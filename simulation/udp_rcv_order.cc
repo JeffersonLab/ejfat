@@ -1,11 +1,18 @@
-/************* UDP SERVER CODE *******************/
+//
+// Copyright 2022, Jefferson Science Associates, LLC.
+// Subject to the terms in the LICENSE file found in the top-level directory.
+//
+// EPSCI Group
+// Thomas Jefferson National Accelerator Facility
+// 12000, Jefferson Ave, Newport News, VA 23606
+// (757)-269-7100
+
 
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <unistd.h>
 #include <cerrno>
-#include <cassert>
 #include <map>
 
 #include <sys/socket.h>
