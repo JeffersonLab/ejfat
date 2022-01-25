@@ -1,0 +1,15 @@
+# ignore all files/dirs beginning with .
+.*
+# ignore all files/dirs beginning with _
+_*
+
+# except this one
+!.gitignore
+!.github
+
+# ignore generated files/dirs
+cmake-*
+cmake_install.cmake
+build/
+doxyerrors.log
+config.log
