@@ -8,6 +8,13 @@
 // (757)-269-7100
 
 
+/**
+ * @file Receive locally generated data sent by udp_data_send.c program
+ * This assumes no emulator between the 2 programs. That can be changed
+ * by commenting out the "#define NO_FPGA" line.
+ */
+
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

@@ -8,6 +8,13 @@
 // (757)-269-7100
 
 
+/**
+ * @file Receive file (read or piped to) and sent by udp_send.c program.
+ * This assumes no emulator between the 2 programs. That can be changed
+ * by uncommenting the "#define TO_FPGA" line.
+ */
+
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

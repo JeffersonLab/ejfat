@@ -8,6 +8,12 @@
 // (757)-269-7100
 
 
+/**
+ * @file Send file (read or piped to) to udp_rcv.c program
+ * This assumes no emulator between the 2 programs.
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

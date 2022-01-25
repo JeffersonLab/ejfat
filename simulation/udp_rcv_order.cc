@@ -8,6 +8,12 @@
 // (757)-269-7100
 
 
+/**
+ * @file Receive locally generated data sent by udp_send.c program.
+ * This assumes there is an emulator or FPGA between the 2 programs.
+ */
+
+
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -24,6 +30,7 @@
 #endif
 
 
+/** Union to facilitate unpacking of RE UDP header. */
 union reHeader {
     struct __attribute__((packed))re_hdr {
         uint32_t version    : 4;

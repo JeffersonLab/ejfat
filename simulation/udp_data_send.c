@@ -8,6 +8,11 @@
 // (757)-269-7100
 
 
+/**
+ * @file Send locally generated data to udp_data_rcv.c program
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
