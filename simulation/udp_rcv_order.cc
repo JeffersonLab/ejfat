@@ -10,7 +10,8 @@
 
 /**
  * @file Receive locally generated data sent by udp_send.c program.
- * This assumes there is an emulator or FPGA between the 2 programs.
+ * This program handles sequentially numbered packets that may arrive out-of-order.
+ * This assumes there is an emulator or FPGA between this and the sending program.
  */
 
 
@@ -194,18 +195,15 @@ int readPacket(char *dataBuf, int bufLen, int udpSocket,
     return bytesRead - HEADER_BYTES;
 }
 
-/**
- * map key = offset from incoming packet
- * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes), (is last packet)
- */
-std::map<uint32_t, std::tuple<char *, uint32_t, bool>> outOfOrderPackets;
 
-void freeMap() {
+
+void freeMap(std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
     for (const auto& n : outOfOrderPackets) {
         // Free allocated buffer holding packet
         free(std::get<0>(n.second));
     }
 }
+
 
 void writePacketData(char *buf, int dataBytes) {
     //memcpy()
@@ -225,28 +223,30 @@ void writePacketData(char *buf, int dataBytes) {
  * @param veryFirstRead this is the very first time data will be read for a sequence of same-tick packets.
  * @param last      to be filled with "last" bit id read from RE header,
  *                  indicating the last packet in a series used to send data.
- * @param expOffset  value-result parameter which gives the next expected offset to be
- *                   read from RE header and returns its updated value
- *                   indicating its sequence in the flow of packets.
+ * @param expSequence  value-result parameter which gives the next expected sequence to be
+ *                     read from RE header and returns its updated value
+ *                     indicating its sequence in the flow of packets.
+ * @param outOfOrderPackets map for holding out-of-order packets between calls to this function.
  *
  * @return If there's an error in recvmsg, it will return RECV_MSG.
  *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
  *         If the buffer is too small to receive a single packet's data, it will return BUF_TOO_SMALL.
- *         If a packet is out of order, it will return OUT_OF_ORDER.
+ *         If a packet is out of order and no recovery is possible (e.g. duplicate sequence),
+ *              it will return OUT_OF_ORDER.
  *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
  *         If cannot allocate memory, it will return OUT_OF_MEM.
  */
 int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
-                        bool veryFirstRead, bool *last, uint32_t *expOffset) {
+                        bool veryFirstRead, bool *last, uint32_t *expSequence,
+                        std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
 
     // TODO: build if sequence is file offset
 
-    uint32_t packetsInBuf = 0, maxPacketsInBuf = 0;
+    // uint32_t packetsInBuf = 0, maxPacketsInBuf = 0;
+    uint32_t sequence, expectedSequence = *expSequence;
 
-    bool packetFirst, packetLast, firstReadForBuf = true;
+    bool packetFirst, packetLast, firstReadForBuf = true, tooLittleRoom = false;
     int  dataId, version, nBytes, maxPacketBytes = 0, totalBytesRead = 0;
-
-    uint32_t offset, expectedOffset = *expOffset;
 
     char *putDataAt = dataBuf;
     int remainingLen = bufLen;
@@ -261,7 +261,7 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
     while (true) {
         // Read in one packet
         nBytes = readPacket(putDataAt, remainingLen, udpSocket,
-                            &offset, &dataId, &version,
+                            &sequence, &dataId, &version,
                             &packetFirst, &packetLast);
 
         // If error
@@ -269,59 +269,81 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
             return nBytes;
         }
 
-        if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d\n", nBytes, offset);
+        if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d\n", nBytes, sequence);
 
         // Check to see if packet is in sequence
-        if (offset != expectedOffset) {
+        if (sequence != expectedSequence) {
+            if (debug) fprintf(stderr, "Got seq %u, expecting %u\n", sequence, expectedSequence);
+
+            // If we get one that we already received, ERROR!
+            if (sequence < expectedSequence) {
+                freeMap(outOfOrderPackets);
+                return OUT_OF_ORDER;
+            }
+
+            // Set a limit on how much we're going to store (100 packets) while we wait
+            if (outOfOrderPackets.size() >= 100) {
+                freeMap(outOfOrderPackets);
+                return OUT_OF_ORDER;
+            }
+
             // Since it's out of order, what was written into dataBuf will need to be
-            // copied and stored. And that data will eventually need to be overwritten
-            // with the correct packet data.
+            // copied and stored. And that written data will eventually need to be
+            // overwritten with the correct packet data.
             char *tempBuf = (char *) malloc(nBytes);
             if (tempBuf == nullptr) {
-                freeMap();
+                freeMap(outOfOrderPackets);
                 return OUT_OF_MEM;
             }
             memcpy(tempBuf, putDataAt, nBytes);
 
-            // What if it's the last Packet???
-
             // Put it into map
-            outOfOrderPackets.emplace(offset, std::tuple<char *, uint32_t, bool>{tempBuf, nBytes, packetLast});
+            outOfOrderPackets.emplace(sequence, std::tuple<char *, uint32_t, bool, bool>{tempBuf, nBytes, packetLast, packetFirst});
             // Read next packet
             continue;
         }
 
         while (true) {
+
             // Packet was in proper order. Get ready to look for next in sequence.
             putDataAt += nBytes;
             remainingLen -= nBytes;
             totalBytesRead += nBytes;
-            packetsInBuf++;
-            expectedOffset++;
+            expectedSequence++;
+            //packetsInBuf++;
 
             // If it's the first read of a sequence, and there are more reads to come,
             // the # of bytes it read will be max possible. Remember that.
             if (firstReadForBuf) {
                 maxPacketBytes = nBytes;
                 firstReadForBuf = false;
-                maxPacketsInBuf = bufLen / maxPacketBytes;
+                //maxPacketsInBuf = bufLen / maxPacketBytes;
+                if (debug) fprintf(stderr, "In first read, max bytes/packet = %d\n", maxPacketBytes);
 
                 // Error check
                 if (veryFirstRead && !packetFirst) {
                     if (debug) fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
+                    freeMap(outOfOrderPackets);
                     return BAD_FIRST_LAST_BIT;
                 }
             }
             else if (packetFirst) {
                 if (debug) fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
+                freeMap(outOfOrderPackets);
                 return BAD_FIRST_LAST_BIT;
             }
 
             if (debug) fprintf(stderr, "remainingLen = %d\n", remainingLen);
-            if (debug) fprintf(stderr, "getPacketizedBuffer: set expected offset = %u\n", expectedOffset);
+            if (debug) fprintf(stderr, "expected offset = %u\n", expectedSequence);
 
             // If very last packet, quit
             if (packetLast) {
+                break;
+            }
+
+            // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
+            if (remainingLen < maxPacketBytes) {
+                tooLittleRoom = true;
                 break;
             }
 
@@ -332,31 +354,33 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
                 auto it = outOfOrderPackets.begin();
 
                 // If it's truly the next packet ...
-                if (it->first == expectedOffset) {
-                    char *data = std::get<0>(it->second);
-                    nBytes = std::get<1>(it->second);
-                    packetLast = std::get<2>(it->second);
+                if (it->first == expectedSequence) {
+                    char *data  = std::get<0>(it->second);
+                    nBytes      = std::get<1>(it->second);
+                    packetLast  = std::get<2>(it->second);
+                    packetFirst = std::get<3>(it->second);
+
                     memcpy(putDataAt, data, nBytes);
+                    free(data);
 
                     // Remove packet from map
                     it = outOfOrderPackets.erase(it);
                     continue;
                 }
             }
+
             break;
         }
 
-        // Reading another mtu of data (as reckoned by source) will exceed buffer space, so quit
-        if (remainingLen < maxPacketBytes) {
+        if (packetLast || tooLittleRoom) {
             break;
         }
+     }
 
-    }
-
-    if (debug) fprintf(stderr, "getPacketizedBuffer: passing offset = %u\n\n", expectedOffset);
+    if (debug) fprintf(stderr, "getPacketizedBuffer: passing offset = %u\n\n", expectedSequence);
 
     *last = packetLast;
-    *expOffset = expectedOffset;
+    *expSequence = expectedSequence;
 
     return totalBytesRead;
 }
@@ -449,9 +473,17 @@ int main(int argc, char **argv) {
     // Start with offset 0 in very first packet to be read
     uint32_t offset = 0;
 
+    /*
+     * Map to hold out-of-order packets.
+     * map key = sequence/offset from incoming packet
+     * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes),
+     * (is last packet), (is first packet).
+     */
+    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
+
 
     while (true) {
-        nBytes = getPacketizedBuffer(dataBuf, BUFSIZE, udpSocket, mtu, firstRead, &last, &offset);
+        nBytes = getPacketizedBuffer(dataBuf, BUFSIZE, udpSocket, mtu, firstRead, &last, &offset, outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
             break;
