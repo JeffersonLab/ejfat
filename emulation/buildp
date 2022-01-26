@@ -1,0 +1,17 @@
+#!/bin/bash
+#set -x
+CHOME=
+if [ -e $1.cc ]
+then
+    g++ -DNO_MAKEFILE -fpermissive -floop-parallelize-all -ffinite-math-only -floop-strip-mine \
+        -fmove-loop-invariants  -std=c++17 -O3 $1.cc -o $1 -lm -lpthread > $1.out 2> $1.err
+    less $1.err
+    #vim $1.cc
+    if [ -e $1 ]
+    then
+        mv $1 ~/bin
+    fi
+else
+    echo "No such file $1.cc"
+fi
+
