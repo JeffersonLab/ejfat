@@ -1,0 +1,23 @@
+#!/bin/bash
+#send_file_lb <datafile>
+#set -x
+
+bn=$(basename $1)
+dn=$(dirname $1)
+wd=$PWD
+tag=$(echo $RANDOM | md5sum | head -c 10)
+cd /tmp
+if [ "$1" == "-" ] || [ "$1" == "/dev/stdin" ]; then
+	split -b1024 $1 $tag
+else
+	split -b1024 $dn/$bn $tag
+fi
+S=1
+for f in $tag*
+do
+       	wc -c $f
+       	cat $f | lb_send -s $S | nc -p 7654 -U -4 -u 129.57.29.231 19522
+       	S=$(echo $S \+ 1 | bc) 
+done
+rm -f $tag* 
+cd $wd
