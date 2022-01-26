@@ -358,7 +358,9 @@ int main(int argc, char **argv) {
             testOutOfOrder = true;
             maxUdpPayload = 100;
             bufsize = mtu = maxUdpPayload + 60 + 8 + HEADER_BYTES;
-            uint32_t myOrder[testPacketCount] {1, 2, 3, 5, 4, 6, 7, 8, 9, 11, 10, 12, 13, 14, 0};
+            uint32_t myOrder[testPacketCount] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+            //uint32_t myOrder[testPacketCount] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+            //uint32_t myOrder[testPacketCount] {1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 14};
             order = myOrder;
         }
         else {
@@ -428,8 +430,8 @@ int main(int argc, char **argv) {
                 lastBuffer = true;
             }
 
-            // Last packet (when properly ordered) to send
-            if (offset == 00) {
+            // First packet (when properly ordered) to send
+            if (offset == 0) {
                 firstBuffer = true;
             }
 

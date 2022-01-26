@@ -549,7 +549,7 @@ int main(int argc, char **argv) {
         totalRead += nBytes;
         firstRead = false;
 
-        printBytes(dataBuf, nBytes, "packet ---->");
+        printBytes(dataBuf, nBytes, "buffer ---->");
 
         // Write out what was received
         writeBuffer(dataBuf, nBytes, fp);
