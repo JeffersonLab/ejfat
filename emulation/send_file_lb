@@ -1,6 +1,6 @@
 #!/bin/bash
-#send_file_lb <datafile>
-#set -x
+#send_file_lb <datafile> <ip> <port>
+set -x
 
 bn=$(basename $1)
 dn=$(dirname $1)
@@ -10,13 +10,13 @@ cd /tmp
 if [ "$1" == "-" ] || [ "$1" == "/dev/stdin" ]; then
 	split -b1024 $1 $tag
 else
-	split -b1024 $dn/$bn $tag
+	split -b1024 $wd/$bn $tag
 fi
 S=1
 for f in $tag*
 do
        	wc -c $f
-       	cat $f | $wd/lb_send -s $S | nc -p 7654 -U -4 -u 129.57.29.231 19522
+       	cat $f | $wd/lb_send -s $S | nc -p 7654 -U -4 -u $2 $3
        	S=$(echo $S \+ 1 | bc) 
 done
 rm -f $tag* 

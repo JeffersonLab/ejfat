@@ -14,6 +14,11 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <string.h>
+#include <fstream>
+#include <iostream>
+
+using namespace std;
 
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
@@ -24,13 +29,52 @@
 
 const unsigned int max_pckt_sz = 1024;
 
-#include <fstream>
-#include <iostream>
-
-using namespace std;
-
-int main () 
+void   Usage(void)
 {
+    char usage_str[] =
+        "\nUsage: \n\
+        -i listening ipv4 address (string)  \n\
+        -p listening ipv4 port (number)  \n\
+        -h help \n\n";
+        cout<<usage_str;
+        cout<<"Required: -s\n";
+}
+
+main (int argc, char *argv[])
+{
+    int optc;
+    extern char *optarg;
+    extern int   optind, optopt;
+
+    bool passedI, passedP = false;
+
+    char ip[64];  // listening ip, port
+    uint16_t prt; // listening ip, port
+
+    while ((optc = getopt(argc, argv, "i:p:")) != -1)
+    {
+        switch (optc)
+        {
+        case 'h':
+            Usage();
+            exit(1);
+        case 'i':
+            strcpy(ip, (const char *) optarg) ;
+            passedI = true;
+            break;
+        case 'p':
+            prt = (uint16_t) atoi((const char *) optarg) ;
+            passedP = true;
+            break;
+        case '?':
+            cerr<<"Unrecognised option: -"<<optopt<<'\n';
+            Usage();
+            exit(1);
+        }
+    }
+
+    if(!(passedI && passedP)) { Usage(); exit(1); }
+
     ofstream f2("/dev/stdout",std::ios::binary | std::ios::out);
 //===================== data source setup ===================================
     int udpSocket, nBytes;
@@ -43,8 +87,8 @@ int main ()
 
     /*Configure settings in address struct*/
     srcAddr.sin_family = AF_INET;
-    srcAddr.sin_port = htons(7777); // "LB"
-    srcAddr.sin_addr.s_addr = inet_addr("129.57.29.232"); //indra-s2
+    srcAddr.sin_port = htons(prt); // "LB"
+    srcAddr.sin_addr.s_addr = inet_addr(ip); //indra-s2
     //srcAddr.sin_addr.s_addr = INADDR_ANY;
     memset(srcAddr.sin_zero, '\0', sizeof srcAddr.sin_zero);
 
