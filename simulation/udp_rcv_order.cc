@@ -49,6 +49,7 @@ union reHeader {
 
 
 static bool debug = true;
+#define btoa(x) ((x)?"true":"false")
 
 
 enum errorCodes {
@@ -98,6 +99,47 @@ static void printBytes(const char *data, uint32_t bytes, const char *label) {
     }
 
     fprintf(stderr, "\n\n");
+}
+
+
+/**
+ * This routine takes a file pointer and prints out (to stderr) the desired number of bytes
+ * from the given file, in hex.
+ *
+ * @param data      data to print out
+ * @param bytes     number of bytes to print in hex
+ * @param label     a label to print as header
+ */
+static void printFileBytes(FILE *fp, uint32_t bytes, const char *label) {
+
+    long currentPos = ftell(fp);
+    rewind(fp);
+    uint8_t byte;
+
+
+    if (label != nullptr) fprintf(stderr, "%s:\n", label);
+
+    if (bytes < 1) {
+        fprintf(stderr, "<no bytes to print ...>\n");
+        return;
+    }
+
+    int i;
+    for (i=0; i < bytes; i++) {
+        if (i%10 == 0) {
+            fprintf(stderr, "\n  Buf(%3d - %3d) =  ", (i+1), (i + 10));
+        }
+        else if (i%5 == 0) {
+            fprintf(stderr, "  ");
+        }
+
+        // Accessing buf in this way does not change position or limit of buffer
+        fread(&byte, 1, 1, fp);
+        fprintf(stderr, "  0x%02x ", byte);
+    }
+
+    fprintf(stderr, "\n\n");
+    fseek(fp, currentPos, SEEK_SET);
 }
 
 
@@ -245,7 +287,7 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
     // uint32_t packetsInBuf = 0, maxPacketsInBuf = 0;
     uint32_t sequence, expectedSequence = *expSequence;
 
-    bool packetFirst, packetLast, firstReadForBuf = true, tooLittleRoom = false;
+    bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
     int  dataId, version, nBytes, maxPacketBytes = 0, totalBytesRead = 0;
 
     char *putDataAt = dataBuf;
@@ -269,21 +311,28 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
             return nBytes;
         }
 
-        if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d\n", nBytes, sequence);
+        if (sequence == 0) {
+            firstReadForBuf = true;
+        }
+
+        if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
+                           nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
 
         // Check to see if packet is in sequence
         if (sequence != expectedSequence) {
-            if (debug) fprintf(stderr, "Got seq %u, expecting %u\n", sequence, expectedSequence);
+            if (debug) fprintf(stderr, "\n    Got seq %u, expecting %u\n", sequence, expectedSequence);
 
             // If we get one that we already received, ERROR!
             if (sequence < expectedSequence) {
                 freeMap(outOfOrderPackets);
+                if (debug) fprintf(stderr, "    Already got seq %u once before!\n", sequence);
                 return OUT_OF_ORDER;
             }
 
             // Set a limit on how much we're going to store (100 packets) while we wait
             if (outOfOrderPackets.size() >= 100) {
                 freeMap(outOfOrderPackets);
+                if (debug) fprintf(stderr, "    Reached limit (100) of stored packets!\n");
                 return OUT_OF_ORDER;
             }
 
@@ -298,12 +347,14 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
             memcpy(tempBuf, putDataAt, nBytes);
 
             // Put it into map
+            if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s\n", sequence, btoa(packetLast));
             outOfOrderPackets.emplace(sequence, std::tuple<char *, uint32_t, bool, bool>{tempBuf, nBytes, packetLast, packetFirst});
             // Read next packet
             continue;
         }
 
         while (true) {
+            if (debug) fprintf(stderr, "\nPacket %u in proper order, last = %s\n", sequence, btoa(packetLast));
 
             // Packet was in proper order. Get ready to look for next in sequence.
             putDataAt += nBytes;
@@ -333,23 +384,27 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
                 return BAD_FIRST_LAST_BIT;
             }
 
-            if (debug) fprintf(stderr, "remainingLen = %d\n", remainingLen);
-            if (debug) fprintf(stderr, "expected offset = %u\n", expectedSequence);
+            if (debug) fprintf(stderr, "remainingLen = %d, expected offset = %u, first = %s, last = %s\n",
+                               remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
 
-            // If very last packet, quit
-            if (packetLast) {
-                break;
+            // If no stored, out-of-order packets ...
+            if (outOfOrderPackets.empty()) {
+                // If very last packet, quit
+                if (packetLast) {
+                    break;
+                }
+
+                // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
+                if (remainingLen < maxPacketBytes) {
+                    tooLittleRoom = true;
+                    break;
+                }
             }
-
-            // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
-            if (remainingLen < maxPacketBytes) {
-                tooLittleRoom = true;
-                break;
-            }
-
             // If there were previous packets out-of-order, they may now be in order.
             // If so, write them into buffer.
-            if (!outOfOrderPackets.empty()) {
+            // Remember the map already sorts them into proper sequence.
+            else {
+                if (debug) fprintf(stderr, "We also have stored packets\n");
                 // Go to first stored packet
                 auto it = outOfOrderPackets.begin();
 
@@ -359,12 +414,15 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
                     nBytes      = std::get<1>(it->second);
                     packetLast  = std::get<2>(it->second);
                     packetFirst = std::get<3>(it->second);
+                    sequence = expectedSequence;
 
                     memcpy(putDataAt, data, nBytes);
                     free(data);
 
                     // Remove packet from map
                     it = outOfOrderPackets.erase(it);
+                    if (debug) fprintf(stderr, "Go and add stored packet %u, size of map = %lu, last = %s\n",
+                                       expectedSequence, outOfOrderPackets.size(), btoa(packetLast));
                     continue;
                 }
             }
@@ -396,7 +454,7 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
  * @param fp      file pointer.
  * @return error code of 0 means OK. If there is an error, programs exits.
  */
-int writeBuffer(char* dataBuf, size_t nBytes, FILE* fp) {
+int writeBuffer(const char* dataBuf, size_t nBytes, FILE* fp) {
 
     size_t n, totalWritten = 0;
 
@@ -491,8 +549,11 @@ int main(int argc, char **argv) {
         totalRead += nBytes;
         firstRead = false;
 
+        printBytes(dataBuf, nBytes, "packet ---->");
+
         // Write out what was received
         writeBuffer(dataBuf, nBytes, fp);
+
 
         if (last) {
             if (debug) fprintf(stderr, "Read last packet from incoming data, quit\n");

@@ -204,8 +204,6 @@ int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
         veryFirstPacket = true;
     }
 
-    assert(offset != NULL);
-
     uint32_t packetCounter = *offset;
 
     // This is where and how many bytes to write for a packet's combined LB and RE headers

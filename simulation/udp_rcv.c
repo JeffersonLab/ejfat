@@ -37,7 +37,7 @@
 
 static bool debug = 1;
 
-// Is this going to an FPGA or FPGA simulator?
+// Did original packets get sent to an FPGA or FPGA simulator?
 // i.e. will the LB header be stripped off at receiving end?
 //#define TO_FPGA 1
 

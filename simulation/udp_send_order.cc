@@ -39,7 +39,24 @@
 static bool debug = true;
 
 
-#define HEADER_BYTES  8
+// Is this going to an FPGA or FPGA simulator?
+// i.e. will the LB header need to added?
+//#define ADD_LB_HEADER 1
+
+#ifdef ADD_LB_HEADER
+    #define LB_HEADER_BYTES 12
+    #define HEADER_BYTES    20
+#else
+    #define LB_HEADER_BYTES 0
+    #define HEADER_BYTES    8
+#endif
+
+
+#ifdef __linux__
+    #define htonll(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
+    #define ntohll(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
+#endif
+
 
 
 
@@ -98,6 +115,43 @@ static int getMTU(const char* interfaceName) {
 }
 
 
+#ifdef ADD_LB_HEADER
+
+    void setLbMetadata(char* buffer, uint64_t tick) {
+        // Put 1 32-bit word, followed by 1 64-bit word in network byte order, followed by 32 bits of data
+
+        // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
+        // 0                   1                   2                   3
+        // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+        // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        // |       L       |       B       |    Version    |    Protocol   |
+        // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        // |                                                               |
+        // +                              Tick                             +
+        // |                                                               |
+        // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        uint32_t L = 'L';
+        uint32_t B = 'B';
+        uint32_t version = 1;
+        uint32_t protocol = 123;
+
+        int firstWord = L | (B << 8) | (version << 16) | (protocol << 24);
+
+        //if (debug) printf("LB first word = 0x%x\n", firstWord);
+        //if (debug) printf("LB tick = 0x%llx (%llu)\n\n", tick, tick);
+
+        // Put the data in network byte order (big endian)
+        *((uint32_t *)buffer) = htonl(firstWord);
+        *((uint64_t *)(buffer + 4)) = htonll(tick);
+    }
+
+#else
+
+    void setLbMetadata(char* buffer, uint64_t tick) {}
+
+#endif
+
+
 void setReMetadata(char* buffer, bool first, bool last, uint32_t offsetVal) {
     // Put 2 32-bit words in network byte order
 
@@ -125,21 +179,23 @@ void setReMetadata(char* buffer, bool first, bool last, uint32_t offsetVal) {
 }
 
 
-/**
- *
- * @param dataBuffer
- * @param dataLen
- * @param maxUdpPayload
- * @param clientSocket
- * @param destination
- * @param tick
- * @param offset value-result parameter, given as the reassembly offset to start with,
- *        returned as the next offset to use.
- * @return
- */
+
+ /**
+  *
+  * @param dataBuffer
+  * @param dataLen
+  * @param maxUdpPayload
+  * @param clientSocket
+  * @param destination
+  * @param tick
+  * @param offset
+  * @param firstBuffer
+  * @param lastBuffer
+  * @return
+  */
 int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                          int clientSocket, struct sockaddr_in* destination,
-                         uint32_t *offset,
+                         uint64_t tick, uint32_t *offset,
                          bool firstBuffer, bool lastBuffer) {
 
     int totalDataBytesSent = 0;
@@ -191,8 +247,11 @@ int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
         if (debug) printf("Send %d bytes, last buf = %s, very first = %s, very last = %s\n",
                           bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
+        // Write LB meta data into buffer (if necessary)
+        setLbMetadata(headerBuffer, tick);
+
         // Write RE meta data into buffer
-        setReMetadata(headerBuffer, veryFirstPacket, veryLastPacket, packetCounter++);
+        setReMetadata(headerBuffer + LB_HEADER_BYTES, veryFirstPacket, veryLastPacket, packetCounter++);
 
         // This is where and how many bytes to write for data
         iov[1].iov_base = (void *)getDataFrom;
@@ -278,57 +337,107 @@ int main(int argc, char **argv) {
 
     // use filename provided as 1st argument (stdin by default)
     bool readingFromFile = false;
+    bool testOutOfOrder = false;
     size_t fileSize = 0L;
+    // For most efficient use of UDP packets, make our buffer a multiple of maxUdpPayload
+    int bufsize = (100000 / maxUdpPayload + 1) * maxUdpPayload;
 
+    // For sending out-of-order
+    uint32_t *order;
+    int packetCounter = 0;
+    const int testPacketCount = 15;
+
+
+    // Read from either file or stdin, or create test data
     FILE *fp = nullptr;
     if (argc > 1) {
-        fp = fopen (argv[1], "r");
-        readingFromFile = true;
-        // find the size of the file
-        fseek(fp, 0L, SEEK_END);
-        fileSize = ftell(fp);
-        rewind(fp);
+        printf("Arg = %s\n", argv[1]);
+
+        if (strncmp(argv[1], "test", 4) == 0) {
+            // Use test data generated right here
+            testOutOfOrder = true;
+            maxUdpPayload = 100;
+            bufsize = mtu = maxUdpPayload + 60 + 8 + HEADER_BYTES;
+            uint32_t myOrder[testPacketCount] {1, 2, 3, 5, 4, 6, 7, 8, 9, 11, 10, 12, 13, 14, 0};
+            order = myOrder;
+        }
+        else {
+            // Open and read file
+            fp = fopen(argv[1], "r");
+            readingFromFile = true;
+            // find the size of the file
+            fseek(fp, 0L, SEEK_END);
+            fileSize = ftell(fp);
+            rewind(fp);
+        }
     }
     else {
         fp = stdin;
     }
 
     // validate file open for reading
-    if (!fp) {
+    if (!testOutOfOrder && !fp) {
         perror ("file open failed");
         return 1;
     }
 
-    // Read from either file or stdin.
-    // Reading from file systems, it's efficient to read in blocks of 16MB
 
-    // For most efficient use of UDP packets, make our buffer a multiple of maxUdpPayload
-    int BUFSIZE = (100000/maxUdpPayload + 1) * maxUdpPayload;
-    char buf[BUFSIZE];
+    char buf[bufsize];
     size_t nBytes, totalBytes = 0;
-    bool firstBuffer = true;
+    bool firstBuffer = false;
     bool lastBuffer  = false;
 
     while (true) {
-        nBytes = fread(buf, 1, BUFSIZE, fp);
+        if (!testOutOfOrder) {
+            nBytes = fread(buf, 1, bufsize, fp);
 
-        // Done
-        if (nBytes == 0) {
-            printf("\n ******* Last read returned 0, END reading\n\n");
-            break;
+            // Done
+            if (nBytes == 0) {
+                printf("\n ******* Last read returned 0, END reading\n\n");
+                break;
+            }
+
+            // Error
+            if (ferror(fp)) {
+                printf("\n ******* Last read returned error, nBytes = %lu\n\n", nBytes);
+                break;
+            }
+
+            totalBytes += nBytes;
         }
 
-        // Error
-        if (ferror(fp)) {
-            printf("\n ******* Last read returned error, nBytes = %lu\n\n", nBytes);
-            break;
-        }
-
-        totalBytes += nBytes;
         if (readingFromFile) {
             if (totalBytes == fileSize) {
                 lastBuffer = true;
             }
+        }
+        else if (testOutOfOrder) {
+            // Sending test data created here
+
+            offset = order[packetCounter];
+            lastBuffer = false;
+            firstBuffer = false;
+
+            // At the end of data
+            if (packetCounter > (testPacketCount - 1)) {
+                break;
+            }
+
+            // Last packet (when properly ordered) to send
+            if (offset == (testPacketCount - 1)) {
+                lastBuffer = true;
+            }
+
+            // Last packet (when properly ordered) to send
+            if (offset == 00) {
+                firstBuffer = true;
+            }
+
+            // Put in some fake data
+            memset(buf, offset, bufsize);
+            nBytes = 100;
+            totalBytes += nBytes;
+            packetCounter++;
         }
         else {
             // if using stdin
@@ -339,11 +448,20 @@ int main(int argc, char **argv) {
             }
         }
 
-        sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr, &offset, firstBuffer, lastBuffer);
+        sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr, tick, &offset, firstBuffer,
+                             lastBuffer);
         firstBuffer = false;
-        if (lastBuffer) {
-            printf("\n ******* last buffer send, END reading\n\n");
-            break;
+        if (testOutOfOrder) {
+            if (packetCounter == testPacketCount) {
+                printf("\n ******* last buffer send, END reading\n\n");
+                break;
+            }
+        }
+        else {
+            if (lastBuffer) {
+                printf("\n ******* last buffer send, END reading\n\n");
+                break;
+            }
         }
     }
 
