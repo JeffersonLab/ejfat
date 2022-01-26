@@ -1,6 +1,6 @@
 #!/bin/bash
 #send_file_lb <datafile> <ip> <port>
-set -x
+#set -x
 
 bn=$(basename $1)
 dn=$(dirname $1)
