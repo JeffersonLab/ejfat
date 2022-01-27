@@ -20,6 +20,15 @@ cat <file> | send_file_lb - 129.57.87.13 19522
 
 
 
+An alternate Data Source can be accomplished using the netcat command as follows:
+
+cat <file> | tail -c +13 | nc -p <src-port> -U –4 -u <LB host ip> <LB host reception port>
+
+e.g.,
+
+cat <file> | tail -c +13 | nc -p <src-port> -U –4 -u 129.57.87.13 19522
+
+
 -------------
 LB emulation:
 -------------
@@ -29,6 +38,24 @@ lb_emu -i "<LB host ip>" -p <LB host reception port> -t "<destination ip>" -r <d
 e.g.,
 
 lb_emu -i "129.57.87.13" -p 19522 -t "129.57.87.14" -r 7777
+
+
+
+An alternate LB emulation can be accomplished using the netcat command as follows:
+
+nc -U –4 -u -l <LB host ip> <lb-port>  | nc -p <arb_port> –U –4 -u <destination-ip> <destination-port>
+
+e.g.,
+
+nc -U –4 -u -l <LB host ip> <lb-port>  | nc –U –4 -u <destination-ip> <destination-port>
+
+
+Note that this does not remove the LB meta-data from the stream; attempting to do that with 
+
+nc -U –4 -u -l 129.57.87.13 19522 | tail -c +13 | nc –U –4 -u 129.57.87.14 7777
+
+fails. See netcat solution for Data Source above.
+
 
 
 -------------
@@ -45,6 +72,15 @@ t=$(mktemp); lb_rcv -i "129.57.87.14" -p 7777 > some_file_name 2> $t
 
 Note that stderr is being redirected to temp file $t (in /tmp) and contains the session log
 
-
-
 NOTE:  does not work reliably when spanning subsets!
+
+
+An alternate Data Source can be accomplished using the netcat command as follows:
+
+nc -u -w 1 -l <sink-ip> <sink-port> >  <file-with-first-12-bytes-stripped> 
+
+e.g.,
+
+nc -u -w 1 -l 129.57.87.14 7777 >  <file-with-first-12-bytes-stripped> 
+
+
