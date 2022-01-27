@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <cerrno>
 #include <string>
+#include <getopt.h>
+#include <cinttypes>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -295,6 +297,124 @@ int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
 
 
 
+#define INPUT_LENGTH_MAX 256
+
+
+
+static void printHelp(char *programName) {
+    fprintf(stderr,
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            programName,
+            "        [-h] [-v] ",
+            "        [-host <destination host (defaults to 127.0.0.1)>]",
+            "        [-p <destination UDP port>]",
+            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
+            "        [-mtu <desired MTU size>]",
+            "        [<input file name (or \"test\")>]");
+
+    fprintf(stderr, "        This is an EJFAT UDP packet sender.\n");
+}
+
+
+
+static void parseArgs(int argc, char **argv, int* mtu, uint16_t* port,
+                      char *fileName, char* host, char *interface) {
+
+    *mtu = 0;
+    int c, i_tmp;
+    bool help = false;
+
+    /* 4 multiple character command-line options */
+    static struct option long_options[] =
+            {{"mtu",  1, NULL, 1},
+             {"host",  1, NULL, 2},
+             {0,       0, 0,    0}
+            };
+
+
+    while ((c = getopt_long_only(argc, argv, "vhp:i:", long_options, 0)) != EOF) {
+
+        if (c == -1)
+            break;
+
+        switch (c) {
+
+            case 'p':
+                // PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 1023 && i_tmp < 65535) {
+                    *port = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'i':
+                // OUTGOING INTERFACE NAME / IP ADDRESS
+                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
+                    fprintf(stderr, "interface address is bad\n");
+                    exit(-1);
+                }
+                strcpy(interface, optarg);
+                break;
+
+            case 1:
+                // MTU
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp < 100) {
+                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be > 100.\n");
+                    exit(-1);
+                }
+                *mtu = i_tmp;
+                break;
+
+            case 2:
+                // DESTINATION HOST
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -host, host name is too long\n");
+                    exit(-1);
+                }
+                strcpy(host, optarg);
+                break;
+
+            case 'v':
+                // VERBOSE
+                debug = true;
+                break;
+
+            case 'h':
+                help = true;
+                break;
+
+            default:
+                printHelp(argv[0]);
+                exit(2);
+        }
+
+    }
+
+    // Grab any default args not in option list
+    if(   !optarg
+          && optind < argc // make sure optind is valid
+          && nullptr != argv[optind] // make sure it's not a null string
+          && '\0'    != argv[optind][0] // ... or an empty string
+          && '-'     != argv[optind][0] // ... or another option
+            ) {
+
+        strcpy(fileName, argv[optind]);
+        fprintf(stderr, "Copy optional arg, file = %s\n", fileName);
+    }
+
+    if (help) {
+        printHelp(argv[0]);
+        exit(2);
+    }
+}
+
+
+
 /**
  * Doing things this way is like reading a buffer bit-by-bit
  * and passing it off to the parser bit-by-bit
@@ -305,24 +425,38 @@ int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
 int main(int argc, char **argv) {
 
     uint32_t offset = 0;
-    uint16_t port = 7891;
+    uint16_t port = 0x4c42; // FPGA port is default
     uint16_t tick = 0xc0da;
+    int mtu;
 
-    // Break data into multiple packets of max MTU size
-    std::string interface = "lo0";
-    int mtu = getMTU(interface.c_str());
+    char fileName[INPUT_LENGTH_MAX], host[INPUT_LENGTH_MAX], interface[16];
 
+    memset(host, 0, INPUT_LENGTH_MAX);
+    memset(interface, 0, 16);
+    memset(fileName, 0, INPUT_LENGTH_MAX);
+
+    // Default to sending to local host
+    strcpy(host, "127.0.0.1");
+    strcpy(interface, "lo0");
+
+    parseArgs(argc, argv, &mtu, &port, fileName, host, interface);
+
+
+    // Break data into multiple packets of max MTU size.
+    // If the mtu was not set on the command line, get it progamatically
+    if (mtu == 0) {
+        mtu = getMTU(interface);
+    }
+
+    // Jumbo (> 1500) ethernet frames are 9000 bytes max.
+    // Don't exceed this limit.
     if (mtu > 9000) {
-        // Jumbo (> 1500) ethernet frames are 9000 bytes max.
-        // Don't exceed this limit.
         mtu = 9000;
     }
 
     // 60 bytes = max IPv4 packet header, 8 bytes = max UDP packet header
     // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
     int maxUdpPayload = mtu - 60 - 8 - HEADER_BYTES;
-
-    if (debug) printf("Setting max UDP payload size to %d bytes\n", maxUdpPayload);
 
     // Create UDP socket
     int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
@@ -331,7 +465,7 @@ int main(int argc, char **argv) {
     struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
-    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serverAddr.sin_addr.s_addr = inet_addr(host);
     memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
 
@@ -350,10 +484,10 @@ int main(int argc, char **argv) {
 
     // Read from either file or stdin, or create test data
     FILE *fp = nullptr;
-    if (argc > 1) {
-        printf("Arg = %s\n", argv[1]);
+    if (strlen(fileName) > 0) {
+        printf("File name = %s\n", fileName);
 
-        if (strncmp(argv[1], "test", 4) == 0) {
+        if (strncmp(fileName, "test", 4) == 0) {
             // Use test data generated right here
             testOutOfOrder = true;
             maxUdpPayload = 100;
@@ -365,7 +499,7 @@ int main(int argc, char **argv) {
         }
         else {
             // Open and read file
-            fp = fopen(argv[1], "r");
+            fp = fopen( fileName, "r");
             readingFromFile = true;
             // find the size of the file
             fseek(fp, 0L, SEEK_END);
@@ -383,6 +517,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (debug) printf("Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
     char buf[bufsize];
     size_t nBytes, totalBytes = 0;

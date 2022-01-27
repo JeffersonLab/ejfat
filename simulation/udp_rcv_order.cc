@@ -21,10 +21,13 @@
 #include <unistd.h>
 #include <cerrno>
 #include <map>
+#include <getopt.h>
+#include <cinttypes>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
+#include <arpa/inet.h>
 
 #ifdef __APPLE__
 #include <cctype>
@@ -278,7 +281,7 @@ void writePacketData(char *buf, int dataBytes) {
  *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
  *         If cannot allocate memory, it will return OUT_OF_MEM.
  */
-int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
+int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket,
                         bool veryFirstRead, bool *last, uint32_t *expSequence,
                         std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
 
@@ -292,11 +295,6 @@ int getPacketizedBuffer(char* dataBuf, int bufLen, int udpSocket, int mtu,
 
     char *putDataAt = dataBuf;
     int remainingLen = bufLen;
-
-    if (bufLen < mtu) {
-        // There may be trouble, increase the size of the receiving buffer
-        return BUF_TOO_SMALL;
-    }
 
     if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %d\n", remainingLen);
 
@@ -481,23 +479,138 @@ int writeBuffer(const char* dataBuf, size_t nBytes, FILE* fp) {
 
 
 
+
+#define INPUT_LENGTH_MAX 256
+
+
+
+static void printHelp(char *programName) {
+    fprintf(stderr,
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
+            programName,
+            "        [-h] [-v] ",
+            "        [-a <listening IP address (defaults to INADDR_ANY)>]",
+            "        [-p <listening UDP port>]",
+            "        [-b <internal buffer size in bytes]",
+            "        <output file name>");
+
+    fprintf(stderr, "        This is an EJFAT UDP packet receiver.\n");
+}
+
+
+
+static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port,
+                      char *fileName, char *listenAddr) {
+
+    int c, i_tmp;
+    bool help = false;
+
+    /* 4 multiple character command-line options */
+    static struct option long_options[] =
+            {
+             {0,       0, 0,    0}
+            };
+
+
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:", long_options, 0)) != EOF) {
+
+        if (c == -1)
+            break;
+
+        switch (c) {
+
+            case 'p':
+                // PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 1023 && i_tmp < 65535) {
+                    *port = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'b':
+                // BUFFER SIZE
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp < 10000) {
+                    *port = 10000;
+                    fprintf(stderr, "Set buffer to minimum size of 10000 bytes\n");
+                }
+                break;
+
+            case 'a':
+                // LISTENING IP ADDRESS
+                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
+                    fprintf(stderr, "listening IP address is bad\n");
+                    exit(-1);
+                }
+                strcpy(listenAddr, optarg);
+                break;
+
+            case 'v':
+                // VERBOSE
+                debug = true;
+                break;
+
+            case 'h':
+                help = true;
+                break;
+
+            default:
+                printHelp(argv[0]);
+                exit(2);
+        }
+
+    }
+
+    // Grab any default args not in option list
+    if (   !optarg
+          && optind < argc // make sure optind is valid
+          && nullptr != argv[optind] // make sure it's not a null string
+          && '\0'    != argv[optind][0] // ... or an empty string
+          && '-'     != argv[optind][0] // ... or another option
+            ) {
+
+        strcpy(fileName, argv[optind]);
+        fprintf(stderr, "Copy optional arg, file = %s\n", fileName);
+    }
+
+    if (help) {
+        printHelp(argv[0]);
+        exit(2);
+    }
+}
+
+
 int main(int argc, char **argv) {
 
     int udpSocket;
     ssize_t nBytes;
     // Set this to max expected data size
-    int BUFSIZE = 100000;
-    char dataBuf[BUFSIZE];
-    struct sockaddr_in serverAddr;
+    int bufSize = 100000;
+    unsigned short port = 7777;
+
+    char fileName[INPUT_LENGTH_MAX], listeningAddr[16];
+    memset(fileName, 0, INPUT_LENGTH_MAX);
+    memset(listeningAddr, 0, 16);
+
+    parseArgs(argc, argv, &bufSize, &port, fileName, listeningAddr);
 
     // Create UDP socket
     udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
 
     // Configure settings in address struct
+    struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(7891);
-    //serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(port);
+    if (strlen(listeningAddr) > 0) {
+        serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
+    }
+    else {
+        serverAddr.sin_addr.s_addr = INADDR_ANY;
+    }
     memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
     // Bind socket with address struct
@@ -511,8 +624,8 @@ int main(int argc, char **argv) {
     bool writingToFile = false;
 
     FILE *fp = nullptr;
-    if (argc > 1) {
-        fp = fopen (argv[1], "w");
+    if (strlen(fileName) > 0) {
+        fp = fopen (fileName, "w");
         writingToFile = true;
     }
     else {
@@ -527,9 +640,9 @@ int main(int argc, char **argv) {
 
     size_t totalRead = 0;
     bool last, firstRead = true;
-    int mtu = 1400;
     // Start with offset 0 in very first packet to be read
     uint32_t offset = 0;
+    char dataBuf[bufSize];
 
     /*
      * Map to hold out-of-order packets.
@@ -541,7 +654,7 @@ int main(int argc, char **argv) {
 
 
     while (true) {
-        nBytes = getPacketizedBuffer(dataBuf, BUFSIZE, udpSocket, mtu, firstRead, &last, &offset, outOfOrderPackets);
+        nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket, firstRead, &last, &offset, outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
             break;
