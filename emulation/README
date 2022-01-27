@@ -4,6 +4,16 @@
 Data Source:
 -------------
 
+cat <file> | ./pktzr_md -t "<destination ip>" -r <destination port>
+
+e.g.,
+
+cat <file> | ./pktzr_md -t 129.57.29.230 -r 19522
+
+
+
+An alternate Data Source can be accomplished using the send_file_lb command as follows:
+
 send_file_lb <file> <LB_ip> <LB_port>
 
 or if preferred
@@ -29,6 +39,7 @@ e.g.,
 cat <file> | tail -c +13 | nc -p <src-port> -U –4 -u 129.57.87.13 19522
 
 
+ cat lb_send | ./pktzr_md -t 129.57.29.230 -r 19522
 -------------
 LB emulation:
 -------------
@@ -82,5 +93,14 @@ nc -u -w 1 -l <sink-ip> <sink-port> >  <file-with-first-12-bytes-stripped>
 e.g.,
 
 nc -u -w 1 -l 129.57.87.14 7777 >  <file-with-first-12-bytes-stripped> 
+
+
+Capabilities / Limitations (Bugs) / Next Steps:
+- lb_send never asserts the 'lst' bit in the RE metadata
+- lb_emu currently routes traffic to a single destination
+- 'netcat' (often soft-linked to 'nc') is not available on all systems, e.g., ifarm
+- need C prog as alternative to use of netcat in send_file_lb
+
+
 
 
