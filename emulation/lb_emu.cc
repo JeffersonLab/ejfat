@@ -12,7 +12,6 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-#include <iostream>
 #include <fstream>
 #include <iostream>
 
@@ -138,7 +137,6 @@ main (int argc, char *argv[])
         unsigned int lbmduia [3];
     } lbmd;
     size_t lblen =  sizeof(union lb);
-    union lb* plbmd = &lbmd;
 	// prepare RE meta-data
     // RE meta-data header on front of payload
     union re {
