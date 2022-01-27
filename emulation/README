@@ -1,0 +1,50 @@
+// Test setup for EJFAT emulation:
+
+-------------
+Data Source:
+-------------
+
+send_file_lb <file> <LB_ip> <LB_port>
+
+or if preferred
+
+cat <file> | send_file_lb - <LB_ip> <LB_port>
+
+e.g.,
+
+send_file_lb <file> 129.57.87.13 19522
+
+or
+
+cat <file> | send_file_lb - 129.57.87.13 19522 
+
+
+
+-------------
+LB emulation:
+-------------
+
+lb_emu -i "<LB host ip>" -p <LB host reception port> -t "<destination ip>" -r <destination port>
+
+e.g.,
+
+lb_emu -i "129.57.87.13" -p 19522 -t "129.57.87.14" -r 7777
+
+
+-------------
+Data Sink:
+-------------
+(bash)
+
+t=$(mktemp); lb_rcv -i "<Data Sink ip>" -p <Data sink reception port>  >  <file> 2> $t
+
+e.g.,
+
+t=$(mktemp); lb_rcv -i "129.57.87.14" -p 7777 > some_file_name 2> $t
+
+
+Note that stderr is being redirected to temp file $t (in /tmp) and contains the session log
+
+
+
+NOTE:  does not work reliably when spanning subsets!
