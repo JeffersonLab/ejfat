@@ -120,7 +120,7 @@ main (int argc, char *argv[])
     bool pckt_cache_inuse[100] = {false};
     unsigned int pckt_sz[100];
     unsigned int pci = 0; //packet cache index
-    while(1){
+    do {
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on srcRcvBuf variable
 
@@ -145,7 +145,7 @@ main (int argc, char *argv[])
             cerr << "Received packet out of sequence: expected " <<  seq << " recd " << premd->remdbf.seq << '\n';
             cerr << "store pckt " <<  premd->remdbf.seq << " in slot " << premd->remdbf.seq << endl;
         }
-    }
+    } while(premd->remdbf.lst == 0);
     return 0;
 }
 
