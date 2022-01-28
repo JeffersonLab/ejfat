@@ -14,4 +14,4 @@ then
 else
     echo "No such file $1.cc"
 fi
-
+# for f in *cc; do ./buildp $(basename $f .cc); done
