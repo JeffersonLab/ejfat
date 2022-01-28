@@ -4,51 +4,26 @@
 Data Source:
 -------------
 
-cat <file> | ./pktzr_md -t "<destination ip>" -r <destination port>
+tx=$(mktemp); cat <file> | pktzr_md -t <destination ip> -r <destination port> 2> $tx
 
 e.g.,
 
-cat <file> | ./pktzr_md -t 129.57.29.230 -r 19522
+tx=$(mktemp); cat <file> | pktzr_md -t 129.57.29.231 -r 19522 2> $tx
+
+the session log is in $tx
 
 
-
-An alternate Data Source can be accomplished using the send_file_lb command as follows:
-
-send_file_lb <file> <LB_ip> <LB_port>
-
-or if preferred
-
-cat <file> | send_file_lb - <LB_ip> <LB_port>
-
-e.g.,
-
-send_file_lb <file> 129.57.87.13 19522
-
-or
-
-cat <file> | send_file_lb - 129.57.87.13 19522 
-
-
-
-An alternate Data Source can be accomplished using the netcat command as follows:
-
-cat <file> | tail -c +13 | nc -p <src-port> -U –4 -u <LB host ip> <LB host reception port>
-
-e.g.,
-
-cat <file> | tail -c +13 | nc -p <src-port> -U –4 -u 129.57.87.13 19522
-
-
- cat lb_send | ./pktzr_md -t 129.57.29.230 -r 19522
 -------------
 LB emulation:
 -------------
 
-lb_emu -i "<LB host ip>" -p <LB host reception port> -t "<destination ip>" -r <destination port>
+tx=$(mktemp); lb_emu -i "<LB host ip>" -p <LB host reception port> -t "<destination ip>" -r <destination port> 2> $tx
+
+the session log is in $tx
 
 e.g.,
 
-lb_emu -i "129.57.87.13" -p 19522 -t "129.57.87.14" -r 7777
+tx=$(mktemp); lb_emu -i "129.57.87.13" -p 19522 -t "129.57.87.14" -r 7777 2> $tx
 
 
 
@@ -74,14 +49,14 @@ Data Sink:
 -------------
 (bash)
 
-t=$(mktemp); lb_rcv -i "<Data Sink ip>" -p <Data sink reception port>  >  <file> 2> $t
+tx=$(mktemp); lb_rcv -i "<Data Sink ip>" -p <Data sink reception port>  >  <file> 2> $tx
 
 e.g.,
 
-t=$(mktemp); lb_rcv -i "129.57.87.14" -p 7777 > some_file_name 2> $t
+t=$(mktemp); lb_rcv -i "129.57.87.14" -p 7777 > some_file_name 2> $tx
 
 
-Note that stderr is being redirected to temp file $t (in /tmp) and contains the session log
+Note that stderr is being redirected to temp file $tx (in /tmp) and contains the session log
 
 NOTE:  does not work reliably when spanning subsets!
 
