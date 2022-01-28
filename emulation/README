@@ -73,6 +73,7 @@ nc -u -w 1 -l 129.57.87.14 7777 >  <file-with-first-12-bytes-stripped>
 Capabilities / Limitations (Bugs) / Next Steps:
 - lb_emu currently routes traffic to a single destination
 - 'netcat' (often soft-linked to 'nc') is not available on all systems, e.g., ifarm
+- lb_rcv does not distinguish between different data-ids
 
 
 
