@@ -153,6 +153,7 @@ int main (int argc, char *argv[])
     size_t relen =  sizeof(union re);
     size_t mdlen =  lblen + relen;
     char buffer[max_pckt_sz + mdlen];
+    union lb* plbmd = (union lb*)&buffer[0];
     union re* premd = (union re*)&buffer[lblen];
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
@@ -162,14 +163,16 @@ int main (int argc, char *argv[])
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
         //printf("Received %i bytes from source\n", nBytes);
-        std::cerr << "Received "<< nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';
+        cerr << "Received "<< nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';
+        cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) << " / tick = " << plbmd->lbmdbf.tick << '\n';	
+        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
 
-        printf("Sending %i bytes to sink\n", int(nBytes-lblen));
+        cerr << "Sending " << int(nBytes-lblen) << " bytes to sink" << '\n';
         
         // forward data to sink skipping past lb meta data
 
         ssize_t rtCd = sendto(clientSocket, &buffer[lblen], nBytes-lblen, 0, (struct sockaddr *)&snkAddr, addr_size);
-        printf("sendto return code = %d\n", int(rtCd));
+        cerr << "sendto return code = " << int(rtCd) << '\n';
 
     }
 

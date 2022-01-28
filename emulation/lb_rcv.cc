@@ -126,7 +126,8 @@ int main (int argc, char *argv[])
 
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
-        cerr << "Received " <<  nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';
+        cerr << "Received " <<  nBytes << " bytes from source\n";
+        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
         if(premd->remdbf.seq == seq) { //the seq # we were expecting
             cerr << "writing seq " <<  premd->remdbf.seq << " size = " << int(nBytes-relen) << endl;
             f2.write((char*)&buffer[relen], nBytes-relen);
