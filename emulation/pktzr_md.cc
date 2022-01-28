@@ -21,8 +21,10 @@ void   Usage(void)
 {
     char usage_str[] =
         "\nUsage: \n\
-        -t destination ipv4 address (string)  \n\
-        -r destination ipv4 port (number)  \n\
+        -i destination ipv4 address (string)  \n\
+        -p destination ipv4 port (number)  \n\
+        -t tick  \n\
+        -d data_id  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -s\n";
@@ -34,25 +36,35 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedT, passedR  = false;
+    bool passedI, passedP, passedT, passedD  = false;
 
-    char out_ip[64]; // target ip
-    uint16_t in_ip[64], out_prt;   // target ports
+    char out_ip[64];    // target ip
+    uint16_t out_prt;   // target port
+    uint16_t tick;      // LB tick
+    uint16_t data_id;   // RE data_id
 
-    while ((optc = getopt(argc, argv, "t:r:")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:d:")) != -1)
     {
         switch (optc)
         {
         case 'h':
             Usage();
             exit(1);
-        case 't':
+        case 'i':
             strcpy(out_ip, (const char *) optarg) ;
+            passedI = true;
+            break;
+        case 'p':
+            out_prt = (uint16_t) atoi((const char *) optarg) ;
+            passedP = true;
+            break;
+        case 't':
+            tick = (uint16_t) atoi((const char *) optarg) ;
             passedT = true;
             break;
-        case 'r':
-            out_prt = (uint16_t) atoi((const char *) optarg) ;
-            passedR = true;
+        case 'd':
+            data_id = (uint16_t) atoi((const char *) optarg) ;
+            passedD = true;
             break;
         case '?':
             cerr<<"Unrecognised option: -"<<optopt<<'\n';
@@ -61,7 +73,7 @@ int main (int argc, char *argv[])
         }
     }
 
-    if(!(passedT && passedR)) { Usage(); exit(1); }
+    if(!(passedI && passedP && passedT && passedD)) { Usage(); exit(1); }
 
 
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
@@ -98,7 +110,7 @@ int main (int argc, char *argv[])
         } lbmdbf;
         unsigned int lbmduia [3];
     } lbmd;
-    lbmd.lbmdbf = {'L','B',1,1,1};
+    lbmd.lbmdbf = {'L','B',1,1,tick};
     size_t lblen =  sizeof(union lb);
 	// prepare RE meta-data
     // RE meta-data header on front of payload
@@ -113,7 +125,7 @@ int main (int argc, char *argv[])
         } remdbf;
         unsigned int remduia[2];
     } remd;
-    remd.remdbf = {1,0,1,0,1,0};
+    remd.remdbf = {1,0,1,0,data_id,0};
     size_t relen =  sizeof(union re);
     size_t mdlen =  lblen + relen;
     char buffer[mdlen + max_pckt_sz];
