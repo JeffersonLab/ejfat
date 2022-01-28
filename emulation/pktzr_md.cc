@@ -132,6 +132,9 @@ int main (int argc, char *argv[])
         if(nr != max_pckt_sz) premd->remdbf.lst  = 1;
 
         // forward data to LB
+        cerr << "Sending " << int(mdlen + nr) << " bytes to LB" << '\n';
+        cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) << " / tick = " << plbmd->lbmdbf.tick << '\n';	
+        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
 
         ssize_t rtCd = sendto(clientSocket, buffer, mdlen + nr, 0, (struct sockaddr *)&snkAddr, addr_size);
         cerr << "sendto return code = " << int(rtCd) << endl;
