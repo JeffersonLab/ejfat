@@ -40,7 +40,7 @@ void   Usage(void)
         cout<<"Required: -s\n";
 }
 
-main (int argc, char *argv[])
+int main (int argc, char *argv[])
 {
     int optc;
     extern char *optarg;
@@ -175,4 +175,3 @@ main (int argc, char *argv[])
 
     return 0;
 }
-
