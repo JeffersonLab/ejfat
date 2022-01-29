@@ -42,6 +42,13 @@ void   Usage(void)
         cout<<"Required: -s\n";
 }
 
+unsigned int cnt_trues(bool b[], unsigned int n) // returns count of true values in array
+{
+    unsigned int cnt = 0;
+    for(unsigned int k = 0; k<n; k++) if(b[k] == true) cnt++;
+    return cnt;
+}
+
 int main (int argc, char *argv[])
 {
     int optc;
@@ -128,11 +135,17 @@ int main (int argc, char *argv[])
     char pckt_cache[max_data_ids][max_ooo_pkts][max_pckt_sz + relen];  // crashes here
     bool pckt_cache_inuse[max_data_ids][max_ooo_pkts];
     unsigned int pckt_sz[max_data_ids][max_ooo_pkts];
-    for(unsigned int i = 0; i < max_data_ids; i++) 
+    bool data_ids_inuse[max_data_ids];
+    bool lst_pkt_rcd[max_data_ids];
+    for(unsigned int i = 0; i < max_data_ids; i++) {
+        data_ids_inuse[i] = false;
+        lst_pkt_rcd[i] = false;
         for(unsigned int j = 0; j < max_ooo_pkts; j++)  {
             pckt_cache_inuse[i][j] = false;
             pckt_sz[i][j] = 0;
         }
+    }
+    uint16_t num_data_ids = 0;  // number of data_ids encountered in this session
     do {
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on srcRcvBuf variable
@@ -142,14 +155,17 @@ int main (int argc, char *argv[])
         cerr << "Received " <<  nBytes << " bytes from source\n";
         cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
             << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';
-        if(premd->remdbf.data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }	
+        if(premd->remdbf.data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }
+        data_ids_inuse[premd->remdbf.data_id] = true;
+        lst_pkt_rcd[premd->remdbf.data_id] = (premd->remdbf.lst == 1);
         if(premd->remdbf.seq == seq[premd->remdbf.data_id]) { //the seq # we were expecting
             cerr << "writing seq " <<  premd->remdbf.seq << " size = " << int(nBytes-relen) << endl;
             rs[premd->remdbf.data_id].write((char*)&buffer[relen], nBytes-relen);
             rs[premd->remdbf.data_id].flush();
             while(pckt_cache_inuse[premd->remdbf.data_id][++seq[premd->remdbf.data_id]] == true) { // while we can find cached packets
                 union re* premd1 = (union re*)pckt_cache[premd->remdbf.data_id][seq[premd->remdbf.data_id]];
-                cerr << "writing seq " <<  premd1->remdbf.seq << " from slot " << seq[premd->remdbf.data_id] << " size = " << pckt_sz[seq[premd->remdbf.data_id]]-relen << endl;
+                cerr << "writing seq " <<  premd1->remdbf.seq << " from slot " << seq[premd->remdbf.data_id] 
+                     << " size = " << pckt_sz[seq[premd->remdbf.data_id]]-relen << endl;
                 rs[premd->remdbf.data_id].write((char*)&pckt_cache[premd->remdbf.data_id][seq[premd->remdbf.data_id]][relen], pckt_sz[premd->remdbf.data_id][seq[premd->remdbf.data_id]]-relen);
                 rs[premd->remdbf.data_id].flush();
                 pckt_cache_inuse[premd->remdbf.data_id][seq[premd->remdbf.data_id]] = false;
@@ -162,6 +178,6 @@ int main (int argc, char *argv[])
             cerr << "Received packet out of sequence: expected " <<  seq[premd->remdbf.data_id] << " recd " << premd->remdbf.seq << '\n';
             cerr << "store pckt " <<  premd->remdbf.seq << " in slot " << premd->remdbf.seq << endl;
         }
-    } while(premd->remdbf.lst == 0);
+    } while(cnt_trues(data_ids_inuse, max_data_ids) != cnt_trues(lst_pkt_rcd, max_data_ids));
     return 0;
 }

@@ -25,9 +25,10 @@ void   Usage(void)
         -p destination ipv4 port (number)  \n\
         -t tick  \n\
         -d data_id  \n\
+        -n num_data_ids starting from initial  \n\
         -h help \n\n";
         cout<<usage_str;
-        cout<<"Required: -s\n";
+        cout<<"Required: -i\n";
 }
 
 int main (int argc, char *argv[])
@@ -36,14 +37,15 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI, passedP, passedT, passedD  = false;
+    bool passedI = false;
 
-    char out_ip[64];    // target ip
-    uint16_t out_prt;   // target port
-    uint16_t tick;      // LB tick
-    uint16_t data_id;   // RE data_id
+    char     lb_ip[64];             // LB target ip
+    uint16_t lb_prt       = 0x4c42; // target LB port
+    uint16_t tick         = 1;      // LB tick
+    uint16_t data_id      = 1;      // RE data_id
+    uint16_t num_data_ids = 1;      // number of data_ids starting from initial
 
-    while ((optc = getopt(argc, argv, "i:p:t:d:")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:d:n:")) != -1)
     {
         switch (optc)
         {
@@ -51,20 +53,20 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         case 'i':
-            strcpy(out_ip, (const char *) optarg) ;
+            strcpy(lb_ip, (const char *) optarg) ;
             passedI = true;
             break;
         case 'p':
-            out_prt = (uint16_t) atoi((const char *) optarg) ;
-            passedP = true;
+            lb_prt = (uint16_t) atoi((const char *) optarg) ;
             break;
         case 't':
             tick = (uint16_t) atoi((const char *) optarg) ;
-            passedT = true;
             break;
         case 'd':
             data_id = (uint16_t) atoi((const char *) optarg) ;
-            passedD = true;
+            break;
+        case 'n':
+            num_data_ids = (uint16_t) atoi((const char *) optarg) ;
             break;
         case '?':
             cerr<<"Unrecognised option: -"<<optopt<<'\n';
@@ -73,7 +75,7 @@ int main (int argc, char *argv[])
         }
     }
 
-    if(!(passedI && passedP && passedT && passedD)) { Usage(); exit(1); }
+    if(!passedI) { Usage(); exit(1); }
 
 
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
@@ -91,8 +93,8 @@ int main (int argc, char *argv[])
 
     // Configure settings in address struct
     snkAddr.sin_family = AF_INET;
-    snkAddr.sin_port = htons(out_prt); // data consumer port to send to
-    snkAddr.sin_addr.s_addr = inet_addr(out_ip); // indra-s3 as data consumer
+    snkAddr.sin_port = htons(lb_prt); // data consumer port to send to
+    snkAddr.sin_addr.s_addr = inet_addr(lb_ip); // indra-s3 as data consumer
     memset(snkAddr.sin_zero, '\0', sizeof snkAddr.sin_zero);
 
     // Initialize size variable to be used later on
@@ -144,13 +146,17 @@ int main (int argc, char *argv[])
         if(nr != max_pckt_sz) premd->remdbf.lst  = 1;
 
         // forward data to LB
-        cerr << "Sending " << int(mdlen + nr) << " bytes to LB" << '\n';
-        cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) << " / tick = " << plbmd->lbmdbf.tick << '\n';	
-        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
+        for(unsigned int didcnt = 0; didcnt < num_data_ids; didcnt++) {
+            premd->remdbf.data_id = data_id + didcnt;
+            cerr << "Sending " << int(mdlen + nr) << " bytes to LB" << '\n';
+            cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
+                 << " / tick = " << plbmd->lbmdbf.tick << '\n';	
+            cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
+                 << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
 
-        ssize_t rtCd = sendto(clientSocket, buffer, mdlen + nr, 0, (struct sockaddr *)&snkAddr, addr_size);
-        cerr << "sendto return code = " << int(rtCd) << endl;
-
+            ssize_t rtCd = sendto(clientSocket, buffer, mdlen + nr, 0, (struct sockaddr *)&snkAddr, addr_size);
+            cerr << "sendto return code = " << int(rtCd) << endl;
+        }
         premd->remdbf.frst = 0;
     } while(premd->remdbf.lst == 0);
 
