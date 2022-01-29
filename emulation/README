@@ -4,11 +4,11 @@
 Data Source:
 -------------
 
-tx=$(mktemp); cat <file> | pktzr_md -t <destination ip> -r <destination port> 2> $tx
+tx=$(mktemp); cat <file> | pktzr_md -i <destination ip> -p <destination port> -t <tick> -d <data_id>  2> $tx
 
 e.g.,
 
-tx=$(mktemp); cat <file> | pktzr_md -t 129.57.29.231 -r 19522 2> $tx
+tx=$(mktemp); cat <file> | pktzr_md -i 129.57.29.231 -p 19522 -t 1 -d 98 2> $tx
 
 the session log is in $tx
 
