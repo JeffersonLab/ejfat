@@ -1,10 +1,10 @@
 // Test setup for EJFAT emulation:
 
+(parameter defaults on rhs of =)
+
 -------------
 Data Source:
 -------------
-
-(parameter defaults on rhs of =)
 
 tx=$(mktemp); cat <file> | pktzr_md -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
 
