@@ -8,7 +8,7 @@ Data Source:
 
 tx=$(mktemp); cat <file> | pktzr_md -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
 
-the <num_data_ids> parm will determine how many replicates of the source data will be sent starting the vakue of the parm <data_id>
+the <num_data_ids> parm will determine how many replicates of the source data will be sent starting with the value of the parm <data_id>
 
 
 e.g.,
