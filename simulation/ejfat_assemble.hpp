@@ -44,8 +44,6 @@
 namespace ersap {
     namespace ejfat {
 
-        static bool debug = true;
-
         /** Union to facilitate unpacking of RE UDP header. */
         union reHeader {
             struct __attribute__((packed))re_hdr {
@@ -175,13 +173,15 @@ namespace ersap {
          *                  indicating the first packet in a series used to send data.
          * @param last      to be filled with "last" bit id read from RE header,
          *                  indicating the last packet in a series used to send data.
+         * @param debug     turn debug printout on & off.
+         *
          * @return number of data (not headers!) bytes read from packet.
          *         If there's an error in recvmsg, it will return RECV_MSG.
          *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
          */
         static int readPacket(char *dataBuf, size_t bufLen, int udpSocket,
                               uint32_t* sequence, int* dataId, int* version,
-                              bool *first, bool *last) {
+                              bool *first, bool *last, bool debug) {
 
             // Storage for RE header
             union reHeader header{};
@@ -264,12 +264,13 @@ namespace ersap {
          * or when the "last" bit is set in a packet.
          * This routine allows for out-of-order packets.
          *
-         * @param dataBuf   place to store assembled packets.
-         * @param bufLen    byte length of dataBuf.
-         * @param udpSocket UDP socket to read.
+         * @param dataBuf       place to store assembled packets.
+         * @param bufLen        byte length of dataBuf.
+         * @param udpSocket     UDP socket to read.
+         * @param debug         turn debug printout on & off.
          * @param veryFirstRead this is the very first time data will be read for a sequence of same-tick packets.
-         * @param last      to be filled with "last" bit id read from RE header,
-         *                  indicating the last packet in a series used to send data.
+         * @param last         to be filled with "last" bit id read from RE header,
+         *                     indicating the last packet in a series used to send data.
          * @param expSequence  value-result parameter which gives the next expected sequence to be
          *                     read from RE header and returns its updated value
          *                     indicating its sequence in the flow of packets.
@@ -287,7 +288,8 @@ namespace ersap {
          *         If cannot allocate memory, it will return OUT_OF_MEM.
          */
         static ssize_t getPacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
-                                           bool veryFirstRead, bool *last, uint32_t *expSequence, uint32_t *bytesPerPacket,
+                                           bool debug, bool veryFirstRead, bool *last,
+                                           uint32_t *expSequence, uint32_t *bytesPerPacket,
                                            std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
 
             // TODO: build if sequence is file offset
@@ -309,7 +311,7 @@ namespace ersap {
                 // Read in one packet
                 nBytes = readPacket(putDataAt, remainingLen, udpSocket,
                                     &sequence, &dataId, &version,
-                                    &packetFirst, &packetLast);
+                                    &packetFirst, &packetLast, debug);
 
                 // If error
                 if (nBytes < 0) {
@@ -460,7 +462,7 @@ namespace ersap {
          * @param fp      file pointer.
          * @return error code of 0 means OK. If there is an error, programs exits.
          */
-        int writeBuffer(const char* dataBuf, size_t nBytes, FILE* fp) {
+        int writeBuffer(const char* dataBuf, size_t nBytes, FILE* fp, bool debug) {
 
             size_t n, totalWritten = 0;
 
@@ -500,6 +502,7 @@ namespace ersap {
          * @param listeningAddr if specified, this is the IP address to listen on (dot-decimal form).
          * @param noCopy        If true, write data directly into userBuf. If there's not enough room, an error is thrown.
          *                      If false, an internal buffer is allocated and returned in the userBuf arg.
+         * @param debug         turn debug printout on & off.
          *
          * @return 0 if success.
          *         If there's an error in recvmsg, it will return RECV_MSG.
@@ -511,7 +514,9 @@ namespace ersap {
          *         If cannot allocate memory, it will return OUT_OF_MEM.
          *         If userBuf is null or *userBuf is null when noCopy is true, it will return BAD_ARG.
          */
-        static int getBuffer(char** userBuf, size_t *userBufLen, unsigned short port, const char *listeningAddr, bool noCopy) {
+        static int getBuffer(char** userBuf, size_t *userBufLen,
+                             unsigned short port, const char *listeningAddr,
+                             bool noCopy, bool debug) {
 
 
             if (userBuf == nullptr || userBufLen == nullptr) {
@@ -567,8 +572,8 @@ namespace ersap {
                 }
 
                 nBytes = getPacketizedBuffer(*userBuf, *userBufLen, udpSocket,
-                                             firstRead, &last, &sequence, &bytesPerPacket,
-                                             outOfOrderPackets);
+                                             debug, firstRead, &last, &sequence,
+                                             &bytesPerPacket,outOfOrderPackets);
                 if (totalBytes < 0) {
                     if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
                     // Return the error
@@ -600,8 +605,8 @@ namespace ersap {
 
                 while (true) {
                     nBytes = getPacketizedBuffer(getDataFrom, remaningBytes, udpSocket,
-                                                 firstRead, &last, &sequence, &bytesPerPacket,
-                                                 outOfOrderPackets);
+                                                 debug, firstRead, &last, &sequence,
+                                                 &bytesPerPacket,outOfOrderPackets);
                     if (nBytes < 0) {
                         if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
                         // Return the error

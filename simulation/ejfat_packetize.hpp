@@ -68,11 +68,7 @@ namespace ersap {
 namespace ejfat {
 
 
-
-    static bool debug = true;
-
-
-    static int getMTU(const char* interfaceName) {
+    static int getMTU(const char* interfaceName, bool debug) {
         // Default MTU
         int mtu = 1500;
 
@@ -129,7 +125,7 @@ namespace ejfat {
     #endif
 
 
-    static void setReMetadata(char* buffer, bool first, bool last,
+    static void setReMetadata(char* buffer, bool first, bool last, bool debug,
                               uint32_t offsetVal, int version, int dataId) {
         // Put 2 32-bit words in network byte order
 
@@ -150,7 +146,6 @@ namespace ejfat {
         // Put the data in network byte order (big endian)
         *((uint32_t *)buffer) = htonl(firstWord);
         *((uint32_t *)(buffer + 4)) = htonl(offsetVal);
-
     }
 
 
@@ -174,13 +169,14 @@ namespace ejfat {
       *                       and returns the sequence to use for next packet to be sent.
       * @param firstBuffer    if true, this is the first buffer to send in a sequence.
       * @param lastBuffer     if true, this is the last buffer to send in a sequence.
+      * @param debug         turn debug printout on & off.
       *
       * @return 0 if OK, -1 if error when sending packet.
       */
     static int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                    int clientSocket, struct sockaddr_in* destination,
                                    uint64_t tick, int version, int dataId, uint32_t *offset,
-                                   bool firstBuffer, bool lastBuffer) {
+                                   bool firstBuffer, bool lastBuffer, bool debug) {
 
         int totalDataBytesSent = 0;
         int remainingBytes = dataLen;
@@ -236,7 +232,7 @@ namespace ejfat {
 
             // Write RE meta data into buffer
             setReMetadata(headerBuffer + LB_HEADER_BYTES, veryFirstPacket, veryLastPacket,
-                          packetCounter++, version, dataId);
+                          debug, packetCounter++, version, dataId);
 
             // This is where and how many bytes to write for data
             iov[1].iov_base = (void *)getDataFrom;
@@ -297,12 +293,12 @@ namespace ejfat {
       * @param tick       tick value for Load Balancer header used in directing packets to final host.
       * @param version    version in reassembly header.
       * @param dataId     data id in reassembly header.
+      * @param debug     turn debug printout on & off.
       *
       * @return 0 if OK, -1 if error when sending packet.
-
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
-                          int mtu, unsigned short port, uint64_t tick, int version, int dataId) {
+                          int mtu, unsigned short port, uint64_t tick, int version, int dataId, bool debug) {
 
         if (host.empty()) {
             // Default to sending to local host
@@ -314,10 +310,10 @@ namespace ejfat {
         if (mtu == 0) {
             if (interface.empty()) {
                 //interface = "eth0";
-                mtu = getMTU("eth0");
+                mtu = getMTU("eth0", debug);
             }
             else {
-                mtu = getMTU(interface.c_str());
+                mtu = getMTU(interface.c_str(), debug);
             }
         }
 
@@ -348,7 +344,7 @@ namespace ejfat {
         if (debug) printf("Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
         int err =  sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
-                                        tick, version, dataId, &offset, true, true);
+                                        tick, version, dataId, &offset, true, true, debug);
         return err;
     }
 

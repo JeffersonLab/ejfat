@@ -27,6 +27,10 @@ using namespace ersap::ejfat;
 #define INPUT_LENGTH_MAX 256
 
 
+/**
+ * Print out help.
+ * @param programName name to use for this program.
+ */
 static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
@@ -41,8 +45,18 @@ static void printHelp(char *programName) {
 }
 
 
-
-static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port,
+/**
+ * Parse all command line options.
+ *
+ * @param argc        arg count from main().
+ * @param argv        arg list from main().
+ * @param bufSize     filled with buffer size.
+ * @param port        filled with UDP port to listen on.
+ * @param debug       filled with debug flag.
+ * @param fileName    filled with output file name.
+ * @param listenAddr  filled with IP address to listen on.
+ */
+static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port, bool *debug,
                       char *fileName, char *listenAddr) {
 
     int c, i_tmp;
@@ -94,7 +108,7 @@ static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port,
 
             case 'v':
                 // VERBOSE
-                debug = true;
+                *debug = true;
                 break;
 
             case 'h':
@@ -134,12 +148,13 @@ int main(int argc, char **argv) {
     // Set this to max expected data size
     int bufSize = 100000;
     unsigned short port = 7777;
+    bool debug = false;
 
     char fileName[INPUT_LENGTH_MAX], listeningAddr[16];
     memset(fileName, 0, INPUT_LENGTH_MAX);
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &bufSize, &port, fileName, listeningAddr);
+    parseArgs(argc, argv, &bufSize, &port, &debug, fileName, listeningAddr);
 
     // Create UDP socket
     udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
@@ -199,7 +214,8 @@ int main(int argc, char **argv) {
 
     while (true) {
         nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                     firstRead, &last, &offset, &bytesPerPacket, outOfOrderPackets);
+                                     debug, firstRead, &last, &offset,
+                                     &bytesPerPacket, outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
             break;
@@ -210,7 +226,7 @@ int main(int argc, char **argv) {
         printBytes(dataBuf, nBytes, "buffer ---->");
 
         // Write out what was received
-        writeBuffer(dataBuf, nBytes, fp);
+        writeBuffer(dataBuf, nBytes, fp, debug);
 
 
         if (last) {

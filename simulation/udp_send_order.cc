@@ -48,7 +48,7 @@ static void printHelp(char *programName) {
 
 
 static void parseArgs(int argc, char **argv, int* mtu, int *version, int *id, uint16_t* port,
-                      char *fileName, char* host, char *interface) {
+                      bool *debug, char *fileName, char* host, char *interface) {
 
     *mtu = 0;
     int c, i_tmp;
@@ -133,7 +133,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *version, int *id, ui
 
             case 'v':
                 // VERBOSE
-                debug = true;
+                *debug = true;
                 break;
 
             case 'h':
@@ -180,6 +180,7 @@ int main(int argc, char **argv) {
     uint16_t port = 0x4c42; // FPGA port is default
     uint16_t tick = 0xc0da;
     int mtu, version = 1, dataId = 1;
+    bool debug = false;
 
     char fileName[INPUT_LENGTH_MAX], host[INPUT_LENGTH_MAX], interface[16];
 
@@ -191,13 +192,13 @@ int main(int argc, char **argv) {
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
 
-    parseArgs(argc, argv, &mtu, &version, &dataId, &port, fileName, host, interface);
+    parseArgs(argc, argv, &mtu, &version, &dataId, &port, &debug, fileName, host, interface);
 
 
     // Break data into multiple packets of max MTU size.
     // If the mtu was not set on the command line, get it progamatically
     if (mtu == 0) {
-        mtu = getMTU(interface);
+        mtu = getMTU(interface, debug);
     }
 
     // Jumbo (> 1500) ethernet frames are 9000 bytes max.
@@ -338,7 +339,7 @@ int main(int argc, char **argv) {
         }
 
         sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
-                             tick, version, dataId, &offset, firstBuffer, lastBuffer);
+                             tick, version, dataId, &offset, firstBuffer, lastBuffer, debug);
         firstBuffer = false;
         if (testOutOfOrder) {
             if (packetCounter == testPacketCount) {
