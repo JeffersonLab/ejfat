@@ -74,6 +74,8 @@ set(C_LIB_FILES
         )
 
 set(CPP_HEADER_FILES
+        simulation/ejfat_packetizer.hpp
+        simulation/ejfat_assemble.hpp
         )
 
 set(CPP_LIB_FILES
@@ -170,6 +172,13 @@ if (DEFINED MAKE_EXAMPLES)
             install(TARGETS ${execName} RUNTIME DESTINATION bin)
         endif()
     endforeach(fileName)
+endif()
+
+
+# Only install if installation directory has been defined
+if (DEFINED INSTALL_DIR_DEFINED)
+        install(FILES ${CPP_HEADER_FILES} DESTINATION include)
+        install(FILES ${CPP_HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
 
