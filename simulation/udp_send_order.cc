@@ -31,13 +31,15 @@ using namespace ersap::ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] ",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
             "        [-mtu <desired MTU size>]",
+            "        [-ver <version>]",
+            "        [-id <data id>]",
             "        [<input file name (or \"test\")>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet sender.\n");
@@ -45,7 +47,7 @@ static void printHelp(char *programName) {
 
 
 
-static void parseArgs(int argc, char **argv, int* mtu, uint16_t* port,
+static void parseArgs(int argc, char **argv, int* mtu, int *version, int *id, uint16_t* port,
                       char *fileName, char* host, char *interface) {
 
     *mtu = 0;
@@ -54,8 +56,10 @@ static void parseArgs(int argc, char **argv, int* mtu, uint16_t* port,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {{"mtu",  1, NULL, 1},
+            {{"mtu",   1, NULL, 1},
              {"host",  1, NULL, 2},
+             {"ver",   1, NULL, 3},
+             {"id",    1, NULL, 4},
              {0,       0, 0,    0}
             };
 
@@ -92,7 +96,7 @@ static void parseArgs(int argc, char **argv, int* mtu, uint16_t* port,
                 // MTU
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp < 100) {
-                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be > 100.\n");
+                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be > 100\n");
                     exit(-1);
                 }
                 *mtu = i_tmp;
@@ -105,6 +109,26 @@ static void parseArgs(int argc, char **argv, int* mtu, uint16_t* port,
                     exit(-1);
                 }
                 strcpy(host, optarg);
+                break;
+
+            case 3:
+                // VERSION
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp < 0 || i_tmp > 31) {
+                    fprintf(stderr, "Invalid argument to -ver. Version must be >= 0 and < 32\n");
+                    exit(-1);
+                }
+                *version = i_tmp;
+                break;
+
+            case 4:
+                // DATA_ID
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp < 0 || i_tmp > 65535) {
+                    fprintf(stderr, "Invalid argument to -id. Id must be >= 0 and < 65536\n");
+                    exit(-1);
+                }
+                *id = i_tmp;
                 break;
 
             case 'v':
@@ -155,7 +179,7 @@ int main(int argc, char **argv) {
     uint32_t offset = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint16_t tick = 0xc0da;
-    int mtu;
+    int mtu, version = 1, dataId = 1;
 
     char fileName[INPUT_LENGTH_MAX], host[INPUT_LENGTH_MAX], interface[16];
 
@@ -167,7 +191,7 @@ int main(int argc, char **argv) {
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
 
-    parseArgs(argc, argv, &mtu, &port, fileName, host, interface);
+    parseArgs(argc, argv, &mtu, &version, &dataId, &port, fileName, host, interface);
 
 
     // Break data into multiple packets of max MTU size.
@@ -314,7 +338,7 @@ int main(int argc, char **argv) {
         }
 
         sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
-                             tick, &offset, firstBuffer, lastBuffer);
+                             tick, version, dataId, &offset, firstBuffer, lastBuffer);
         firstBuffer = false;
         if (testOutOfOrder) {
             if (packetCounter == testPacketCount) {
@@ -345,21 +369,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-/*
- * will egress traffic out with the lowest numbered interface:
- */
-
-//    server_addr.sin_addr.s_addr = INADDR_ANY;
-
-/* 
- * But if you need to explicitely assign your IP address, then you will have to create another sin.addr construct and give it the IP in network byte order then: 
- */
-
-//    destination.sin_addr.s_addr = inet_addr("10.10.10.100");
-
-/* 
- * Then call your sendto to use the struct with the above declaration. Please note that the sendto does have an extra struct argument that allows for this.
- * Added sockaddr *myDestination here as an example 
- */
-
-//   sendto(int fd,const void *msg, int len, unsigned int flags, const struct sockaddr *myDestination, int tolen);

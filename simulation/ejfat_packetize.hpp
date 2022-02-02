@@ -129,10 +129,11 @@ namespace ejfat {
     #endif
 
 
-    static void setReMetadata(char* buffer, bool first, bool last, uint32_t offsetVal) {
+    static void setReMetadata(char* buffer, bool first, bool last,
+                              uint32_t offsetVal, int version, int dataId) {
         // Put 2 32-bit words in network byte order
 
-        // protocol 'Version:4, Rsvd:10, First:1, Last:1, ROC-ID:16, Offset:32'
+        // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
         // 0                   1                   2                   3
         // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
         // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -141,10 +142,7 @@ namespace ejfat {
         // |                  UDP Packet Offset                            |
         // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-        uint32_t version = 1;
-        uint32_t dataId  = 0x7777;
-
-        int firstWord = version | (first << 14) | (last << 15) | (dataId << 16);
+        int firstWord = (version & 0x1F) | (first << 14) | (last << 15) | (dataId << 16);
 
         if (debug) printf("RE first word = 0x%x\n", firstWord);
         if (debug) printf("RE offset = %u\n", offsetVal);
@@ -170,6 +168,8 @@ namespace ejfat {
       * @param clientSocket   UDP sending socket.
       * @param destination    FPGA address.
       * @param tick           value used by FPGA in directing packets to final host.
+      * @param version        version in reassembly header.
+      * @param dataId         data id in reassembly header.
       * @param offset         value-result parameter that passes in the sequence number of first packet
       *                       and returns the sequence to use for next packet to be sent.
       * @param firstBuffer    if true, this is the first buffer to send in a sequence.
@@ -179,7 +179,7 @@ namespace ejfat {
       */
     static int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                    int clientSocket, struct sockaddr_in* destination,
-                                   uint64_t tick, uint32_t *offset,
+                                   uint64_t tick, int version, int dataId, uint32_t *offset,
                                    bool firstBuffer, bool lastBuffer) {
 
         int totalDataBytesSent = 0;
@@ -235,7 +235,8 @@ namespace ejfat {
             setLbMetadata(headerBuffer, tick);
 
             // Write RE meta data into buffer
-            setReMetadata(headerBuffer + LB_HEADER_BYTES, veryFirstPacket, veryLastPacket, packetCounter++);
+            setReMetadata(headerBuffer + LB_HEADER_BYTES, veryFirstPacket, veryLastPacket,
+                          packetCounter++, version, dataId);
 
             // This is where and how many bytes to write for data
             iov[1].iov_base = (void *)getDataFrom;
@@ -293,13 +294,15 @@ namespace ejfat {
       * @param mtu        the max number of bytes to send per UDP packet,
       *                   which includes IP and UDP headers.
       * @param port       UDP port to send to.
-      * @param tick       tick value for Load Balancer header.
+      * @param tick       tick value for Load Balancer header used in directing packets to final host.
+      * @param version    version in reassembly header.
+      * @param dataId     data id in reassembly header.
       *
       * @return 0 if OK, -1 if error when sending packet.
 
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
-                          int mtu, unsigned short port, uint64_t tick) {
+                          int mtu, unsigned short port, uint64_t tick, int version, int dataId) {
 
         if (host.empty()) {
             // Default to sending to local host
@@ -345,7 +348,7 @@ namespace ejfat {
         if (debug) printf("Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
         int err =  sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
-                                        tick, &offset, true, true);
+                                        tick, version, dataId, &offset, true, true);
         return err;
     }
 
