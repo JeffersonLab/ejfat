@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
 
     char buf[bufsize];
     size_t nBytes, totalBytes = 0;
-    bool firstBuffer = false;
+    bool firstBuffer = true;
     bool lastBuffer  = false;
 
     while (true) {
