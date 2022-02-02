@@ -62,6 +62,9 @@ set(EXEC_FILES
         simulation/udp_send_order.cc
         simulation/udp_rcv.c
         simulation/udp_send.c
+        emulation/lb_emu.cc
+        emulation/lb_rcv.cc
+        emulation/pktzr_md.cc
         )
 
 set(C_HEADER_FILES

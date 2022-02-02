@@ -12,7 +12,6 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-#include <iostream>
 #include <fstream>
 #include <iostream>
 
@@ -41,7 +40,7 @@ void   Usage(void)
         cout<<"Required: -s\n";
 }
 
-main (int argc, char *argv[])
+int main (int argc, char *argv[])
 {
     int optc;
     extern char *optarg;
@@ -95,8 +94,8 @@ main (int argc, char *argv[])
 
     /*Configure settings in address struct*/
     srcAddr.sin_family = AF_INET;
-    srcAddr.sin_port = htons(in_prt); // "LB" = 0x4c42
-    srcAddr.sin_addr.s_addr = inet_addr(in_ip); //indra-s2
+    srcAddr.sin_port = htons(in_prt);           // "LB" = 0x4c42 by spec
+    srcAddr.sin_addr.s_addr = inet_addr(in_ip); // LB address
     //srcAddr.sin_addr.s_addr = INADDR_ANY;
     memset(srcAddr.sin_zero, '\0', sizeof srcAddr.sin_zero);
 
@@ -118,8 +117,8 @@ main (int argc, char *argv[])
 
     // Configure settings in address struct
     snkAddr.sin_family = AF_INET;
-    snkAddr.sin_port = htons(out_prt); // data consumer port to send to
-    snkAddr.sin_addr.s_addr = inet_addr(out_ip); // indra-s3 as data consumer
+    snkAddr.sin_port = htons(out_prt);           // Data Sink
+    snkAddr.sin_addr.s_addr = inet_addr(out_ip); // Data Sink
     memset(snkAddr.sin_zero, '\0', sizeof snkAddr.sin_zero);
 
     // Initialize size variable to be used later on
@@ -138,7 +137,6 @@ main (int argc, char *argv[])
         unsigned int lbmduia [3];
     } lbmd;
     size_t lblen =  sizeof(union lb);
-    union lb* plbmd = &lbmd;
 	// prepare RE meta-data
     // RE meta-data header on front of payload
     union re {
@@ -155,6 +153,7 @@ main (int argc, char *argv[])
     size_t relen =  sizeof(union re);
     size_t mdlen =  lblen + relen;
     char buffer[max_pckt_sz + mdlen];
+    union lb* plbmd = (union lb*)&buffer[0];
     union re* premd = (union re*)&buffer[lblen];
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
@@ -164,17 +163,20 @@ main (int argc, char *argv[])
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
         //printf("Received %i bytes from source\n", nBytes);
-        std::cerr << "Received "<< nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';
+        cerr << "Received "<< nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';
+        cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
+            << " / tick = " << plbmd->lbmdbf.tick << '\n';	
+        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
+            << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
 
-        printf("Sending %i bytes to sink\n", int(nBytes-lblen));
+        cerr << "Sending " << int(nBytes-lblen) << " bytes to sink" << '\n';
         
         // forward data to sink skipping past lb meta data
 
         ssize_t rtCd = sendto(clientSocket, &buffer[lblen], nBytes-lblen, 0, (struct sockaddr *)&snkAddr, addr_size);
-        printf("sendto return code = %d\n", int(rtCd));
+        cerr << "sendto return code = " << int(rtCd) << '\n';
 
     }
 
     return 0;
 }
-
