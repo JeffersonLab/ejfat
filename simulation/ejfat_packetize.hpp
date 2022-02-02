@@ -15,8 +15,8 @@
  * a special FPGA router. These packets will eventually be received at a given
  * UDP destination equipped to reassemble it.
  */
-#ifndef EJFAT_PACKETIZER_H
-#define EJFAT_PACKETIZER_H
+#ifndef EJFAT_PACKETIZE_H
+#define EJFAT_PACKETIZE_H
 
 
 
@@ -352,4 +352,4 @@ namespace ejfat {
 }
 }
 
-#endif // EJFAT_PACKETIZER_H
+#endif // EJFAT_PACKETIZE_H
