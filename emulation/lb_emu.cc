@@ -161,6 +161,12 @@ int main (int argc, char *argv[])
 
         // locate ingress data after lb+re meta data regions
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
+        // convert LB meta-data to host order
+        plbmd->lbmduia[0] = ntohl(plbmd->lbmduia[0]);
+        plbmd->lbmdbf.tick = NTOHLL(plbmd->lbmdbf.tick);
+        // convert RE meta-data to host order
+        premd->remduia[0] = ntohl(premd->remduia[0]);
+        premd->remduia[1] = ntohl(premd->remduia[1]);
 
         //printf("Received %i bytes from source\n", nBytes);
         cerr << "Received "<< nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';

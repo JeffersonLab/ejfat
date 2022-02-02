@@ -151,6 +151,9 @@ int main (int argc, char *argv[])
         //  requesting client will be stored on srcRcvBuf variable
 
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
+        // convert RE meta-data to host order
+        premd->remduia[0] = ntohl(premd->remduia[0]);
+        premd->remduia[1] = ntohl(premd->remduia[1]);
 
         cerr << "Received " <<  nBytes << " bytes from source\n";
         cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
