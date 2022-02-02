@@ -90,7 +90,7 @@ namespace ejfat {
 
     #ifdef ADD_LB_HEADER
 
-        static void setLbMetadata(char* buffer, uint64_t tick) {
+        static void setLbMetadata(char* buffer, uint64_t tick, uint32_t version) {
             // Put 1 32-bit word, followed by 1 64-bit word in network byte order, followed by 32 bits of data
 
             // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
@@ -105,7 +105,6 @@ namespace ejfat {
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             uint32_t L = 'L';
             uint32_t B = 'B';
-            uint32_t version = 1;
             uint32_t protocol = 123;
 
             int firstWord = L | (B << 8) | (version << 16) | (protocol << 24);
@@ -120,7 +119,7 @@ namespace ejfat {
 
     #else
 
-        static void setLbMetadata(char* buffer, uint64_t tick) {}
+        static void setLbMetadata(char* buffer, uint64_t tick, int version) {}
 
     #endif
 
@@ -228,7 +227,7 @@ namespace ejfat {
                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
             // Write LB meta data into buffer
-            setLbMetadata(headerBuffer, tick);
+            setLbMetadata(headerBuffer, tick, version);
 
             // Write RE meta data into buffer
             setReMetadata(headerBuffer + LB_HEADER_BYTES, veryFirstPacket, veryLastPacket,
