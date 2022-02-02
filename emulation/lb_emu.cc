@@ -94,8 +94,8 @@ int main (int argc, char *argv[])
 
     /*Configure settings in address struct*/
     srcAddr.sin_family = AF_INET;
-    srcAddr.sin_port = htons(in_prt); // "LB" = 0x4c42
-    srcAddr.sin_addr.s_addr = inet_addr(in_ip); //indra-s2
+    srcAddr.sin_port = htons(in_prt);           // "LB" = 0x4c42 by spec
+    srcAddr.sin_addr.s_addr = inet_addr(in_ip); // LB address
     //srcAddr.sin_addr.s_addr = INADDR_ANY;
     memset(srcAddr.sin_zero, '\0', sizeof srcAddr.sin_zero);
 
@@ -117,8 +117,8 @@ int main (int argc, char *argv[])
 
     // Configure settings in address struct
     snkAddr.sin_family = AF_INET;
-    snkAddr.sin_port = htons(out_prt); // data consumer port to send to
-    snkAddr.sin_addr.s_addr = inet_addr(out_ip); // indra-s3 as data consumer
+    snkAddr.sin_port = htons(out_prt);           // Data Sink
+    snkAddr.sin_addr.s_addr = inet_addr(out_ip); // Data Sink
     memset(snkAddr.sin_zero, '\0', sizeof snkAddr.sin_zero);
 
     // Initialize size variable to be used later on
@@ -164,8 +164,10 @@ int main (int argc, char *argv[])
 
         //printf("Received %i bytes from source\n", nBytes);
         cerr << "Received "<< nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';
-        cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) << " / tick = " << plbmd->lbmdbf.tick << '\n';	
-        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
+        cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
+            << " / tick = " << plbmd->lbmdbf.tick << '\n';	
+        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
+            << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
 
         cerr << "Sending " << int(nBytes-lblen) << " bytes to sink" << '\n';
         

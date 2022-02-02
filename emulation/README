@@ -78,6 +78,7 @@ nc -u -w 1 -l 129.57.87.14 7777 >  <file-with-first-12-bytes-stripped>
 Capabilities / Limitations (Bugs) / Next Steps:
 - pktzr_md repicates input data across as many (sequential) data_ids as specified 
 - lb_emu currently routes traffic to a single destination
+- lb_emu currently not encoding LB meta-data in network order
 - lb_rcv suports up to 100 concurrent data_ids each with as many as 10 out-of-order packets pending output.
 - 'netcat' (often soft-linked to 'nc') is not available on all systems, e.g., ifarm
 - send_file_lb and lb_send are deprecated and will be removed.
