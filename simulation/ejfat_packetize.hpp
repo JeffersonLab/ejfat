@@ -68,6 +68,21 @@ namespace ersap {
 namespace ejfat {
 
 
+    /** Union to facilitate unpacking of RE UDP header. */
+    union reHeader {
+        struct __attribute__((packed))re_hdr {
+            uint32_t version    : 4;
+            uint32_t reserved   : 10;
+            uint32_t first      : 1;
+            uint32_t last       : 1;
+            uint32_t data_id    : 16;
+            uint32_t sequence   : 32;
+        } reFields;
+
+        uint32_t reWords[2];
+    };
+
+
     static int getMTU(const char* interfaceName, bool debug) {
         // Default MTU
         int mtu = 1500;
@@ -90,7 +105,18 @@ namespace ejfat {
 
     #ifdef ADD_LB_HEADER
 
-        static void setLbMetadata(char* buffer, uint64_t tick, uint32_t version) {
+        /**
+         * Set the Load Balancer header data.
+         * The first four bytes go as ordered.
+         * The tick goes as a single, network byte ordered, 64-bit int.
+         *
+         * @param buffer   buffer in which to write the header.
+         * @param tick     unsigned 64 bit tick number used to tell the load balancer
+         *                 which backend host to direct the packet to.
+         * @param version  version of this software.
+         * @param protocol protocol this software uses.
+         */
+        static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol) {
             // Put 1 32-bit word, followed by 1 64-bit word in network byte order, followed by 32 bits of data
 
             // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
@@ -103,29 +129,38 @@ namespace ejfat {
             // +                              Tick                             +
             // |                                                               |
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            uint32_t L = 'L';
-            uint32_t B = 'B';
-            uint32_t protocol = 123;
-
-            int firstWord = L | (B << 8) | (version << 16) | (protocol << 24);
 
             //if (debug) printf("LB first word = 0x%x\n", firstWord);
             //if (debug) printf("LB tick = 0x%llx (%llu)\n\n", tick, tick);
 
             // Put the data in network byte order (big endian)
-            *((uint32_t *)buffer) = htonl(firstWord);
+            *buffer     = 'L';
+            *(buffer+1) = 'B';
+            *(buffer+2) = version;
+            *(buffer+3) = protocol;
             *((uint64_t *)(buffer + 4)) = htonll(tick);
         }
 
     #else
 
-        static void setLbMetadata(char* buffer, uint64_t tick, int version) {}
+        static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol) {}
 
     #endif
 
 
-    static void setReMetadata(char* buffer, bool first, bool last, bool debug,
-                              uint32_t offsetVal, int version, int dataId) {
+    /**
+     * Set the Reassembly Header data.
+     * The first 16 bits go as ordered. The dataId is put in network byte order.
+     * The offset is also put into network byte order.
+     * @param buffer  buffer in which to write the header.
+     * @param first   is this the first packet?
+     * @param last    is this the last packet?
+     * @param offset  the packet sequence number.
+     * @param version the version of this software.
+     * @param dataId  the data source id number.
+     */
+    static void setReMetadata(char* buffer, bool first, bool last,
+                              uint32_t offset, int version, unsigned short dataId) {
         // Put 2 32-bit words in network byte order
 
         // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
@@ -137,14 +172,13 @@ namespace ejfat {
         // |                  UDP Packet Offset                            |
         // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-        int firstWord = (version & 0x1F) | (first << 14) | (last << 15) | (dataId << 16);
+        union reHeader* header = (union reHeader*)buffer;
 
-        if (debug) printf("RE first word = 0x%x\n", firstWord);
-        if (debug) printf("RE offset = %u\n", offsetVal);
-
-        // Put the data in network byte order (big endian)
-        *((uint32_t *)buffer) = htonl(firstWord);
-        *((uint32_t *)(buffer + 4)) = htonl(offsetVal);
+        header->reFields.version = version;
+        header->reFields.first = first;
+        header->reFields.last = last;
+        header->reFields.data_id = htons(dataId);
+        header->reFields.sequence = htonl(offset);
     }
 
 
@@ -161,7 +195,8 @@ namespace ejfat {
       * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
       * @param clientSocket   UDP sending socket.
       * @param destination    FPGA address.
-      * @param tick           value used by FPGA in directing packets to final host.
+      * @param tick           value used by load balancer in directing packets to final host.
+      * @param protocol       protocol in laad balance header.
       * @param version        version in reassembly header.
       * @param dataId         data id in reassembly header.
       * @param offset         value-result parameter that passes in the sequence number of first packet
@@ -174,7 +209,7 @@ namespace ejfat {
       */
     static int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                    int clientSocket, struct sockaddr_in* destination,
-                                   uint64_t tick, int version, int dataId, uint32_t *offset,
+                                   uint64_t tick, int protocol, int version, unsigned short dataId, uint32_t *offset,
                                    bool firstBuffer, bool lastBuffer, bool debug) {
 
         int totalDataBytesSent = 0;
@@ -227,11 +262,11 @@ namespace ejfat {
                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
             // Write LB meta data into buffer
-            setLbMetadata(headerBuffer, tick, version);
+            setLbMetadata(headerBuffer, tick, version, protocol);
 
             // Write RE meta data into buffer
             setReMetadata(headerBuffer + LB_HEADER_BYTES, veryFirstPacket, veryLastPacket,
-                          debug, packetCounter++, version, dataId);
+                          packetCounter++, version, dataId);
 
             // This is where and how many bytes to write for data
             iov[1].iov_base = (void *)getDataFrom;
@@ -297,7 +332,8 @@ namespace ejfat {
       * @return 0 if OK, -1 if error when sending packet.
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
-                          int mtu, unsigned short port, uint64_t tick, int version, int dataId, bool debug) {
+                          int mtu, unsigned short port, uint64_t tick, int protocol,
+                          int version, unsigned short dataId, bool debug) {
 
         if (host.empty()) {
             // Default to sending to local host
@@ -343,7 +379,7 @@ namespace ejfat {
         if (debug) printf("Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
         int err =  sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
-                                        tick, version, dataId, &offset, true, true, debug);
+                                        tick, protocol, version, dataId, &offset, true, true, debug);
         return err;
     }
 

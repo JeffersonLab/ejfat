@@ -87,8 +87,7 @@ static void printBytes(const char *data, uint32_t bytes, const char *label) {
 }
 
 
-
-static void setLbMetadata(char* buffer, uint64_t tick, uint32_t version) {
+static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol) {
     // Put 1 32-bit word, followed by 1 64-bit word in network byte order, followed by 32 bits of data
 
     // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
@@ -101,19 +100,18 @@ static void setLbMetadata(char* buffer, uint64_t tick, uint32_t version) {
     // +                              Tick                             +
     // |                                                               |
     // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    uint32_t L = 'L';
-    uint32_t B = 'B';
-    uint32_t protocol = 123;
-
-    int firstWord = L | (B << 8) | (version << 16) | (protocol << 24);
 
     //if (debug) printf("LB first word = 0x%x\n", firstWord);
     //if (debug) printf("LB tick = 0x%llx (%llu)\n\n", tick, tick);
 
     // Put the data in network byte order (big endian)
-    *((uint32_t *)buffer) = htonl(firstWord);
+    *buffer     = 'L';
+    *(buffer+1) = 'B';
+    *(buffer+2) = version;
+    *(buffer+3) = protocol;
     *((uint64_t *)(buffer + 4)) = htonll(tick);
 }
+
 
 
 static void setReMetadata(char* buffer, bool first, bool last, bool debug,

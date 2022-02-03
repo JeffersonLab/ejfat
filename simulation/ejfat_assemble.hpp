@@ -55,7 +55,7 @@ namespace ersap {
                 uint32_t sequence   : 32;
             } reFields;
 
-            uint32_t remWords[2];
+            uint32_t reWords[2];
         };
 
 
@@ -199,7 +199,7 @@ namespace ersap {
             msg.msg_iov = iov;
             msg.msg_iovlen = 2;
 
-            iov[0].iov_base = (void *) header.remWords;
+            iov[0].iov_base = (void *) header.reWords;
             iov[0].iov_len = HEADER_BYTES;
 
             iov[1].iov_base = (void *) dataBuf;
@@ -218,31 +218,12 @@ namespace ersap {
                 return(TRUNCATED_MSG);
             }
 
-            // Do any necessary swapping
-            header.remWords[0] = ntohl(header.remWords[0]);
-            header.remWords[1] = ntohl(header.remWords[1]);
-            if (debug) fprintf(stderr, "\nRE first word = 0x%x, seq = %u\n", header.remWords[0], header.remWords[1]);
-
-            // Parse header & return values
-            if (dataId != nullptr) {
-                *dataId = header.reFields.data_id;
-            }
-
-            if (version != nullptr) {
-                *version = header.reFields.version;
-            }
-
-            if (first != nullptr) {
-                *first = header.reFields.first;
-            }
-
-            if (last != nullptr) {
-                *last = header.reFields.last;
-            }
-
-            if (sequence != nullptr) {
-                *sequence = header.reFields.sequence;
-            }
+            // Parse header
+            *dataId   = ntohs(header.reFields.data_id);
+            *version  = header.reFields.version;
+            *first    = header.reFields.first;
+            *last     = header.reFields.last;
+            *sequence = ntohl(header.reFields.sequence);
 
             return bytesRead - HEADER_BYTES;
         }
