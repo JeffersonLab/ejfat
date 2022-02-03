@@ -161,19 +161,13 @@ int main (int argc, char *argv[])
 
         // locate ingress data after lb+re meta data regions
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
-        // convert LB meta-data to host order
-        plbmd->lbmduia[0] = ntohl(plbmd->lbmduia[0]);
-        plbmd->lbmdbf.tick = NTOHLL(plbmd->lbmdbf.tick);
-        // convert RE meta-data to host order
-        premd->remduia[0] = ntohl(premd->remduia[0]);
-        premd->remduia[1] = ntohl(premd->remduia[1]);
 
         //printf("Received %i bytes from source\n", nBytes);
-        cerr << "Received "<< nBytes << " bytes from source for seq # " << premd->remdbf.seq << '\n';
+        cerr << "Received "<< nBytes << " bytes from source for seq # " << ntohl(premd->remdbf.seq) << '\n';
         cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
-            << " / tick = " << plbmd->lbmdbf.tick << '\n';	
+            << " / tick = " << NTOHLL(plbmd->lbmdbf.tick) << '\n';	
         cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
-            << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
+            << " / data_id = " << ntohs(premd->remdbf.data_id) << " / seq = " << ntohl(premd->remdbf.seq) << '\n';	
 
         cerr << "Sending " << int(nBytes-lblen) << " bytes to sink" << '\n';
         
