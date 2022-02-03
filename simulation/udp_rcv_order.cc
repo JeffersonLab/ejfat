@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     ssize_t nBytes;
     // Set this to max expected data size
     int bufSize = 100000;
-    unsigned short port = 7777;
+    uint16_t port = 7777;
     bool debug = false;
 
     char fileName[INPUT_LENGTH_MAX], listeningAddr[16];

@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
     uint16_t port = 0x4c42; // FPGA port is default
     uint16_t tick = 0xc0da;
     int mtu, version = 1, protocol = 1;
-    unsigned short dataId = 1;
+    uint16_t dataId = 1;
     bool debug = false;
 
     char fileName[INPUT_LENGTH_MAX], host[INPUT_LENGTH_MAX], interface[16];

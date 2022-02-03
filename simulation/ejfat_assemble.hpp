@@ -497,7 +497,7 @@ namespace ersap {
          *         If userBuf is null or *userBuf is null when noCopy is true, it will return BAD_ARG.
          */
         static int getBuffer(char** userBuf, size_t *userBufLen,
-                             unsigned short port, const char *listeningAddr,
+                             uint16_t port, const char *listeningAddr,
                              bool noCopy, bool debug) {
 
 

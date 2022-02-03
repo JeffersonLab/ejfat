@@ -332,7 +332,7 @@ namespace ejfat {
       * @return 0 if OK, -1 if error when sending packet.
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
-                          int mtu, unsigned short port, uint64_t tick, int protocol,
+                          int mtu, uint16_t port, uint64_t tick, int protocol,
                           int version, uint16_t dataId, bool debug) {
 
         if (host.empty()) {
