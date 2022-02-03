@@ -95,15 +95,16 @@ namespace ersap {
 
             uint32_t i;
             for (i=0; i < bytes; i++) {
-                if (i%10 == 0) {
-                    fprintf(stderr, "\n  Buf(%3d - %3d) =  ", (i+1), (i + 10));
+                if (i%8 == 0) {
+                    fprintf(stderr, "\n  Buf(%3d - %3d) =  ", (i+1), (i + 8));
                 }
-                else if (i%5 == 0) {
+                else if (i%4 == 0) {
                     fprintf(stderr, "  ");
                 }
 
                 // Accessing buf in this way does not change position or limit of buffer
                 fprintf(stderr, "  0x%02x ", (int)(*((data + i))));
+                fprintf(stderr, "%02x ",( ((int)(*(data + i))) & 0xff)  );
             }
 
             fprintf(stderr, "\n\n");
