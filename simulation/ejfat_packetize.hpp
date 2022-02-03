@@ -160,7 +160,7 @@ namespace ejfat {
      * @param dataId  the data source id number.
      */
     static void setReMetadata(char* buffer, bool first, bool last,
-                              uint32_t offset, int version, unsigned short dataId) {
+                              uint32_t offset, int version, uint16_t dataId) {
         // Put 2 32-bit words in network byte order
 
         // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
@@ -209,7 +209,7 @@ namespace ejfat {
       */
     static int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                    int clientSocket, struct sockaddr_in* destination,
-                                   uint64_t tick, int protocol, int version, unsigned short dataId, uint32_t *offset,
+                                   uint64_t tick, int protocol, int version, uint16_t dataId, uint32_t *offset,
                                    bool firstBuffer, bool lastBuffer, bool debug) {
 
         int totalDataBytesSent = 0;
@@ -333,7 +333,7 @@ namespace ejfat {
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
                           int mtu, unsigned short port, uint64_t tick, int protocol,
-                          int version, unsigned short dataId, bool debug) {
+                          int version, uint16_t dataId, bool debug) {
 
         if (host.empty()) {
             // Default to sending to local host

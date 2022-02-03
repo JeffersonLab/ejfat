@@ -180,7 +180,7 @@ namespace ersap {
          *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
          */
         static int readPacket(char *dataBuf, size_t bufLen, int udpSocket,
-                              uint32_t* sequence, int* dataId, int* version,
+                              uint32_t* sequence, uint16_t* dataId, int* version,
                               bool *first, bool *last, bool debug) {
 
             // Storage for RE header
@@ -279,7 +279,8 @@ namespace ersap {
             uint32_t sequence, expectedSequence = *expSequence;
 
             bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
-            int  dataId, version, nBytes;
+            int  version, nBytes;
+            uint16_t dataId;
             size_t maxPacketBytes = 0;
             ssize_t totalBytesRead = 0;
 
