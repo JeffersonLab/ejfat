@@ -128,11 +128,13 @@ int main (int argc, char *argv[])
     } remd;
     size_t relen =  sizeof(union re);
     char buffer[max_pckt_sz + relen];
-    union re* premd = (union re*)buffer; // RE neta data is at front of buffer
+    // RE neta data is at front of buffer
+    union re* premd = (union re*)buffer; 
     unsigned int seq[max_data_ids];
-    for(unsigned int i = 0; i < max_data_ids; i++) seq[i] = 1; // start all data_id streams at seq = 1
+    // start all data_id streams at seq = 0
+    for(unsigned int i = 0; i < max_data_ids; i++) seq[i] = 0; 
     // set up some cachd buffers for out-of-sequence work
-    char pckt_cache[max_data_ids][max_ooo_pkts][max_pckt_sz + relen];  // crashes here
+    char pckt_cache[max_data_ids][max_ooo_pkts][max_pckt_sz + relen];
     bool pckt_cache_inuse[max_data_ids][max_ooo_pkts];
     unsigned int pckt_sz[max_data_ids][max_ooo_pkts];
     bool data_ids_inuse[max_data_ids];
@@ -165,7 +167,8 @@ int main (int argc, char *argv[])
             cerr << "writing seq " <<  premd->remdbf.seq << " size = " << int(nBytes-relen) << endl;
             rs[premd->remdbf.data_id].write((char*)&buffer[relen], nBytes-relen);
             rs[premd->remdbf.data_id].flush();
-            while(pckt_cache_inuse[premd->remdbf.data_id][++seq[premd->remdbf.data_id]] == true) { // while we can find cached packets
+            // while we can find cached packets
+            while(pckt_cache_inuse[premd->remdbf.data_id][++seq[premd->remdbf.data_id]] == true) { 
                 union re* premd1 = (union re*)pckt_cache[premd->remdbf.data_id][seq[premd->remdbf.data_id]];
                 cerr << "writing seq " <<  premd1->remdbf.seq << " from slot " << seq[premd->remdbf.data_id] 
                      << " size = " << pckt_sz[seq[premd->remdbf.data_id]]-relen << endl;
