@@ -103,7 +103,6 @@ namespace ersap {
                 }
 
                 // Accessing buf in this way does not change position or limit of buffer
-                fprintf(stderr, "  0x%02x ", (int)(*((data + i))));
                 fprintf(stderr, "%02x ",( ((int)(*(data + i))) & 0xff)  );
             }
 
