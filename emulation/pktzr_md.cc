@@ -15,6 +15,9 @@
 
 using namespace std;
 
+#define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
+#define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
+
 const unsigned int max_pckt_sz = 1024;
 
 void   Usage(void)
@@ -111,6 +114,7 @@ int main (int argc, char *argv[])
             unsigned long int tick : 64;
         } lbmdbf;
         unsigned int lbmduia [3];
+        unsigned char bytes[(8+8+8+8+64)/8];
     } lbmd;
     lbmd.lbmdbf = {'L','B',1,1,tick};
     size_t lblen =  sizeof(union lb);
@@ -126,6 +130,7 @@ int main (int argc, char *argv[])
             unsigned int seq     : 32;
         } remdbf;
         unsigned int remduia[2];
+        unsigned char bytes[(4+10+1+1+16+32)/8];
     } remd;
     remd.remdbf = {1,0,1,0,data_id,0};
     size_t relen =  sizeof(union re);
@@ -135,11 +140,24 @@ int main (int argc, char *argv[])
     memmove(&buffer[lblen], &remd, relen);
     union lb* plbmd = (union lb*)buffer;
     union re* premd = (union re*)&buffer[lblen];
+
     premd->remdbf.frst = 1;
     premd->remdbf.lst  = 0;
     premd->remdbf.seq  = 0;
+
+    // convert tick to network byte order
+    plbmd->lbmdbf.tick = HTONLL(plbmd->lbmdbf.tick);
+    cerr << "LB meta-data on the wire is:";
+    for(unsigned int b = 0; b < sizeof(lbmd.bytes); b++) fprintf( stderr, " [%d] = %x ", b, lbmd.bytes[b]);
+    cerr << endl;
+    // convert data_id, seq to network byte order
+    premd->remdbf.data_id = htons(premd->remdbf.data_id);
+    premd->remdbf.seq = htonl(premd->remdbf.seq);
+    cerr << "RE meta-data on the wire is:";
+    for(unsigned int b = 0; b < sizeof(remd.bytes); b++) fprintf( stderr, " [%d] = %x ", b, remd.bytes[b]); 
+    cerr << endl;
+    unsigned int seq = 0;
     do {
-        premd->remdbf.seq++;
         f1.read((char*)&buffer[mdlen], max_pckt_sz);
         streamsize nr = f1.gcount();
         cerr << "Num read from stdin: " << nr << endl;
@@ -147,17 +165,18 @@ int main (int argc, char *argv[])
 
         // forward data to LB
         for(unsigned int didcnt = 0; didcnt < num_data_ids; didcnt++) {
-            premd->remdbf.data_id = data_id + didcnt;
+            premd->remdbf.data_id = htons(data_id + didcnt);
             cerr << "Sending " << int(mdlen + nr) << " bytes to LB" << '\n';
             cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
-                 << " / tick = " << plbmd->lbmdbf.tick << '\n';	
+                 << " / tick = " << NTOHLL(plbmd->lbmdbf.tick) << '\n';	
             cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
-                 << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';	
+                 << " / data_id = " << ntohs(premd->remdbf.data_id) << " / seq = " << ntohl(premd->remdbf.seq) << '\n';	
 
             ssize_t rtCd = sendto(clientSocket, buffer, mdlen + nr, 0, (struct sockaddr *)&snkAddr, addr_size);
             cerr << "sendto return code = " << int(rtCd) << endl;
         }
         premd->remdbf.frst = 0;
+        premd->remdbf.seq = htonl(++seq);
     } while(premd->remdbf.lst == 0);
 
     return 0;
