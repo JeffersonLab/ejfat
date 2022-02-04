@@ -31,7 +31,7 @@ using namespace ersap::ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] ",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -42,6 +42,7 @@ static void printHelp(char *programName) {
             "        [-ver <version>]",
             "        [-id <data id>]",
             "        [-pro <protocol>]",
+            "        [-d <delay in millisec between packets>]",
             "        [<input file name (or \"test\")>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet sender.\n");
@@ -50,7 +51,7 @@ static void printHelp(char *programName) {
 
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *version, uint16_t *id, uint16_t* port,
-                      uint64_t* tick, bool *debug, char *fileName, char* host, char *interface) {
+                      uint64_t* tick, uint32_t* delay, bool *debug, char *fileName, char* host, char *interface) {
 
     *mtu = 0;
     int c, i_tmp;
@@ -68,7 +69,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *versi
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -95,6 +96,18 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *versi
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'd':
+                // DELAY
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *delay = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -d, packet delay > 0\n");
                     exit(-1);
                 }
                 break;
@@ -202,7 +215,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *versi
  */
 int main(int argc, char **argv) {
 
-    uint32_t offset = 0;
+    uint32_t offset = 0, delay = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 0xc0da;
     int mtu, version = 1, protocol = 1;
@@ -219,7 +232,7 @@ int main(int argc, char **argv) {
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
 
-    parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick, &debug, fileName, host, interface);
+    parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick, &delay, &debug, fileName, host, interface);
 
 
     // Break data into multiple packets of max MTU size.
@@ -366,7 +379,8 @@ int main(int argc, char **argv) {
         }
 
         sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
-                             tick, protocol, version, dataId, &offset, firstBuffer, lastBuffer, debug);
+                             tick, protocol, version, dataId, &offset, delay,
+                             firstBuffer, lastBuffer, debug);
         firstBuffer = false;
         if (testOutOfOrder) {
             if (packetCounter == testPacketCount) {
