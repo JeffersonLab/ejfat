@@ -25,6 +25,9 @@ using namespace std;
 #endif
 
 const unsigned int max_pckt_sz = 1024;
+const size_t lblen = 12;
+const size_t relen = 8;
+const size_t mdlen =  lblen + relen;
 
 
 void   Usage(void)
@@ -124,37 +127,14 @@ int main (int argc, char *argv[])
     // Initialize size variable to be used later on
     addr_size = sizeof snkAddr;
 
-	// prepare LB meta-data
-    // LB meta-data header on front of payload
-    union lb {
-        struct __attribute__((packed)) lb_hdr {
-            unsigned int l    : 8;
-            unsigned int b    : 8;
-            unsigned int vrsn : 8;
-            unsigned int ptcl : 8;
-            unsigned long int tick : 64;
-        } lbmdbf;
-        unsigned int lbmduia [3];
-    } lbmd;
-    size_t lblen =  sizeof(union lb);
-	// prepare RE meta-data
-    // RE meta-data header on front of payload
-    union re {
-        struct __attribute__((packed))re_hdr {
-            unsigned int vrsn    : 4;
-            unsigned int rsrvd   : 10;
-            unsigned int frst    : 1;
-            unsigned int lst     : 1;
-            unsigned int data_id : 16;
-            unsigned int seq     : 32;
-        } remdbf;
-        unsigned int remduia[2];
-    } remd;
-    size_t relen =  sizeof(union re);
-    size_t mdlen =  lblen + relen;
-    char buffer[max_pckt_sz + mdlen];
-    union lb* plbmd = (union lb*)&buffer[0];
-    union re* premd = (union re*)&buffer[lblen];
+//=======================================================================
+
+    uint8_t buffer[mdlen + max_pckt_sz];
+
+    uint8_t* pBuf   = buffer;
+    uint8_t* pBufLb = buffer;
+    uint8_t* pBufRe = &buffer[lblen];
+
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on srcRcvBuf variable
@@ -162,17 +142,28 @@ int main (int argc, char *argv[])
         // locate ingress data after lb+re meta data regions
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
-        //printf("Received %i bytes from source\n", nBytes);
-        cerr << "Received "<< nBytes << " bytes from source for seq # " << ntohl(premd->remdbf.seq) << '\n';
-        cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
-            << " / tick = " << NTOHLL(plbmd->lbmdbf.tick) << '\n';	
-        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
-            << " / data_id = " << ntohs(premd->remdbf.data_id) << " / seq = " << ntohl(premd->remdbf.seq) << '\n';	
+        // decode to little endian
+        uint32_t seq     = pBufRe[4]*0x1000000 + pBufRe[5]*0x10000 + pBufRe[6]*0x100 + pBufRe[7];
+        uint16_t data_id = pBufRe[2]*0x100 + pBufRe[3];
+        uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
+        uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
+        uint8_t lst      = pBufRe[1] & 0x01;
 
-        cerr << "Sending " << int(nBytes-lblen) << " bytes to sink" << '\n';
+        //printf("Received %i bytes from source\n", nBytes);
+        fprintf( stderr, "\n data_id = %d ", data_id);
+        fprintf( stderr, "Received %d bytes from source for seq # %d\n", nBytes, seq );
+        fprintf( stderr, "l = %c  / b = %c ", pBufLb[0], pBufLb[1]); 
+            /* << " / tick = " << NTOHLL(plbmd->lbmdbf.tick)  << '\n';	*/
+        fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
+        fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
+
         
         // forward data to sink skipping past lb meta data
-
+/**
+        unsigned int tick = NTOHLL(plbmd->lbmdbf.tick);
+        if(tick != 0) continue;
+**/
+        cerr << "Sending " << int(nBytes-lblen) << " bytes to sink" << '\n';
         ssize_t rtCd = sendto(clientSocket, &buffer[lblen], nBytes-lblen, 0, (struct sockaddr *)&snkAddr, addr_size);
         cerr << "sendto return code = " << int(rtCd) << '\n';
 

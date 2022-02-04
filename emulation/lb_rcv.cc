@@ -24,9 +24,11 @@ using namespace std;
 #include <ctype.h>
 #endif
 
-const unsigned int max_pckt_sz = 1024;
-const unsigned int max_data_ids = 100;  // support up to 100 data_ids
-const unsigned int max_ooo_pkts = 10;  // support up to 10 out of order packets
+const uint16_t max_pckt_sz = 1024;
+const uint16_t max_data_ids = 100;  // support up to 100 data_ids
+const uint16_t max_ooo_pkts = 10;  // support up to 10 out of order packets
+const size_t relen = 8;
+const size_t mdlen = relen;
 
 void   Usage(void)
 {
@@ -39,10 +41,10 @@ void   Usage(void)
         cout<<"Required: -s\n";
 }
 
-unsigned int cnt_trues(bool b[], unsigned int n) // returns count of true values in array
+uint16_t cnt_trues(bool b[], uint16_t n) // returns count of true values in array
 {
-    unsigned int cnt = 0;
-    for(unsigned int k = 0; k<n; k++) if(b[k] == true) cnt++;
+    uint16_t cnt = 0;
+    for(uint16_t k = 0; k<n; k++) if(b[k] == true) cnt++;
     return cnt;
 }
 
@@ -82,7 +84,7 @@ int main (int argc, char *argv[])
     if(!(passedI && passedP)) { Usage(); exit(1); }
 
     ofstream rs[max_data_ids];
-    for(unsigned int s = 0; s < max_data_ids; s++) {
+    for(uint16_t s = 0; s < max_data_ids; s++) {
         char x[64];
         sprintf(x,"/tmp/rs_%d",s);
         rs[s].open(x,std::ios::binary | std::ios::out);
@@ -110,36 +112,24 @@ int main (int argc, char *argv[])
     /*Initialize size variable to be used later on*/
     addr_size = sizeof srcRcvBuf;
 
-    // prepare RE meta-data
-    // RE meta-data header on front of payload
-    union re {
-        struct __attribute__((packed))re_hdr {
-            unsigned int vrsn    : 4;
-            unsigned int rsrvd   : 10;
-            unsigned int frst    : 1;
-            unsigned int lst     : 1;
-            unsigned int data_id : 16;
-            unsigned int seq     : 32;
-        } remdbf;
-        unsigned int remduia[2];
-    } remd;
-    size_t relen =  sizeof(union re);
-    char buffer[max_pckt_sz + relen];
+    uint8_t buffer[max_pckt_sz + relen];
+    uint8_t* pBufRe = buffer;
+
     // RE neta data is at front of buffer
     union re* premd = (union re*)buffer; 
-    unsigned int seq[max_data_ids];
+    uint16_t did_seq[max_data_ids];
     // start all data_id streams at seq = 0
-    for(unsigned int i = 0; i < max_data_ids; i++) seq[i] = 0; 
+    for(uint16_t i = 0; i < max_data_ids; i++) did_seq[i] = 0; 
     // set up some cachd buffers for out-of-sequence work
     char pckt_cache[max_data_ids][max_ooo_pkts][max_pckt_sz + relen];
     bool pckt_cache_inuse[max_data_ids][max_ooo_pkts];
-    unsigned int pckt_sz[max_data_ids][max_ooo_pkts];
+    uint16_t pckt_sz[max_data_ids][max_ooo_pkts];
     bool data_ids_inuse[max_data_ids];
     bool lst_pkt_rcd[max_data_ids];
-    for(unsigned int i = 0; i < max_data_ids; i++) {
+    for(uint16_t i = 0; i < max_data_ids; i++) {
         data_ids_inuse[i] = false;
         lst_pkt_rcd[i] = false;
-        for(unsigned int j = 0; j < max_ooo_pkts; j++)  {
+        for(uint16_t j = 0; j < max_ooo_pkts; j++)  {
             pckt_cache_inuse[i][j] = false;
             pckt_sz[i][j] = 0;
         }
@@ -152,35 +142,49 @@ int main (int argc, char *argv[])
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
         // convert RE meta-data to host order
-        premd->remdbf.data_id = ntohs(premd->remdbf.data_id);
-        premd->remdbf.seq = ntohl(premd->remdbf.seq);
+#if 0
+        pBufRe[2] = data_id / 0x100;
+        pBufRe[3] = data_id % 0x100; //256
+        pBufRe[4] = seq / 0x1000000;
+        pBufRe[5] = seq / 0x10000;
+        pBufRe[6] = seq / 0x100;
+        pBufRe[7] = seq % 0x100;
+#endif
 
-        cerr << "Received " <<  nBytes << " bytes from source\n";
-        cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
-            << " / data_id = " << premd->remdbf.data_id << " / seq = " << premd->remdbf.seq << '\n';
-        if(premd->remdbf.data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }
-        data_ids_inuse[premd->remdbf.data_id] = true;
-        lst_pkt_rcd[premd->remdbf.data_id] = (premd->remdbf.lst == 1);
-        if(premd->remdbf.seq == seq[premd->remdbf.data_id]) { //the seq # we were expecting
-            cerr << "writing seq " <<  premd->remdbf.seq << " size = " << int(nBytes-relen) << endl;
-            rs[premd->remdbf.data_id].write((char*)&buffer[relen], nBytes-relen);
-            rs[premd->remdbf.data_id].flush();
+        // decode to little endian
+        uint32_t seq     = pBufRe[4]*0x1000000 + pBufRe[5]*0x10000 + pBufRe[6]*0x100 + pBufRe[7];
+        uint16_t data_id = pBufRe[2]*0x100 + pBufRe[3];
+        uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
+        uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
+        uint8_t lst      = pBufRe[1] & 0x01;
+
+        fprintf( stderr, "Received %d bytes from source for seq # %d\n", nBytes, seq );
+        fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
+        fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
+
+        if(data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }
+        data_ids_inuse[data_id] = true;
+        lst_pkt_rcd[data_id] = lst == 1;
+        if(seq == did_seq[data_id]) { //the seq # we were expecting
+            cerr << "writing seq " <<  seq << " size = " << int(nBytes-relen) << endl;
+            rs[data_id].write((char*)&buffer[relen], nBytes-relen);
+            rs[data_id].flush();
             // while we can find cached packets
-            while(pckt_cache_inuse[premd->remdbf.data_id][++seq[premd->remdbf.data_id]] == true) { 
-                union re* premd1 = (union re*)pckt_cache[premd->remdbf.data_id][seq[premd->remdbf.data_id]];
-                cerr << "writing seq " <<  premd1->remdbf.seq << " from slot " << seq[premd->remdbf.data_id] 
-                     << " size = " << pckt_sz[seq[premd->remdbf.data_id]]-relen << endl;
-                rs[premd->remdbf.data_id].write((char*)&pckt_cache[premd->remdbf.data_id][seq[premd->remdbf.data_id]][relen], pckt_sz[premd->remdbf.data_id][seq[premd->remdbf.data_id]]-relen);
-                rs[premd->remdbf.data_id].flush();
-                pckt_cache_inuse[premd->remdbf.data_id][seq[premd->remdbf.data_id]] = false;
+            while(pckt_cache_inuse[data_id][++did_seq[data_id]] == true) { 
+                union re* premd1 = (union re*)pckt_cache[data_id][did_seq[data_id]];
+                cerr << "writing seq " <<  seq << " from slot " << did_seq[data_id] 
+                     << " size = " << pckt_sz[did_seq[data_id]]-relen << endl;
+                rs[data_id].write((char*)&pckt_cache[data_id][did_seq[data_id]][relen], pckt_sz[data_id][did_seq[data_id]]-relen);
+                rs[data_id].flush();
+                pckt_cache_inuse[data_id][did_seq[data_id]] = false;
             }
         } else { // out of expected order - save packet in associated slot
-            if(premd->remdbf.seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
-            memmove(pckt_cache[premd->remdbf.data_id][premd->remdbf.seq], buffer, nBytes);
-            pckt_sz[premd->remdbf.data_id][premd->remdbf.seq] = nBytes;
-            pckt_cache_inuse[premd->remdbf.data_id][premd->remdbf.seq] = true;
-            cerr << "Received packet out of sequence: expected " <<  seq[premd->remdbf.data_id] << " recd " << premd->remdbf.seq << '\n';
-            cerr << "store pckt " <<  premd->remdbf.seq << " in slot " << premd->remdbf.seq << endl;
+            if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
+            memmove(pckt_cache[data_id][seq], buffer, nBytes);
+            pckt_sz[data_id][seq] = nBytes;
+            pckt_cache_inuse[data_id][seq] = true;
+            cerr << "Received packet out of sequence: expected " <<  did_seq[data_id] << " recd " << seq << '\n';
+            cerr << "store pckt " <<  seq << " in slot " << seq << endl;
         }
     } while(cnt_trues(data_ids_inuse, max_data_ids) != cnt_trues(lst_pkt_rcd, max_data_ids));
     return 0;

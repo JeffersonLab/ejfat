@@ -18,7 +18,7 @@ using namespace std;
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 
-const unsigned int max_pckt_sz = 1024;
+const uint16_t max_pckt_sz = 1024;
 
 void   Usage(void)
 {
@@ -44,9 +44,14 @@ int main (int argc, char *argv[])
 
     char     lb_ip[64];             // LB target ip
     uint16_t lb_prt       = 0x4c42; // target LB port
-    uint16_t tick         = 1;      // LB tick
+    uint64_t tick         = 1;      // LB tick
     uint16_t data_id      = 1;      // RE data_id
     uint16_t num_data_ids = 1;      // number of data_ids starting from initial
+    const uint8_t vrsn    = 1;
+    const uint16_t rsrvd  = 2; // = 2 just for testing
+    uint8_t frst = 1;
+    uint8_t lst  = 0;
+    uint32_t seq = 0;
 
     while ((optc = getopt(argc, argv, "i:p:t:d:n:")) != -1)
     {
@@ -63,7 +68,7 @@ int main (int argc, char *argv[])
             lb_prt = (uint16_t) atoi((const char *) optarg) ;
             break;
         case 't':
-            tick = (uint16_t) atoi((const char *) optarg) ;
+            tick = (uint64_t) atoi((const char *) optarg) ;
             break;
         case 'd':
             data_id = (uint16_t) atoi((const char *) optarg) ;
@@ -103,81 +108,133 @@ int main (int argc, char *argv[])
     // Initialize size variable to be used later on
     socklen_t addr_size = sizeof snkAddr;
 
-	// prepare LB meta-data
-    // LB meta-data header on front of payload
-    union lb {
-        struct __attribute__((packed)) lb_hdr {
-            unsigned int l    : 8;
-            unsigned int b    : 8;
-            unsigned int vrsn : 8;
-            unsigned int ptcl : 8;
-            unsigned long int tick : 64;
-        } lbmdbf;
-        unsigned int lbmduia [3];
-        unsigned char bytes[(8+8+8+8+64)/8];
-    } lbmd;
-    lbmd.lbmdbf = {'L','B',1,1,tick};
-    size_t lblen =  sizeof(union lb);
-	// prepare RE meta-data
-    // RE meta-data header on front of payload
-    union re {
-        struct __attribute__((packed))re_hdr {
-            unsigned int vrsn    : 4;
-            unsigned int rsrvd   : 10;
-            unsigned int frst    : 1;
-            unsigned int lst     : 1;
-            unsigned int data_id : 16;
-            unsigned int seq     : 32;
-        } remdbf;
-        unsigned int remduia[2];
-        unsigned char bytes[(4+10+1+1+16+32)/8];
-    } remd;
-    remd.remdbf = {1,0,1,0,data_id,0};
-    size_t relen =  sizeof(union re);
-    size_t mdlen =  lblen + relen;
-    char buffer[mdlen + max_pckt_sz];
-    memmove(buffer, &lbmd, lblen);
-    memmove(&buffer[lblen], &remd, relen);
-    union lb* plbmd = (union lb*)buffer;
-    union re* premd = (union re*)&buffer[lblen];
+    const size_t lblen = 12;
+    const size_t relen = 8;
+    const size_t mdlen =  lblen + relen;
+    uint8_t buffer[mdlen + max_pckt_sz];
 
-    premd->remdbf.frst = 1;
-    premd->remdbf.lst  = 0;
-    premd->remdbf.seq  = 0;
+    uint8_t* pBuf   = buffer;
+    uint8_t* pBufLb = buffer;
+    uint8_t* pBufRe = &buffer[lblen];
+
+    pBufLb[0] = 'L';
+    pBufLb[1] = 'B';
+    pBufLb[2] = 1;
+    pBufLb[3] = 1;
+
+    {
+        uint64_t* p = (uint64_t*) &buffer[4];
+        *p = tick = 0xf0f1f2f3f4f5f6f7;
+#if 1
+        cerr << "Example LB meta-data on the wire:";
+        for(uint8_t b = 0; b < lblen; b++) fprintf( stderr, " [%d] = %x ", b, pBufLb[b]);
+        fprintf( stderr, "\n tick = %lu ", *p);
+        cerr << endl;
+#endif
+    }
+    {
+        //RE meta-data
+        //uint32_t seq = 0x01abcdef;
+        //uint16_t data_id = 0xabcd;
+        pBufRe[0] = (vrsn << 4) + (rsrvd >> 6);
+        pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
+        //little endian
+        pBufRe[2] = data_id % 0x100; //256
+        pBufRe[3] = data_id / 0x100;
+        pBufRe[4] = seq % 0x100;
+        pBufRe[5] = seq / 0x100;
+        pBufRe[6] = seq / 0x10000;
+        pBufRe[7] = seq / 0x1000000;
+
+        cerr << "Example RE little endian meta-data on the wire:";
+        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
+        fprintf( stderr, "\n data_id = %d ", data_id);
+        //fprintf( stderr, "\n seq = %lu ", *pl);
+        cerr << endl;
+
+        //big endian
+        pBufRe[2] = data_id / 0x100;
+        pBufRe[3] = data_id % 0x100; //256
+        pBufRe[4] = seq / 0x1000000;
+        pBufRe[5] = seq / 0x10000;
+        pBufRe[6] = seq / 0x100;
+        pBufRe[7] = seq % 0x100;
+
+        cerr << "Example RE big endian meta-data on the wire:";
+        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
+        fprintf( stderr, "\n data_id = %d ", data_id);
+        //fprintf( stderr, "\n seq = %lu ", *pl);
+        cerr << endl;
+
+        //   or
+
+        //big endian
+        pBufRe[2] = (data_id & 0xff00) >> 8;
+        pBufRe[3] = (data_id & 0xff) >> 0;
+        pBufRe[4] = (seq & 0xff000000) >> 24;
+        pBufRe[5] = (seq & 0xff0000) >> 16;
+        pBufRe[6] = (seq & 0xff00) >> 8;
+        pBufRe[7] = (seq & 0xff) >> 0;
+
+        cerr << "Example RE big endian meta-data on the wire:";
+        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
+        fprintf( stderr, "\n data_id = %d ", data_id);
+        //fprintf( stderr, "\n seq = %lu ", *pl);
+        cerr << endl;
+    }
+
+#if 0
 
     // convert tick to network byte order
     plbmd->lbmdbf.tick = HTONLL(plbmd->lbmdbf.tick);
-    cerr << "LB meta-data on the wire is:";
-    for(unsigned int b = 0; b < sizeof(lbmd.bytes); b++) fprintf( stderr, " [%d] = %x ", b, lbmd.bytes[b]);
-    cerr << endl;
     // convert data_id, seq to network byte order
     premd->remdbf.data_id = htons(premd->remdbf.data_id);
     premd->remdbf.seq = htonl(premd->remdbf.seq);
     cerr << "RE meta-data on the wire is:";
-    for(unsigned int b = 0; b < sizeof(remd.bytes); b++) fprintf( stderr, " [%d] = %x ", b, remd.bytes[b]); 
+    for(unsigned int b = 0; b < sizeof(union re); b++) fprintf( stderr, " [%d] = %x ", b, premd->bytes[b]); 
     cerr << endl;
-    unsigned int seq = 0;
+#endif
+
     do {
         f1.read((char*)&buffer[mdlen], max_pckt_sz);
         streamsize nr = f1.gcount();
         cerr << "Num read from stdin: " << nr << endl;
-        if(nr != max_pckt_sz) premd->remdbf.lst  = 1;
+        if(nr != max_pckt_sz) {
+            lst  = 1;
+            pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
+        }
 
         // forward data to LB
-        for(unsigned int didcnt = 0; didcnt < num_data_ids; didcnt++) {
-            premd->remdbf.data_id = htons(data_id + didcnt);
-            cerr << "Sending " << int(mdlen + nr) << " bytes to LB" << '\n';
-            cerr << "l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
+        for(uint16_t didcnt = 0; didcnt < num_data_ids; didcnt++) {
+            //big endian
+            pBufRe[2] = (data_id + didcnt) / 0x100;
+            pBufRe[3] = (data_id + didcnt) % 0x100; //256
+
+            //premd->remdbf.data_id = htons(data_id + didcnt);
+#if 0
+
+            cerr << "Sending " << int(mdlen + nr) << " bytes to LB" << '\n'
+                << " l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
+                << " vrsn = " << plbmd->lbmdbf.vrsn << " ptcl = " << plbmd->lbmdbf.ptcl 
                  << " / tick = " << NTOHLL(plbmd->lbmdbf.tick) << '\n';	
-            cerr << "frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
+            cerr << "version = "  << premd->remdbf.vrsn << " rsrvd = "  << premd->remdbf.rsrvd 
+                << " frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
                  << " / data_id = " << ntohs(premd->remdbf.data_id) << " / seq = " << ntohl(premd->remdbf.seq) << '\n';	
+#endif
 
             ssize_t rtCd = sendto(clientSocket, buffer, mdlen + nr, 0, (struct sockaddr *)&snkAddr, addr_size);
             cerr << "sendto return code = " << int(rtCd) << endl;
         }
-        premd->remdbf.frst = 0;
-        premd->remdbf.seq = htonl(++seq);
-    } while(premd->remdbf.lst == 0);
-
+//////////////////////
+        //premd->remdbf.frst = 0;
+        frst = 0;
+        pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
+        ++seq;
+        pBufRe[4] = seq / 0x1000000;
+        pBufRe[5] = seq / 0x10000;
+        pBufRe[6] = seq / 0x100;
+        pBufRe[7] = seq % 0x100;
+//////////////////////
+    } while(!lst); //premd->remdbf.lst == 0);
     return 0;
 }
