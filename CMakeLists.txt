@@ -64,6 +64,7 @@ set(EXEC_FILES
         simulation/udp_rcv.c
         simulation/udp_send.c
         simulation/re_header_test.cc
+        simulation/lb_emu2.cc
         emulation/lb_emu.cc
         emulation/lb_rcv.cc
         emulation/pktzr_md.cc
