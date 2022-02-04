@@ -112,10 +112,10 @@ namespace ejfat {
         strcpy(ifr.ifr_name, interfaceName);
         if (!ioctl(sock, SIOCGIFMTU, &ifr)) {
             mtu = ifr.ifr_mtu;
-            if (debug) printf("ioctl says MTU = %d\n", mtu);
+            if (debug) fprintf(stderr, "ioctl says MTU = %d\n", mtu);
         }
         else {
-            if (debug) printf("Using default MTU = %d\n", mtu);
+            if (debug) fprintf(stderr, "Using default MTU = %d\n", mtu);
         }
         close(sock);
         return mtu;
@@ -259,7 +259,7 @@ namespace ejfat {
       * @param lastBuffer     if true, this is the last buffer to send in a sequence.
       * @param debug          turn debug printout on & off.
       *
-      * @return 0 if OK, -1 if error when sending packet.
+      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
     static int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                    int clientSocket, struct sockaddr_in* destination,
@@ -313,7 +313,7 @@ namespace ejfat {
                 veryLastPacket = true;
             }
 
-            if (debug) printf("Send %d bytes, last buf = %s, very first = %s, very last = %s\n",
+            if (debug) fprintf(stderr, "Send %d bytes, last buf = %s, very first = %s, very last = %s\n",
                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
             // Write LB meta data into buffer
@@ -330,17 +330,13 @@ namespace ejfat {
             // Send message to receiver
             int err = sendmsg(clientSocket, &msg, 0);
             if (err == -1) {
-                // All other errors are unrecoverable
-                if (debug) perror("error sending message: ");
-                if (debug) printf("total msg len = %d\n", (bytesToWrite + HEADER_BYTES));
-
                 if ((errno == EMSGSIZE) && (veryFirstPacket)) {
                     // The UDP packet is too big, so we need to reduce it.
-                    // If this is still the first packet, we can try again. Try 10% reduction.
-                    maxUdpPayload = maxUdpPayload * 9 / 10;
+                    // If this is still the first packet, we can try again. Try 20% reduction.
+                    maxUdpPayload = maxUdpPayload * 8 / 10;
                     veryLastPacket = false;
                     packetCounter--;
-                    if (debug) printf("\n******************  START AGAIN ********************\n\n");
+                    if (debug) fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
                     goto startAgain;
                 }
                 else {
@@ -359,11 +355,12 @@ namespace ejfat {
             getDataFrom += bytesToWrite;
             veryFirstPacket = false;
 
-            if (debug) printf("Sent pkt, total %d, remaining bytes = %d\n\n", totalDataBytesSent, remainingBytes);
+            if (debug) fprintf(stderr, "Sent pkt %u, total %d, remaining bytes = %d\n\n",
+                              (packetCounter - 1), totalDataBytesSent, remainingBytes);
         }
 
         *offset = packetCounter;
-        if (debug) printf("Set next offset to = %d\n", packetCounter);
+        if (debug) fprintf(stderr, "Set next offset to = %d\n", packetCounter);
 
         return 0;
     }
@@ -390,7 +387,7 @@ namespace ejfat {
       * @param delay      delay in millisec between each packet being sent.
       * @param debug      turn debug printout on & off.
       *
-      * @return 0 if OK, -1 if error when sending packet.
+      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
                           int mtu, uint16_t port, uint64_t tick, int protocol,
@@ -405,7 +402,6 @@ namespace ejfat {
         // If the mtu was not set, attempt to get it progamatically.
         if (mtu == 0) {
             if (interface.empty()) {
-                //interface = "eth0";
                 mtu = getMTU("eth0", debug);
             }
             else {
@@ -437,12 +433,11 @@ namespace ejfat {
         memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
 
-        if (debug) printf("Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
+        if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-        int err =  sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
-                                        tick, protocol, version, dataId, &offset, delay,
-                                        true, true, debug);
-        return err;
+        return sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
+                                    tick, protocol, version, dataId, &offset, delay,
+                                   true, true, debug);
     }
 
 }

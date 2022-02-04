@@ -280,7 +280,7 @@ int main(int argc, char **argv) {
     // Read from either file or stdin, or create test data
     FILE *fp = nullptr;
     if (strlen(fileName) > 0) {
-        printf("File name = %s\n", fileName);
+        fprintf(stderr, "File name = %s\n", fileName);
 
         if (strncmp(fileName, "test", 4) == 0) {
             // Use test data generated right here
@@ -295,6 +295,10 @@ int main(int argc, char **argv) {
         else {
             // Open and read file
             fp = fopen( fileName, "r");
+            if (fp == nullptr) {
+                fprintf(stderr, "\n ******* file %s, does not exist or cannot open\n\n", fileName);
+                return -1;
+            }
             readingFromFile = true;
             // find the size of the file
             fseek(fp, 0L, SEEK_END);
@@ -312,7 +316,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (debug) printf("Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
+    if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
     char buf[bufsize];
     size_t nBytes, totalBytes = 0;
@@ -325,13 +329,13 @@ int main(int argc, char **argv) {
 
             // Done
             if (nBytes == 0) {
-                printf("\n ******* Last read returned 0, END reading\n\n");
+                fprintf(stderr, "\n ******* Last read returned 0, END reading\n\n");
                 break;
             }
 
             // Error
             if (ferror(fp)) {
-                printf("\n ******* Last read returned error, nBytes = %lu\n\n", nBytes);
+                fprintf(stderr, "\n ******* Last read returned error, nBytes = %lu\n\n", nBytes);
                 break;
             }
 
@@ -375,30 +379,37 @@ int main(int argc, char **argv) {
             // if using stdin
             if (feof(fp)) {
                 // We've reached the EOF with last read
-                printf("\n ******* FOUND EOF for reading from stdin, just read in %lu bytes\n\n", nBytes);
+                fprintf(stderr, "\n ******* FOUND EOF for reading from stdin, just read in %lu bytes\n\n", nBytes);
                 lastBuffer = true;
             }
         }
 
-        sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
-                             tick, protocol, version, dataId, &offset, delay,
-                             firstBuffer, lastBuffer, debug);
+        int err = sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
+                                       tick, protocol, version, dataId, &offset, delay,
+                                       firstBuffer, lastBuffer, debug);
+        if (err < 0) {
+            // Should be more info in errno
+            //perror("sendPacketizedBuffer:");
+            fprintf(stderr, "\nsendPacketizedBuffer: %s\n\n", strerror(errno));
+            exit(1);
+        }
+
         firstBuffer = false;
         if (testOutOfOrder) {
             if (packetCounter == testPacketCount) {
-                printf("\n ******* last buffer send, END reading\n\n");
+                fprintf(stderr, "\n ******* last buffer sent, END reading\n\n");
                 break;
             }
         }
         else {
             if (lastBuffer) {
-                printf("\n ******* last buffer send, END reading\n\n");
+                fprintf(stderr, "\n ******* last buffer send, END reading\n\n");
                 break;
             }
         }
     }
 
-    printf("\n ******* Sent a total of %lu data bytes\n", totalBytes);
+    fprintf(stderr, "\n ******* Sent a total of %lu data bytes\n\n", totalBytes);
 
 
     if (nBytes == -1) {
