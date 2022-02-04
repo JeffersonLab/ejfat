@@ -161,6 +161,7 @@ int main(int argc, char **argv) {
 
     // Configure settings in address struct
     struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
     if (strlen(listeningAddr) > 0) {
@@ -223,7 +224,7 @@ int main(int argc, char **argv) {
         totalRead += nBytes;
         firstRead = false;
 
-        printBytes(dataBuf, nBytes, "buffer ---->");
+        //printBytes(dataBuf, nBytes, "buffer ---->");
 
         // Write out what was received
         writeBuffer(dataBuf, nBytes, fp, debug);

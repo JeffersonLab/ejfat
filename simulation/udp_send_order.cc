@@ -256,6 +256,8 @@ int main(int argc, char **argv) {
 
     // Configure settings in address struct
     struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
+
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
     serverAddr.sin_addr.s_addr = inet_addr(host);
