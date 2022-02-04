@@ -88,6 +88,18 @@ namespace ersap {
         };
 
 
+        static void parseLbHeader(char* buffer, char* ll, char* bb,
+                                  uint32_t* version, uint32_t* protocol,
+                                  uint64_t* tick)
+        {
+            *ll = buffer[0];
+            *bb = buffer[1];
+            *version  = (uint32_t)buffer[2];
+            *protocol = (uint32_t)buffer[3];
+            *tick     = ntohll(*((uint64_t *)(&buffer[4])));
+        }
+
+
         static void parseReHeader(char* buffer, int* version,
                                   bool *first, bool *last,
                                   uint16_t* dataId, uint32_t* sequence)
@@ -97,11 +109,11 @@ namespace ersap {
 
             // If this is a little endian machine, we're good.
             // If this is a big endian machine, we need to swap.
-            // If we call htons on a big endian machine it does nothing,
+            // If we call ntohs on a big endian machine it does nothing,
             // then calling bswap_16 will make it little endian.
-            // If we call htons on a little endian machine, it makes things big endian,
+            // If we call ntohs on a little endian machine, it makes things big endian,
             // then calling bswap_16 makes it little again.
-            s = bswap_16(htons(s));
+            s = bswap_16(ntohs(s));
 
             // Now pull out the component values
             *version = s & 0x1f;
