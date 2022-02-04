@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &bufSize, &port, &debug, fileName, listeningAddr);
 
     // Create UDP socket
-    udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
+    udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
     // Configure settings in address struct
     struct sockaddr_in serverAddr;
