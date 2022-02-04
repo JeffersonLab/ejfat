@@ -227,12 +227,10 @@ namespace ejfat {
             // When sending, we need to ensure that the LSB (version) goes first.
             // Transform to big endian, then swap.
             firstShort = bswap_16(htons(firstShort));
-            dataId = htons(dataId);
-            offset = htonl(offset);
 
             *((uint16_t *)buffer) = firstShort;
-            *((uint16_t *)(buffer + 2)) = dataId;
-            *((uint32_t *)(buffer + 4)) = offset;
+            *((uint16_t *)(buffer + 2)) = htons(dataId);
+            *((uint32_t *)(buffer + 4)) = htonl(offset);
         }
 
 
