@@ -52,6 +52,51 @@
 #define btoa(x) ((x)?"true":"false")
 
 
+static inline uint16_t bswap_16(uint16_t x) {
+    return (x>>8) | (x<<8);
+}
+
+static inline uint32_t bswap_32(uint32_t x) {
+    return (bswap_16(x&0xffff)<<16) | (bswap_16(x>>16));
+}
+
+static inline uint64_t bswap_64(uint64_t x) {
+    return (((uint64_t)bswap_32(x&0xffffffffull))<<32) |
+           (bswap_32(x>>32));
+}
+
+
+
+
+/** Union to facilitate unpacking of RE UDP header. */
+union reHeader {
+    struct __attribute__((packed))re_hdr {
+        uint32_t version    : 4;
+        uint32_t reserved   : 10;
+        uint32_t first      : 1;
+        uint32_t last       : 1;
+        uint32_t data_id    : 16;
+        uint32_t sequence   : 32;
+    } reFields;
+
+    uint32_t reWords[2];
+};
+
+
+/** Union to facilitate unpacking of RE UDP header. */
+union lbHeader {
+    struct __attribute__((packed))lb_hdr {
+        uint32_t l       : 8;
+        uint32_t b       : 8;
+        uint32_t version : 8;
+        uint32_t data_id : 8;
+        uint64_t tick    : 64;
+    } lbFields;
+
+    uint32_t lbWords[3];
+};
+
+
 
 /**
   * This routine takes a pointer and prints out (to stderr) the desired number of bytes
@@ -114,9 +159,21 @@ static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol
 
 
 
-static void setReMetadata(char* buffer, bool first, bool last, bool debug,
-                          uint32_t offsetVal, int version, int dataId) {
-    // Put 2 32-bit words in network byte order
+/**
+ * <p>Set the Reassembly Header data.
+ * The first 16 bits go as ordered. The dataId is put in network byte order.
+ * The offset is also put into network byte order.</p>
+ * Implemented using C++ bit fields.
+ *
+ * @param buffer  buffer in which to write the header.
+ * @param first   is this the first packet?
+ * @param last    is this the last packet?
+ * @param offset  the packet sequence number.
+ * @param version the version of this software.
+ * @param dataId  the data source id number.
+ */
+static void setReMetadataBitField(char* buffer, bool first, bool last,
+                                  uint32_t offset, int version, uint16_t dataId) {
 
     // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
     // 0                   1                   2                   3
@@ -127,44 +184,95 @@ static void setReMetadata(char* buffer, bool first, bool last, bool debug,
     // |                  UDP Packet Offset                            |
     // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-    int firstWord = (version & 0x1F) | (first << 14) | (last << 15) | (dataId << 16);
+    union reHeader* header = (union reHeader*)buffer;
 
-    if (debug) printf("RE first word = 0x%x\n", firstWord);
-    if (debug) printf("RE offset = %u\n", offsetVal);
-
-    // Put the data in network byte order (big endian)
-    *((uint32_t *)buffer) = htonl(firstWord);
-    *((uint32_t *)(buffer + 4)) = htonl(offsetVal);
+    header->reFields.version = version;
+    header->reFields.first = first;
+    header->reFields.last = last;
+    header->reFields.data_id = htons(dataId);
+    header->reFields.sequence = htonl(offset);
 }
 
 
-/** Union to facilitate unpacking of RE UDP header. */
-union reHeader {
-    struct __attribute__((packed))re_hdr {
-        uint32_t version    : 4;
-        uint32_t reserved   : 10;
-        uint32_t first      : 1;
-        uint32_t last       : 1;
-        uint32_t data_id    : 16;
-        uint32_t sequence   : 32;
-    } reFields;
+/**
+ * <p>Set the Reassembly Header data.
+ * The first 16 bits go as ordered. The dataId is put in network byte order.
+ * The offset is also put into network byte order.</p>
+ * Implemented <b>without</b> using C++ bit fields.
+ *
+ * @param buffer  buffer in which to write the header.
+ * @param first   is this the first packet?
+ * @param last    is this the last packet?
+ * @param offset  the packet sequence number.
+ * @param version the version of this software.
+ * @param dataId  the data source id number.
+ */
+static void setReMetadata(char* buffer, bool first, bool last,
+                          uint32_t offset, int version, uint16_t dataId) {
 
-    uint32_t reWords[2];
-};
+    // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+    // 0                   1                   2                   3
+    // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    // |Version|        Rsvd       |F|L|            Data-ID            |
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    // |                  UDP Packet Offset                            |
+    // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+    uint16_t firstShort = (version & 0x1f) | first << 14 | last << 15;
+    // When sending, we need to ensure that the LSB (version) goes first.
+    // Transform to big endian, then swap.
+    firstShort = bswap_16(htons(firstShort));
+    dataId = htons(dataId);
+    offset = htonl(offset);
+
+    *((uint16_t *)buffer) = firstShort;
+    *((uint16_t *)(buffer + 2)) = dataId;
+    *((uint32_t *)(buffer + 4)) = offset;
+}
 
 
-/** Union to facilitate unpacking of RE UDP header. */
-union lbHeader {
-    struct __attribute__((packed))lb_hdr {
-        uint32_t l       : 8;
-        uint32_t b       : 8;
-        uint32_t version : 8;
-        uint32_t data_id : 8;
-        uint64_t tick    : 64;
-    } lbFields;
+static void parseReHeader(char* buffer, int* version,
+                          bool *first, bool *last,
+                          uint16_t* dataId, uint32_t* sequence)
+{
+    // version (LSB) is first in buffer, last bit is last
+    uint16_t s = *((uint16_t *) buffer);
 
-    uint32_t lbWords[3];
-};
+    // If this is a little endian machine, we're good.
+    // If this is a big endian machine, we need to swap.
+    // If we call htons on a big endian machine it does nothing,
+    // then calling bswap_16 will make it little endian.
+    // If we call htons on a little endian machine, it makes things big endian,
+    // then calling bswap_16 makes it little again.
+    s = bswap_16(htons(s));
+
+    // Now pull out the component values
+    *version = s & 0x1f;
+    *first   = (s >> 14) & 1;
+    *last    = (s >> 15) & 1;
+
+    *dataId   = ntohs(*((uint16_t *) (buffer + 2)));
+    *sequence = ntohl(*((uint32_t *) (buffer + 4)));
+}
+
+static void parseReHeaderBitField(char* buffer, int* version,
+                                  bool *first, bool *last,
+                                  uint16_t* dataId, uint32_t* offset)
+{
+    union reHeader* header = (union reHeader*)buffer;
+
+    // Make sure first short is read as little endian
+    uint16_t *s = (uint16_t *) buffer;
+    *s = bswap_16(htons(*s));
+
+    // Parse
+    *version = header->reFields.version;
+    *first   = header->reFields.first;
+    *last    = header->reFields.last;
+    *dataId  = ntohs(header->reFields.data_id);
+    *offset  = ntohl(header->reFields.sequence);
+}
 
 
 
@@ -172,34 +280,25 @@ int main(int argc, char **argv) {
 
     uint32_t offset = 4;
     uint64_t tick = 0xc0da;
-    int mtu, version = 2, dataId = 3;
+    int version = 2;
+    uint16_t dataId = 3;
     bool first = true;
     bool last  = true;
-    bool debug = true;
 
     char buffer[RE_HEADER_BYTES];
 
     // Write data into RE header in network byte order
-    setReMetadata(buffer, first, last, debug, offset, version, dataId);
+//    setReMetadataBitField(buffer, first, last, offset, version, dataId);
+    setReMetadata(buffer, first, last, offset, version, dataId);
 
     printBytes(buffer, RE_HEADER_BYTES, "Written (network order) bytes");
 
-    union reHeader* header = (union reHeader*)buffer;
+//    parseReHeaderBitField(buffer, &version, &first, &last, &dataId, &offset);
+//    printf("From parseReHeaderBitField:  dataId = %hu, version = %d, first = %s, last = %s, seq = %u\n",
+//           dataId, version, btoa(first), btoa(last), offset);
 
-    // Swap to local byte order
-    header->reWords[0] = ntohl(header->reWords[0]);
-    header->reWords[1] = ntohl(header->reWords[1]);
-
-    printBytes(buffer, RE_HEADER_BYTES, "Written (local order) bytes");
-
-    // Parse
-        dataId  = header->reFields.data_id;
-        version = header->reFields.version;
-        first   = header->reFields.first;
-        last    = header->reFields.last;
-        offset  = header->reFields.sequence;
-
-    printf("dataId = %u, version = %d, first = %s, last = %s, seq = %u\n",
+    parseReHeader(buffer, &version, &first, &last, &dataId, &offset);
+    printf("From parseReHeader:  dataId = %hu, version = %d, first = %s, last = %s, seq = %u\n",
            dataId, version, btoa(first), btoa(last), offset);
 
 

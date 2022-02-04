@@ -41,6 +41,24 @@
 #define btoa(x) ((x)?"true":"false")
 
 
+#ifndef _BYTESWAP_H
+#define _BYTESWAP_H
+
+static inline uint16_t bswap_16(uint16_t x) {
+    return (x>>8) | (x<<8);
+}
+
+static inline uint32_t bswap_32(uint32_t x) {
+    return (bswap_16(x&0xffff)<<16) | (bswap_16(x>>16));
+}
+
+static inline uint64_t bswap_64(uint64_t x) {
+    return (((uint64_t)bswap_32(x&0xffffffffull))<<32) |
+           (bswap_32(x>>32));
+}
+#endif
+
+
 namespace ersap {
     namespace ejfat {
 
@@ -70,8 +88,53 @@ namespace ersap {
         };
 
 
+        static void parseReHeader(char* buffer, int* version,
+                                  bool *first, bool *last,
+                                  uint16_t* dataId, uint32_t* sequence)
+        {
+            // version (LSB) is first in buffer, last bit is last
+            uint16_t s = *((uint16_t *) buffer);
+
+            // If this is a little endian machine, we're good.
+            // If this is a big endian machine, we need to swap.
+            // If we call htons on a big endian machine it does nothing,
+            // then calling bswap_16 will make it little endian.
+            // If we call htons on a little endian machine, it makes things big endian,
+            // then calling bswap_16 makes it little again.
+            s = bswap_16(htons(s));
+
+            // Now pull out the component values
+            *version = s & 0x1f;
+            *first   = (s >> 14) & 1;
+            *last    = (s >> 15) & 1;
+
+            *dataId   = ntohs(*((uint16_t *) (buffer + 2)));
+            *sequence = ntohl(*((uint32_t *) (buffer + 4)));
+        }
+
+
+
+        static void parseReHeaderBitField(char* buffer, int* version,
+                                          bool *first, bool *last,
+                                          uint16_t* dataId, uint32_t* offset)
+        {
+            union reHeader* header = (union reHeader*)buffer;
+
+            // Make sure first short is read as little endian
+            uint16_t *s = (uint16_t *) buffer;
+            *s = bswap_16(htons(*s));
+
+            // Parse
+            *version = header->reFields.version;
+            *first   = header->reFields.first;
+            *last    = header->reFields.last;
+            *dataId  = ntohs(header->reFields.data_id);
+            *offset  = ntohl(header->reFields.sequence);
+        }
+
+
         //-----------------------------------------------------------------------
-        // Be sure to print to stderr as this program pipes data to stdout!!!
+        // Be sure to print to stderr as programs may pipe data to stdout!!!
         //-----------------------------------------------------------------------
 
 
@@ -184,7 +247,8 @@ namespace ersap {
                               bool *first, bool *last, bool debug) {
 
             // Storage for RE header
-            union reHeader header{};
+            //union reHeader header{};
+            char header[HEADER_BYTES];
 
             // Prepare a msghdr structure to receive multiple buffers with one system call.
             // One buffer will contain the header.
@@ -199,7 +263,8 @@ namespace ersap {
             msg.msg_iov = iov;
             msg.msg_iovlen = 2;
 
-            iov[0].iov_base = (void *) header.reWords;
+            //iov[0].iov_base = (void *) header.reWords;
+            iov[0].iov_base = (void *) header;
             iov[0].iov_len = HEADER_BYTES;
 
             iov[1].iov_base = (void *) dataBuf;
@@ -219,11 +284,15 @@ namespace ersap {
             }
 
             // Parse header
-            *dataId   = ntohs(header.reFields.data_id);
-            *version  = header.reFields.version;
-            *first    = header.reFields.first;
-            *last     = header.reFields.last;
-            *sequence = ntohl(header.reFields.sequence);
+            parseReHeader(header, version, first, last, dataId, sequence);
+
+//            // Parse header
+//            *dataId   = ntohs(header.reFields.data_id);
+//            *version  = header.reFields.version;
+//            *first    = header.reFields.first;
+//            *last     = header.reFields.last;
+//            *sequence = ntohl(header.reFields.sequence);
+
 
             return bytesRead - HEADER_BYTES;
         }

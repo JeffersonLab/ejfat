@@ -31,13 +31,14 @@ using namespace ersap::ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] ",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
             "        [-mtu <desired MTU size>]",
+            "        [-t <tick>]",
             "        [-ver <version>]",
             "        [-id <data id>]",
             "        [-pro <protocol>]",
@@ -49,10 +50,11 @@ static void printHelp(char *programName) {
 
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *version, uint16_t *id, uint16_t* port,
-                      bool *debug, char *fileName, char* host, char *interface) {
+                      uint64_t* tick, bool *debug, char *fileName, char* host, char *interface) {
 
     *mtu = 0;
     int c, i_tmp;
+    int64_t tmp;
     bool help = false;
 
     /* 4 multiple character command-line options */
@@ -66,12 +68,24 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *versi
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
 
         switch (c) {
+
+            case 't':
+                // TICK
+                tmp = strtoll(optarg, nullptr, 0);
+                if (tmp > -1) {
+                    *tick = tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -t, tick > 0\n");
+                    exit(-1);
+                }
+                break;
 
             case 'p':
                 // PORT
@@ -190,7 +204,7 @@ int main(int argc, char **argv) {
 
     uint32_t offset = 0;
     uint16_t port = 0x4c42; // FPGA port is default
-    uint16_t tick = 0xc0da;
+    uint64_t tick = 0xc0da;
     int mtu, version = 1, protocol = 1;
     uint16_t dataId = 1;
     bool debug = false;
@@ -205,7 +219,7 @@ int main(int argc, char **argv) {
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
 
-    parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &debug, fileName, host, interface);
+    parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick, &debug, fileName, host, interface);
 
 
     // Break data into multiple packets of max MTU size.
