@@ -32,6 +32,9 @@ set(CMAKE_DEBUG_POSTFIX -dbg)
 
 set(MAKE_EXAMPLES 1)
 
+# uncomment to put in debug symbols or do on command line with:
+# cmake -DCMAKE_BUILD_TYPE=Debug ..
+#set(CMAKE_BUILD_TYPE Debug)
 
 # Place libs & binaries in build/lib and bin (this is not for installation)
 set(LIBRARY_OUTPUT_PATH    ${CMAKE_BINARY_DIR}/lib)
