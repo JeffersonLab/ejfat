@@ -11,11 +11,7 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 #include <string.h>
-
-#include <fstream>
-#include <iostream>
-
-using namespace std;
+#include <inttypes.h>
 
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
@@ -39,8 +35,8 @@ void   Usage(void)
         -t destination ipv4 address (string)  \n\
         -r destination ipv4 port (number)  \n\
         -h help \n\n";
-        cout<<usage_str;
-        cout<<"Required: -s\n";
+        fprintf(stdout, "%s", usage_str);
+        fprintf(stdout, "Required: -i -p -t -r\n");
 }
 
 int main (int argc, char *argv[])
@@ -78,7 +74,7 @@ int main (int argc, char *argv[])
             passedR = true;
             break;
         case '?':
-            cerr<<"Unrecognised option: -"<<optopt<<'\n';
+            fprintf(stderr, "Unrecognised option: %d\n", optopt);
             Usage();
             exit(1);
         }
@@ -134,6 +130,7 @@ int main (int argc, char *argv[])
     uint8_t* pBuf   = buffer;
     uint8_t* pBufLb = buffer;
     uint8_t* pBufRe = &buffer[lblen];
+    uint64_t* pTick = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
 
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
@@ -143,30 +140,24 @@ int main (int argc, char *argv[])
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
         // decode to little endian
+        uint64_t tick    = NTOHLL(*pTick);
         uint32_t seq     = pBufRe[4]*0x1000000 + pBufRe[5]*0x10000 + pBufRe[6]*0x100 + pBufRe[7];
         uint16_t data_id = pBufRe[2]*0x100 + pBufRe[3];
         uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
         uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
         uint8_t lst      = pBufRe[1] & 0x01;
 
-        //printf("Received %i bytes from source\n", nBytes);
-        fprintf( stderr, "\n data_id = %d ", data_id);
-        fprintf( stderr, "Received %d bytes from source for seq # %d\n", nBytes, seq );
-        fprintf( stderr, "l = %c  / b = %c ", pBufLb[0], pBufLb[1]); 
-            /* << " / tick = " << NTOHLL(plbmd->lbmdbf.tick)  << '\n';	*/
+        fprintf( stderr, "Received %d bytes from source: ", nBytes);
+        fprintf( stderr, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
+        fprintf( stderr, "tick = %" PRIu64 " ", tick);
+        fprintf( stderr, "tick = %" PRIx64 " ", tick);
         fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
         fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
-
         
         // forward data to sink skipping past lb meta data
-/**
-        unsigned int tick = NTOHLL(plbmd->lbmdbf.tick);
-        if(tick != 0) continue;
-**/
-        cerr << "Sending " << int(nBytes-lblen) << " bytes to sink" << '\n';
+        fprintf( stderr, "Sending %d bytes to sink\n", int(nBytes-lblen));
         ssize_t rtCd = sendto(clientSocket, &buffer[lblen], nBytes-lblen, 0, (struct sockaddr *)&snkAddr, addr_size);
-        cerr << "sendto return code = " << int(rtCd) << '\n';
-
+        fprintf( stderr, "sendto return code = %d\n", int(rtCd));
     }
 
     return 0;

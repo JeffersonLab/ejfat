@@ -141,16 +141,6 @@ int main (int argc, char *argv[])
 
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
-        // convert RE meta-data to host order
-#if 0
-        pBufRe[2] = data_id / 0x100;
-        pBufRe[3] = data_id % 0x100; //256
-        pBufRe[4] = seq / 0x1000000;
-        pBufRe[5] = seq / 0x10000;
-        pBufRe[6] = seq / 0x100;
-        pBufRe[7] = seq % 0x100;
-#endif
-
         // decode to little endian
         uint32_t seq     = pBufRe[4]*0x1000000 + pBufRe[5]*0x10000 + pBufRe[6]*0x100 + pBufRe[7];
         uint16_t data_id = pBufRe[2]*0x100 + pBufRe[3];
@@ -158,7 +148,7 @@ int main (int argc, char *argv[])
         uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
         uint8_t lst      = pBufRe[1] & 0x01;
 
-        fprintf( stderr, "Received %d bytes from source for seq # %d\n", nBytes, seq );
+        fprintf( stderr, "Received %d bytes from source: ", nBytes);
         fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
         fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
 

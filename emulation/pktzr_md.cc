@@ -12,6 +12,7 @@
 #include <string.h>
 #include <fstream>
 #include <iostream>
+#include <inttypes.h>
 
 using namespace std;
 
@@ -49,9 +50,9 @@ int main (int argc, char *argv[])
     uint16_t num_data_ids = 1;      // number of data_ids starting from initial
     const uint8_t vrsn    = 1;
     const uint16_t rsrvd  = 2; // = 2 just for testing
-    uint8_t frst = 1;
-    uint8_t lst  = 0;
-    uint32_t seq = 0;
+    uint8_t frst          = 1;
+    uint8_t lst           = 0;
+    uint32_t seq          = 0;
 
     while ((optc = getopt(argc, argv, "i:p:t:d:n:")) != -1)
     {
@@ -85,9 +86,7 @@ int main (int argc, char *argv[])
 
     if(!passedI) { Usage(); exit(1); }
 
-
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
-
 
 //===================== data sink setup ===================================
 
@@ -116,84 +115,23 @@ int main (int argc, char *argv[])
     uint8_t* pBuf   = buffer;
     uint8_t* pBufLb = buffer;
     uint8_t* pBufRe = &buffer[lblen];
+    uint64_t* pTick = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
+
+    // meta-data in network order
 
     pBufLb[0] = 'L';
     pBufLb[1] = 'B';
     pBufLb[2] = 1;
     pBufLb[3] = 1;
+    *pTick = HTONLL(tick);
 
-    {
-        uint64_t* p = (uint64_t*) &buffer[4];
-        *p = tick = 0xf0f1f2f3f4f5f6f7;
-#if 1
-        cerr << "Example LB meta-data on the wire:";
-        for(uint8_t b = 0; b < lblen; b++) fprintf( stderr, " [%d] = %x ", b, pBufLb[b]);
-        fprintf( stderr, "\n tick = %lu ", *p);
-        cerr << endl;
-#endif
-    }
-    {
-        //RE meta-data
-        //uint32_t seq = 0x01abcdef;
-        //uint16_t data_id = 0xabcd;
-        pBufRe[0] = (vrsn << 4) + (rsrvd >> 6);
-        pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
-        //little endian
-        pBufRe[2] = data_id % 0x100; //256
-        pBufRe[3] = data_id / 0x100;
-        pBufRe[4] = seq % 0x100;
-        pBufRe[5] = seq / 0x100;
-        pBufRe[6] = seq / 0x10000;
-        pBufRe[7] = seq / 0x1000000;
-
-        cerr << "Example RE little endian meta-data on the wire:";
-        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
-        fprintf( stderr, "\n data_id = %d ", data_id);
-        //fprintf( stderr, "\n seq = %lu ", *pl);
-        cerr << endl;
-
-        //big endian
-        pBufRe[2] = data_id / 0x100;
-        pBufRe[3] = data_id % 0x100; //256
-        pBufRe[4] = seq / 0x1000000;
-        pBufRe[5] = seq / 0x10000;
-        pBufRe[6] = seq / 0x100;
-        pBufRe[7] = seq % 0x100;
-
-        cerr << "Example RE big endian meta-data on the wire:";
-        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
-        fprintf( stderr, "\n data_id = %d ", data_id);
-        //fprintf( stderr, "\n seq = %lu ", *pl);
-        cerr << endl;
-
-        //   or
-
-        //big endian
-        pBufRe[2] = (data_id & 0xff00) >> 8;
-        pBufRe[3] = (data_id & 0xff) >> 0;
-        pBufRe[4] = (seq & 0xff000000) >> 24;
-        pBufRe[5] = (seq & 0xff0000) >> 16;
-        pBufRe[6] = (seq & 0xff00) >> 8;
-        pBufRe[7] = (seq & 0xff) >> 0;
-
-        cerr << "Example RE big endian meta-data on the wire:";
-        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
-        fprintf( stderr, "\n data_id = %d ", data_id);
-        //fprintf( stderr, "\n seq = %lu ", *pl);
-        cerr << endl;
-    }
-
-#if 0
-
-    // convert tick to network byte order
-    plbmd->lbmdbf.tick = HTONLL(plbmd->lbmdbf.tick);
-    // convert data_id, seq to network byte order
-    premd->remdbf.data_id = htons(premd->remdbf.data_id);
-    premd->remdbf.seq = htonl(premd->remdbf.seq);
-    cerr << "RE meta-data on the wire is:";
-    for(unsigned int b = 0; b < sizeof(union re); b++) fprintf( stderr, " [%d] = %x ", b, premd->bytes[b]); 
-    cerr << endl;
-#endif
+    pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
+    pBufRe[2] = data_id / 0x100;
+    pBufRe[3] = data_id % 0x100; //256
+    pBufRe[4] = seq / 0x1000000;
+    pBufRe[5] = seq / 0x10000;
+    pBufRe[6] = seq / 0x100;
+    pBufRe[7] = seq % 0x100;
 
     do {
         f1.read((char*)&buffer[mdlen], max_pckt_sz);
@@ -204,29 +142,25 @@ int main (int argc, char *argv[])
             pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
         }
 
+        fprintf( stderr, "LB Meta-data on the wire:");
+        for(uint8_t b = 0; b < lblen; b++) fprintf( stderr, " [%d] = %x ", b, pBufLb[b]);
+        fprintf( stderr, "\nfor tick = %" PRIu64 " ", *pTick);
+        fprintf( stderr, "tick = %" PRIx64 " ", *pTick);
+        fprintf( stderr, "for tick = %" PRIu64 "\n", tick);
+        fprintf( stderr, "RE Meta-data on the wire:");
+        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
+        fprintf( stderr, "\nfor frst = %d / lst = %d ", frst, lst); 
+        fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
+
         // forward data to LB
         for(uint16_t didcnt = 0; didcnt < num_data_ids; didcnt++) {
             //big endian
             pBufRe[2] = (data_id + didcnt) / 0x100;
             pBufRe[3] = (data_id + didcnt) % 0x100; //256
 
-            //premd->remdbf.data_id = htons(data_id + didcnt);
-#if 0
-
-            cerr << "Sending " << int(mdlen + nr) << " bytes to LB" << '\n'
-                << " l = " << char(plbmd->lbmdbf.l) << " / b = " << char(plbmd->lbmdbf.b) 
-                << " vrsn = " << plbmd->lbmdbf.vrsn << " ptcl = " << plbmd->lbmdbf.ptcl 
-                 << " / tick = " << NTOHLL(plbmd->lbmdbf.tick) << '\n';	
-            cerr << "version = "  << premd->remdbf.vrsn << " rsrvd = "  << premd->remdbf.rsrvd 
-                << " frst = " << premd->remdbf.frst << " / lst = " << premd->remdbf.lst 
-                 << " / data_id = " << ntohs(premd->remdbf.data_id) << " / seq = " << ntohl(premd->remdbf.seq) << '\n';	
-#endif
-
             ssize_t rtCd = sendto(clientSocket, buffer, mdlen + nr, 0, (struct sockaddr *)&snkAddr, addr_size);
             cerr << "sendto return code = " << int(rtCd) << endl;
         }
-//////////////////////
-        //premd->remdbf.frst = 0;
         frst = 0;
         pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
         ++seq;
@@ -234,7 +168,6 @@ int main (int argc, char *argv[])
         pBufRe[5] = seq / 0x10000;
         pBufRe[6] = seq / 0x100;
         pBufRe[7] = seq % 0x100;
-//////////////////////
-    } while(!lst); //premd->remdbf.lst == 0);
+    } while(!lst);
     return 0;
 }
