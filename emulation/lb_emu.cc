@@ -20,10 +20,10 @@
 #include <ctype.h>
 #endif
 
-const unsigned int max_pckt_sz = 1024;
-const size_t lblen = 12;
-const size_t relen = 8;
-const size_t mdlen =  lblen + relen;
+const size_t max_pckt_sz = 1024;
+const size_t lblen       = 12;
+const size_t relen       = 8;
+const size_t mdlen       = lblen + relen;
 
 
 void   Usage(void)
@@ -131,6 +131,8 @@ int main (int argc, char *argv[])
     uint8_t* pBufLb = buffer;
     uint8_t* pBufRe = &buffer[lblen];
     uint64_t* pTick = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
+    uint32_t* pSeq  = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)];
+    uint16_t* pDid  = (uint16_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
 
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
@@ -139,10 +141,10 @@ int main (int argc, char *argv[])
         // locate ingress data after lb+re meta data regions
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
-        // decode to little endian
+        // decode to host encoding
         uint64_t tick    = NTOHLL(*pTick);
-        uint32_t seq     = pBufRe[4]*0x1000000 + pBufRe[5]*0x10000 + pBufRe[6]*0x100 + pBufRe[7];
-        uint16_t data_id = pBufRe[2]*0x100 + pBufRe[3];
+        uint32_t seq     = ntohl(*pSeq);
+        uint16_t data_id = ntohs(*pDid);
         uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
         uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
         uint8_t lst      = pBufRe[1] & 0x01;

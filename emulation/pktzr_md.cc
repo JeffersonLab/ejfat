@@ -19,7 +19,10 @@ using namespace std;
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 
-const uint16_t max_pckt_sz = 1024;
+const size_t max_pckt_sz = 1024;
+const size_t lblen       = 12;
+const size_t relen       = 8;
+const size_t mdlen       = lblen + relen;
 
 void   Usage(void)
 {
@@ -107,15 +110,14 @@ int main (int argc, char *argv[])
     // Initialize size variable to be used later on
     socklen_t addr_size = sizeof snkAddr;
 
-    const size_t lblen = 12;
-    const size_t relen = 8;
-    const size_t mdlen =  lblen + relen;
     uint8_t buffer[mdlen + max_pckt_sz];
 
     uint8_t* pBuf   = buffer;
     uint8_t* pBufLb = buffer;
     uint8_t* pBufRe = &buffer[lblen];
     uint64_t* pTick = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
+    uint32_t* pSeq  = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)];
+    uint16_t* pDid  = (uint16_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
 
     // meta-data in network order
 
@@ -123,15 +125,11 @@ int main (int argc, char *argv[])
     pBufLb[1] = 'B';
     pBufLb[2] = 1;
     pBufLb[3] = 1;
-    *pTick = HTONLL(tick);
+    *pTick    = HTONLL(tick);
 
     pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
-    pBufRe[2] = data_id / 0x100;
-    pBufRe[3] = data_id % 0x100; //256
-    pBufRe[4] = seq / 0x1000000;
-    pBufRe[5] = seq / 0x10000;
-    pBufRe[6] = seq / 0x100;
-    pBufRe[7] = seq % 0x100;
+    *pDid     = htons(data_id);
+    *pSeq     = htonl(seq);
 
     do {
         f1.read((char*)&buffer[mdlen], max_pckt_sz);
@@ -142,32 +140,27 @@ int main (int argc, char *argv[])
             pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
         }
 
-        fprintf( stderr, "LB Meta-data on the wire:");
-        for(uint8_t b = 0; b < lblen; b++) fprintf( stderr, " [%d] = %x ", b, pBufLb[b]);
-        fprintf( stderr, "\nfor tick = %" PRIu64 " ", *pTick);
-        fprintf( stderr, "tick = %" PRIx64 " ", *pTick);
-        fprintf( stderr, "for tick = %" PRIu64 "\n", tick);
-        fprintf( stderr, "RE Meta-data on the wire:");
-        for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
-        fprintf( stderr, "\nfor frst = %d / lst = %d ", frst, lst); 
-        fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
-
         // forward data to LB
         for(uint16_t didcnt = 0; didcnt < num_data_ids; didcnt++) {
-            //big endian
-            pBufRe[2] = (data_id + didcnt) / 0x100;
-            pBufRe[3] = (data_id + didcnt) % 0x100; //256
+
+            *pDid = htons(data_id + didcnt);
+
+            fprintf( stderr, "LB Meta-data on the wire:");
+            for(uint8_t b = 0; b < lblen; b++) fprintf( stderr, " [%d] = %x ", b, pBufLb[b]);
+            fprintf( stderr, "\nfor tick = %" PRIu64 " ", *pTick);
+            fprintf( stderr, "tick = %" PRIx64 " ", *pTick);
+            fprintf( stderr, "for tick = %" PRIu64 "\n", tick);
+            fprintf( stderr, "RE Meta-data on the wire:");
+            for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
+            fprintf( stderr, "\nfor frst = %d / lst = %d ", frst, lst); 
+            fprintf( stderr, " / data_id = %d / seq = %d\n", data_id + didcnt, seq);	
 
             ssize_t rtCd = sendto(clientSocket, buffer, mdlen + nr, 0, (struct sockaddr *)&snkAddr, addr_size);
             cerr << "sendto return code = " << int(rtCd) << endl;
         }
         frst = 0;
         pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
-        ++seq;
-        pBufRe[4] = seq / 0x1000000;
-        pBufRe[5] = seq / 0x10000;
-        pBufRe[6] = seq / 0x100;
-        pBufRe[7] = seq % 0x100;
+        *pSeq = htonl(++seq);
     } while(!lst);
     return 0;
 }

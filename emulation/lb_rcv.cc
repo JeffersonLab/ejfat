@@ -24,11 +24,11 @@ using namespace std;
 #include <ctype.h>
 #endif
 
-const uint16_t max_pckt_sz = 1024;
-const uint16_t max_data_ids = 100;  // support up to 100 data_ids
-const uint16_t max_ooo_pkts = 10;  // support up to 10 out of order packets
-const size_t relen = 8;
-const size_t mdlen = relen;
+const size_t max_pckt_sz = 1024;
+const size_t max_data_ids = 100;  // support up to 100 data_ids
+const size_t max_ooo_pkts = 10;  // support up to 10 out of order packets
+const size_t relen        = 8;
+const size_t mdlen        = relen;
 
 void   Usage(void)
 {
@@ -135,15 +135,19 @@ int main (int argc, char *argv[])
         }
     }
     uint16_t num_data_ids = 0;  // number of data_ids encountered in this session
+
+    uint32_t* pSeq  = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)];
+    uint16_t* pDid  = (uint16_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
+
     do {
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on srcRcvBuf variable
 
         nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
 
-        // decode to little endian
-        uint32_t seq     = pBufRe[4]*0x1000000 + pBufRe[5]*0x10000 + pBufRe[6]*0x100 + pBufRe[7];
-        uint16_t data_id = pBufRe[2]*0x100 + pBufRe[3];
+        // decode to host encoding
+        uint32_t seq     = ntohl(*pSeq);
+        uint16_t data_id = ntohs(*pDid);
         uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
         uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
         uint8_t lst      = pBufRe[1] & 0x01;
