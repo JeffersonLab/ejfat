@@ -30,10 +30,12 @@ void   Usage(void)
 {
     char usage_str[] =
         "\nUsage: \n\
-        -i listening ipv4 address (string)  \n\
-        -p listening ipv4 port (number)  \n\
-        -t destination ipv4 address (string)  \n\
-        -r destination ipv4 port (number)  \n\
+        -i listen address (string)  \n\
+        -p listen port (number)  \n\
+        -n listen ipv6  \n\
+        -t send address (string)  \n\
+        -r send port (number)  \n\
+        -o send ipv6  \n\
         -h help \n\n";
         fprintf(stdout, "%s", usage_str);
         fprintf(stdout, "Required: -i -p -t -r\n");
@@ -45,12 +47,12 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI, passedP, passedT, passedR  = false;
+    bool passedI, passedP, passedT, passedR, passedN, passedO = false;
 
-    char in_ip[64], out_ip[64]; // listening, target ip
-    uint16_t in_prt, out_prt;   // listening, target ports
+    char in_ip[INET6_ADDRSTRLEN], out_ip[INET6_ADDRSTRLEN]; // listening, target ip
+    uint16_t in_prt = 0x4c42, out_prt;   // listening, target ports
 
-    while ((optc = getopt(argc, argv, "i:p:t:r:")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:r:no")) != -1)
     {
         switch (optc)
         {
@@ -65,6 +67,9 @@ int main (int argc, char *argv[])
             in_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
             break;
+        case 'n':
+            passedN = true;
+            break;
         case 't':
             strcpy(out_ip, (const char *) optarg) ;
             passedT = true;
@@ -72,6 +77,9 @@ int main (int argc, char *argv[])
         case 'r':
             out_prt = (uint16_t) atoi((const char *) optarg) ;
             passedR = true;
+            break;
+        case 'o':
+            passedO = true;
             break;
         case '?':
             fprintf(stderr, "Unrecognised option: %d\n", optopt);
@@ -83,39 +91,60 @@ int main (int argc, char *argv[])
     if(!(passedI && passedP && passedT && passedR)) { Usage(); exit(1); }
 
 //===================== data source setup ===================================
-    int udpSocket, nBytes;
-    struct sockaddr_in srcAddr;
+    int lstn_sckt, nBytes;
+
+    struct sockaddr_in6 lstnAddr6;
+    struct sockaddr_in lstnAddr;
     struct sockaddr_storage srcRcvBuf;
     socklen_t addr_size;
 
     /*Create UDP socket for reception from sender */
-    udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
+    if ((lstn_sckt = socket(passedN ? AF_INET6 : AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("creating src socket");
+        exit(1);
+    }
 
     /*Configure settings in address struct*/
-    srcAddr.sin_family = AF_INET;
-    srcAddr.sin_port = htons(in_prt);           // "LB" = 0x4c42 by spec
-    srcAddr.sin_addr.s_addr = inet_addr(in_ip); // LB address
-    //srcAddr.sin_addr.s_addr = INADDR_ANY;
-    memset(srcAddr.sin_zero, '\0', sizeof srcAddr.sin_zero);
+    if(passedN) {
+        /* clear it out */
+        memset(&lstnAddr6, 0, sizeof(lstnAddr6));
+        /* it is an INET address */
+        lstnAddr6.sin6_family = AF_INET6; 
+        /* the port we are going to send to, in network byte order */
+        lstnAddr6.sin6_port = htons(in_prt);           // "LB" = 0x4c42 by spec (network order)
+        /* the server IP address, in network byte order */
+        inet_pton(AF_INET6, in_ip, &lstnAddr6.sin6_addr);  // LB address
+        bind(lstn_sckt, (struct sockaddr *) &lstnAddr6, sizeof(lstnAddr6));
+    } else {
+        /* clear it out */
+        memset(&lstnAddr, 0, sizeof(lstnAddr));
+        /* it is an INET address */
+        lstnAddr.sin_family = AF_INET; 
+        /* the port we are going to send to, in network byte order */
+        lstnAddr.sin_port = htons(in_prt);           // "LB" = 0x4c42 by spec (network order)
+        /* the server IP address, in network byte order */
+        inet_pton(AF_INET, in_ip, &lstnAddr.sin_addr);  // LB address
+        /*Bind socket with address struct*/
+        bind(lstn_sckt, (struct sockaddr *) &lstnAddr, sizeof(lstnAddr));
+  }
 
-    /*Bind socket with address struct*/
-    bind(udpSocket, (struct sockaddr *) &srcAddr, sizeof(srcAddr));
 
     /*Initialize size variable to be used later on*/
     addr_size = sizeof srcRcvBuf;
 
 //===================== data sink setup ===================================
+    int dst_sckt;
 
-    int clientSocket;
-    uint32_t counter = 0;
-    uint16_t port = 0x4c42;  // LB recv port
     struct sockaddr_in snkAddr;
 
-    // Create UDP socket for transmission to sender
-    clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
+    /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+    if ((dst_sckt = socket(passedO ? AF_INET6 : AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("creating dst socket");
+        exit(1);
+    }
 
     // Configure settings in address struct
-    snkAddr.sin_family = AF_INET;
+    snkAddr.sin_family = passedO ? AF_INET6 : AF_INET;
     snkAddr.sin_port = htons(out_prt);           // Data Sink
     snkAddr.sin_addr.s_addr = inet_addr(out_ip); // Data Sink
     memset(snkAddr.sin_zero, '\0', sizeof snkAddr.sin_zero);
@@ -139,7 +168,11 @@ int main (int argc, char *argv[])
         //  requesting client will be stored on srcRcvBuf variable
 
         // locate ingress data after lb+re meta data regions
-        nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
+        if ((nBytes = recvfrom(lstn_sckt, buffer, sizeof(buffer), 0, 
+                        (struct sockaddr *)&srcRcvBuf, &addr_size)) < 0) {
+            perror("recvfrom src socket");
+            exit(1);
+        }
 
         // decode to host encoding
         uint64_t tick    = NTOHLL(*pTick);
@@ -147,7 +180,7 @@ int main (int argc, char *argv[])
         uint16_t data_id = ntohs(*pDid);
         uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
         uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
-        uint8_t lst      = pBufRe[1] & 0x01;
+        uint8_t lst      =  pBufRe[1] & 0x01;
 
         fprintf( stderr, "Received %d bytes from source: ", nBytes);
         fprintf( stderr, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
@@ -158,8 +191,12 @@ int main (int argc, char *argv[])
         
         // forward data to sink skipping past lb meta data
         fprintf( stderr, "Sending %d bytes to sink\n", int(nBytes-lblen));
-        ssize_t rtCd = sendto(clientSocket, &buffer[lblen], nBytes-lblen, 0, (struct sockaddr *)&snkAddr, addr_size);
-        fprintf( stderr, "sendto return code = %d\n", int(rtCd));
+        /* now send a datagram */
+        if (sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+                    (struct sockaddr *)&snkAddr, addr_size) < 0) {
+            perror("sendto failed");
+            exit(4);
+        }
     }
 
     return 0;
