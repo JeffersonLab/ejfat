@@ -32,10 +32,8 @@ void   Usage(void)
         "\nUsage: \n\
         -i listen address (string)  \n\
         -p listen port (number)  \n\
-        -n listen ipv6  \n\
         -t send address (string)  \n\
         -r send port (number)  \n\
-        -o send ipv6  \n\
         -h help \n\n";
         fprintf(stdout, "%s", usage_str);
         fprintf(stdout, "Required: -i -p -t -r\n");
@@ -47,12 +45,12 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI, passedP, passedT, passedR, passedN, passedO = false;
+    bool passedI, passedP, passedT, passedR = false;
 
     char in_ip[INET6_ADDRSTRLEN], out_ip[INET6_ADDRSTRLEN]; // listening, target ip
     uint16_t in_prt = 0x4c42, out_prt;   // listening, target ports
 
-    while ((optc = getopt(argc, argv, "i:p:t:r:no")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:r:")) != -1)
     {
         switch (optc)
         {
@@ -67,19 +65,13 @@ int main (int argc, char *argv[])
             in_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
             break;
-        case 'n':
-            passedN = true;
-            break;
-        case 't':
+         case 't':
             strcpy(out_ip, (const char *) optarg) ;
             passedT = true;
             break;
         case 'r':
             out_prt = (uint16_t) atoi((const char *) optarg) ;
             passedR = true;
-            break;
-        case 'o':
-            passedO = true;
             break;
         case '?':
             fprintf(stderr, "Unrecognised option: %d\n", optopt);
@@ -93,64 +85,52 @@ int main (int argc, char *argv[])
 //===================== data source setup ===================================
     int lstn_sckt, nBytes;
 
-    struct sockaddr_in6 lstnAddr6;
-    struct sockaddr_in lstnAddr;
+    struct sockaddr_in6 lstn_addr6;
     struct sockaddr_storage srcRcvBuf;
     socklen_t addr_size;
 
     /*Create UDP socket for reception from sender */
-    if ((lstn_sckt = socket(passedN ? AF_INET6 : AF_INET, SOCK_DGRAM, 0)) < 0) {
+    if ((lstn_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
         perror("creating src socket");
         exit(1);
     }
 
     /*Configure settings in address struct*/
-    if(passedN) {
-        /* clear it out */
-        memset(&lstnAddr6, 0, sizeof(lstnAddr6));
-        /* it is an INET address */
-        lstnAddr6.sin6_family = AF_INET6; 
-        /* the port we are going to send to, in network byte order */
-        lstnAddr6.sin6_port = htons(in_prt);           // "LB" = 0x4c42 by spec (network order)
-        /* the server IP address, in network byte order */
-        inet_pton(AF_INET6, in_ip, &lstnAddr6.sin6_addr);  // LB address
-        bind(lstn_sckt, (struct sockaddr *) &lstnAddr6, sizeof(lstnAddr6));
-    } else {
-        /* clear it out */
-        memset(&lstnAddr, 0, sizeof(lstnAddr));
-        /* it is an INET address */
-        lstnAddr.sin_family = AF_INET; 
-        /* the port we are going to send to, in network byte order */
-        lstnAddr.sin_port = htons(in_prt);           // "LB" = 0x4c42 by spec (network order)
-        /* the server IP address, in network byte order */
-        inet_pton(AF_INET, in_ip, &lstnAddr.sin_addr);  // LB address
-        /*Bind socket with address struct*/
-        bind(lstn_sckt, (struct sockaddr *) &lstnAddr, sizeof(lstnAddr));
-  }
-
-
+    /* clear it out */
+    memset(&lstn_addr6, 0, sizeof(lstn_addr6));
+    /* it is an INET address */
+    lstn_addr6.sin6_family = AF_INET6; 
+    /* the port we are going to send to, in network byte order */
+    lstn_addr6.sin6_port = htons(in_prt);           // "LB" = 0x4c42 by spec (network order)
+    /* the server IP address, in network byte order */
+    inet_pton(AF_INET6, in_ip, &lstn_addr6.sin6_addr);  // LB address
+    ///bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
+    bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
+ 
     /*Initialize size variable to be used later on*/
-    addr_size = sizeof srcRcvBuf;
+    addr_size = sizeof lstn_addr6;
 
 //===================== data sink setup ===================================
     int dst_sckt;
 
-    struct sockaddr_in snkAddr;
+    struct sockaddr_in6 dst_addr6;
 
     /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
-    if ((dst_sckt = socket(passedO ? AF_INET6 : AF_INET, SOCK_DGRAM, 0)) < 0) {
+    if ((dst_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
         perror("creating dst socket");
         exit(1);
     }
 
     // Configure settings in address struct
-    snkAddr.sin_family = passedO ? AF_INET6 : AF_INET;
-    snkAddr.sin_port = htons(out_prt);           // Data Sink
-    snkAddr.sin_addr.s_addr = inet_addr(out_ip); // Data Sink
-    memset(snkAddr.sin_zero, '\0', sizeof snkAddr.sin_zero);
-
-    // Initialize size variable to be used later on
-    addr_size = sizeof snkAddr;
+    /*Configure settings in address struct*/
+    /* clear it out */
+    memset(&dst_addr6, 0, sizeof(dst_addr6));
+    /* it is an INET address */
+    dst_addr6.sin6_family = AF_INET6; 
+    /* the port we are going to send to, in network byte order */
+    dst_addr6.sin6_port = htons(out_prt);           // "LB" = 0x4c42 by spec (network order)
+    /* the server IP address, in network byte order */
+    inet_pton(AF_INET6, out_ip, &dst_addr6.sin6_addr);  // LB address
 
 //=======================================================================
 
@@ -193,7 +173,7 @@ int main (int argc, char *argv[])
         fprintf( stderr, "Sending %d bytes to sink\n", int(nBytes-lblen));
         /* now send a datagram */
         if (sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
-                    (struct sockaddr *)&snkAddr, addr_size) < 0) {
+                    (struct sockaddr *)&dst_addr6, sizeof dst_addr6) < 0) {
             perror("sendto failed");
             exit(4);
         }
