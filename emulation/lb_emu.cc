@@ -156,6 +156,7 @@ if (passed6) {
     dst_addr6.sin6_port = htons(dst_prt);           // "LB" = 0x4c42 by spec (network order)
     /* the server IP address, in network byte order */
     inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
+
 } else {
 
     // Create UDP socket for transmission to sender
@@ -169,7 +170,6 @@ if (passed6) {
 
     // Initialize size variable to be used later on
     socklen_t addr_size = sizeof dst_addr;
-
 }
 //=======================================================================
 
@@ -186,15 +186,11 @@ if (passed6) {
         //  requesting client will be stored on src_addr variable
 
         // locate ingress data after lb+re meta data regions
-if (passed6) {
         if ((nBytes = recvfrom(lstn_sckt, buffer, sizeof(buffer), 0, 
                         (struct sockaddr *)&src_addr, &addr_size)) < 0) {
             perror("recvfrom src socket");
             exit(1);
         }
-} else {
-        nBytes = recvfrom(lstn_sckt, buffer, sizeof(buffer), 0, (struct sockaddr *)&src_addr, &addr_size);
-}
 
         // decode to host encoding
         uint64_t tick    = NTOHLL(*pTick);
@@ -206,9 +202,8 @@ if (passed6) {
 
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
-                       sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV) < 0) {
-            perror("recvfrom socket");
-            exit(1);
+                       sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV) ) {
+            perror("getnameinfo ");
         }
         fprintf( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
         fprintf( stderr, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
@@ -219,17 +214,21 @@ if (passed6) {
         
         // forward data to sink skipping past lb meta data
         /* now send a datagram */
+	ssize_t rtCd = 0;
 if (passed6) {
-        if (sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
-                    (struct sockaddr *)&dst_addr6, sizeof dst_addr6) < 0) {
+        if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+                    (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
             perror("sendto failed");
             exit(4);
         }
-
 } else {
-            ssize_t rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, (struct sockaddr *)&dst_addr, sizeof dst_addr);
+        if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+                    (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
+            perror("sendto failed");
+            exit(4);
+        }
 }
-         fprintf( stderr, "Sending %d bytes to %s : %u\n", uint16_t(nBytes-lblen), dst_ip, dst_prt);
+         fprintf( stderr, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
 
 /*** why is this not working ?
         if (getnameinfo((struct sockaddr*) &dst_addr6, sizeof(dst_addr6), gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,

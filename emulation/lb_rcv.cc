@@ -17,6 +17,7 @@
 #include <string.h>
 #include <fstream>
 #include <iostream>
+#include <netdb.h>
 
 using namespace std;
 
@@ -34,8 +35,9 @@ void   Usage(void)
 {
     char usage_str[] =
         "\nUsage: \n\
-        -i listening ipv4 address (string)  \n\
-        -p listening ipv4 port (number)  \n\
+        -6 Use IPV6 \n\
+        -i listen address (string)  \n\
+        -p listen port (number)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -s\n";
@@ -54,28 +56,31 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI, passedP = false;
+    bool passedI, passedP, passed6 = false;
 
-    char ip[64];  // listening ip, port
-    uint16_t prt; // listening ip, port
+    char lstn_ip[INET6_ADDRSTRLEN]; // listening ip
+    uint16_t lstn_prt;   // listening ports
 
-    while ((optc = getopt(argc, argv, "i:p:")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:6")) != -1)
     {
         switch (optc)
         {
         case 'h':
             Usage();
             exit(1);
+        case '6':
+            passed6 = true;
+            break;
         case 'i':
-            strcpy(ip, (const char *) optarg) ;
+            strcpy(lstn_ip, (const char *) optarg) ;
             passedI = true;
             break;
         case 'p':
-            prt = (uint16_t) atoi((const char *) optarg) ;
+            lstn_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
             break;
         case '?':
-            cerr<<"Unrecognised option: -"<<optopt<<'\n';
+            fprintf(stderr, "Unrecognised option: %d\n", optopt);
             Usage();
             exit(1);
         }
@@ -90,27 +95,49 @@ int main (int argc, char *argv[])
         rs[s].open(x,std::ios::binary | std::ios::out);
     }
 
-//===================== data source setup ===================================
-    int udpSocket, nBytes;
-    struct sockaddr_in srcAddr;
-    struct sockaddr_storage srcRcvBuf;
+//===================== data reception setup ===================================
+    int lstn_sckt, nBytes;
+    socklen_t addr_size;
+    struct sockaddr_storage src_addr;
+
+if (passed6) {
+    struct sockaddr_in6 lstn_addr6;
+
+    /*Create UDP socket for reception from sender */
+    if ((lstn_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+        perror("creating src socket");
+        exit(1);
+    }
+
+    /*Configure settings in address struct*/
+    /* clear it out */
+    memset(&lstn_addr6, 0, sizeof(lstn_addr6));
+    /* it is an INET address */
+    lstn_addr6.sin6_family = AF_INET6; 
+    /* the port we are going to send to, in network byte order */
+    lstn_addr6.sin6_port = htons(lstn_prt);           // "LB" = 0x4c42 by spec (network order)
+    /* the server IP address, in network byte order */
+    inet_pton(AF_INET6, lstn_ip, &lstn_addr6.sin6_addr);  // LB address
+    ///bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
+    bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
+} else {
+    struct sockaddr_in lstn_addr;
     socklen_t addr_size;
 
     /*Create UDP socket for reception from sender */
-    udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
+    lstn_sckt = socket(PF_INET, SOCK_DGRAM, 0);
 
     /*Configure settings in address struct*/
-    srcAddr.sin_family = AF_INET;
-    srcAddr.sin_port = htons(prt); // "LB"
-    srcAddr.sin_addr.s_addr = inet_addr(ip); //indra-s2
-    //srcAddr.sin_addr.s_addr = INADDR_ANY;
-    memset(srcAddr.sin_zero, '\0', sizeof srcAddr.sin_zero);
+    lstn_addr.sin_family = AF_INET;
+    lstn_addr.sin_port = htons(lstn_prt); // "LB"
+    lstn_addr.sin_addr.s_addr = inet_addr(lstn_ip); //indra-s2
+    memset(lstn_addr.sin_zero, '\0', sizeof lstn_addr.sin_zero);
 
     /*Bind socket with address struct*/
-    bind(udpSocket, (struct sockaddr *) &srcAddr, sizeof(srcAddr));
+    bind(lstn_sckt, (struct sockaddr *) &lstn_addr, sizeof(lstn_addr));
 
-    /*Initialize size variable to be used later on*/
-    addr_size = sizeof srcRcvBuf;
+}
+//=======================================================================
 
     uint8_t buffer[max_pckt_sz + relen];
     uint8_t* pBufRe = buffer;
@@ -141,18 +168,23 @@ int main (int argc, char *argv[])
 
     do {
         // Try to receive any incoming UDP datagram. Address and port of
-        //  requesting client will be stored on srcRcvBuf variable
+        //  requesting client will be stored on src_addr variable
 
-        nBytes = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&srcRcvBuf, &addr_size);
+        nBytes = recvfrom(lstn_sckt, buffer, sizeof(buffer), 0, (struct sockaddr *)&src_addr, &addr_size);
 
         // decode to host encoding
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
         uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
         uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
-        uint8_t lst      = pBufRe[1] & 0x01;
+        uint8_t lst      =  pBufRe[1] & 0x01;
 
-        fprintf( stderr, "Received %d bytes from source: ", nBytes);
+        char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
+        if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
+                       sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV)) {
+            perror("getnameinfo ");
+        }
+        fprintf( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
         fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
         fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
 
