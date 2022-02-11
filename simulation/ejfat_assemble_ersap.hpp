@@ -14,8 +14,8 @@
  * The receiving program handles sequentially numbered packets that may arrive out-of-order
  * coming from an FPGA-based between this and the sending program.
  */
-#ifndef EJFAT_ASSEMBLE_H
-#define EJFAT_ASSEMBLE_H
+#ifndef EJFAT_ASSEMBLE_ERSAP_H
+#define EJFAT_ASSEMBLE_ERSAP_H
 
 
 #include <cstdio>
@@ -36,8 +36,11 @@
 #include <cctype>
 #endif
 
+#ifdef USE_ZMQ
+#include <zmq.h>
+#endif
 
-#define HEADER_BYTES 8
+#define HEADER_BYTES 16
 #define btoa(x) ((x)?"true":"false")
 
 
@@ -62,21 +65,6 @@ static inline uint64_t bswap_64(uint64_t x) {
 namespace ersap {
     namespace ejfat {
 
-        /** Union to facilitate unpacking of RE UDP header. */
-        union reHeader {
-            struct __attribute__((packed))re_hdr {
-                uint32_t version    : 4;
-                uint32_t reserved   : 10;
-                uint32_t first      : 1;
-                uint32_t last       : 1;
-                uint32_t data_id    : 16;
-                uint32_t sequence   : 32;
-            } reFields;
-
-            uint32_t reWords[2];
-        };
-
-
         enum errorCodes {
             RECV_MSG = -1,
             TRUNCATED_MSG = -2,
@@ -88,10 +76,30 @@ namespace ersap {
         };
 
 
+        /**
+         * Parse the load balance header at the start of the given buffer.
+         *
+         * @param buffer   buffer to parse.
+         * @param ll       return 1st byte as char.
+         * @param bb       return 2nd byte as char.
+         * @param version  return 3rd byte as integer version.
+         * @param protocol return 4th byte as integer protocol.
+         * @param tick     return last 8 bytes as 64 bit integer tick.
+         */
         static void parseLbHeader(char* buffer, char* ll, char* bb,
                                   uint32_t* version, uint32_t* protocol,
                                   uint64_t* tick)
         {
+            // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
+            // 0                   1                   2                   3
+            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |       L       |       B       |    Version    |    Protocol   |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |                                                               |
+            // +                              Tick                             +
+            // |                                                               |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             *ll = buffer[0];
             *bb = buffer[1];
             *version  = (uint32_t)buffer[2];
@@ -100,10 +108,36 @@ namespace ersap {
         }
 
 
+        /**
+         * Parse the reassembly header at the start of the given buffer.
+         * Return parsed values in pointer args.
+         *
+         * @param buffer   buffer to parse.
+         * @param version  returned version.
+         * @param first    returned is-first-packet value.
+         * @param last     returned is-last-packet value.
+         * @param dataId   returned data source id.
+         * @param sequence returned packet sequence number.
+         * @param tick     returned tick value, also in LB meta data.
+         */
         static void parseReHeader(char* buffer, int* version,
                                   bool *first, bool *last,
-                                  uint16_t* dataId, uint32_t* sequence)
+                                  uint16_t* dataId, uint32_t* sequence,
+                                  uint64_t *tick)
         {
+            // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+            // 0                   1                   2                   3
+            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |Version|        Rsvd       |F|L|            Data-ID            |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |                  UDP Packet Offset                            |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |                                                               |
+            // +                              Tick                             +
+            // |                                                               |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
             // version (LSB) is first in buffer, last bit is last
             uint16_t s = *((uint16_t *) buffer);
 
@@ -122,26 +156,7 @@ namespace ersap {
 
             *dataId   = ntohs(*((uint16_t *) (buffer + 2)));
             *sequence = ntohl(*((uint32_t *) (buffer + 4)));
-        }
-
-
-
-        static void parseReHeaderBitField(char* buffer, int* version,
-                                          bool *first, bool *last,
-                                          uint16_t* dataId, uint32_t* offset)
-        {
-            union reHeader* header = (union reHeader*)buffer;
-
-            // Make sure first short is read as little endian
-            uint16_t *s = (uint16_t *) buffer;
-            *s = bswap_16(htons(*s));
-
-            // Parse
-            *version = header->reFields.version;
-            *first   = header->reFields.first;
-            *last    = header->reFields.last;
-            *dataId  = ntohs(header->reFields.data_id);
-            *offset  = ntohl(header->reFields.sequence);
+            *tick     = ntohll(*((uint64_t *) (buffer + 8)));
         }
 
 
@@ -241,12 +256,13 @@ namespace ersap {
          * @param dataBuf   buffer in which to store actual data read (not any headers).
          * @param bufLen    available bytes in dataBuf in which to safely write.
          * @param udpSocket UDP socket to read.
-         * @param sequence  to be filled with packet sequence read from RE header.
-         * @param dataId    to be filled with data id read from RE header.
-         * @param version   to be filled with version read from RE header.
-         * @param first     to be filled with "first" bit read from RE header,
+         * @param tick      to be filled with tick from RE header.
+         * @param sequence  to be filled with packet sequence from RE header.
+         * @param dataId    to be filled with data id read RE header.
+         * @param version   to be filled with version read RE header.
+         * @param first     to be filled with "first" bit from RE header,
          *                  indicating the first packet in a series used to send data.
-         * @param last      to be filled with "last" bit id read from RE header,
+         * @param last      to be filled with "last" bit id from RE header,
          *                  indicating the last packet in a series used to send data.
          * @param debug     turn debug printout on & off.
          *
@@ -255,7 +271,7 @@ namespace ersap {
          *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
          */
         static int readPacket(char *dataBuf, size_t bufLen, int udpSocket,
-                              uint32_t* sequence, uint16_t* dataId, int* version,
+                              uint64_t *tick, uint32_t* sequence, uint16_t* dataId, int* version,
                               bool *first, bool *last, bool debug) {
 
             // Storage for RE header
@@ -296,15 +312,7 @@ namespace ersap {
             }
 
             // Parse header
-            parseReHeader(header, version, first, last, dataId, sequence);
-
-//            // Parse header
-//            *dataId   = ntohs(header.reFields.data_id);
-//            *version  = header.reFields.version;
-//            *first    = header.reFields.first;
-//            *last     = header.reFields.last;
-//            *sequence = ntohl(header.reFields.sequence);
-
+            parseReHeader(header, version, first, last, dataId, sequence, tick);
 
             return bytesRead - HEADER_BYTES;
         }
@@ -331,11 +339,12 @@ namespace ersap {
          * @param udpSocket     UDP socket to read.
          * @param debug         turn debug printout on & off.
          * @param veryFirstRead this is the very first time data will be read for a sequence of same-tick packets.
-         * @param last         to be filled with "last" bit id read from RE header,
-         *                     indicating the last packet in a series used to send data.
-         * @param expSequence  value-result parameter which gives the next expected sequence to be
-         *                     read from RE header and returns its updated value
-         *                     indicating its sequence in the flow of packets.
+         * @param last          to be filled with "last" bit id from RE header,
+         *                      indicating the last packet in a series used to send data.
+         * @param tick          to be filled with tick from RE header.
+         * @param expSequence   value-result parameter which gives the next expected sequence to be
+         *                      read from RE header and returns its updated value
+         *                      indicating its sequence in the flow of packets.
          * @param bytesPerPacket  pointer to int which get filled with the very first packet's data byte length
          *                        (not including header). This gives us an indication of the MTU.
          * @param outOfOrderPackets map for holding out-of-order packets between calls to this function.
@@ -351,18 +360,18 @@ namespace ersap {
          */
         static ssize_t getPacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
                                            bool debug, bool veryFirstRead, bool *last,
-                                           uint32_t *expSequence, uint32_t *bytesPerPacket,
+                                           uint64_t *tick, uint32_t *expSequence, uint32_t *bytesPerPacket,
                                            std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
 
             // TODO: build if sequence is file offset
 
-            // uint32_t packetsInBuf = 0, maxPacketsInBuf = 0;
+            uint64_t packetTick;
             uint32_t sequence, expectedSequence = *expSequence;
 
             bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
             int  version, nBytes;
             uint16_t dataId;
-            size_t maxPacketBytes = 0;
+            size_t  maxPacketBytes = 0;
             ssize_t totalBytesRead = 0;
 
             char *putDataAt = dataBuf;
@@ -373,7 +382,7 @@ namespace ersap {
             while (true) {
                 // Read in one packet
                 nBytes = readPacket(putDataAt, remainingLen, udpSocket,
-                                    &sequence, &dataId, &version,
+                                    &packetTick, &sequence, &dataId, &version,
                                     &packetFirst, &packetLast, debug);
 
                 // If error
@@ -510,6 +519,7 @@ namespace ersap {
 
             *last = packetLast;
             *expSequence = expectedSequence;
+            *tick = packetTick;
 
             return totalBytesRead;
         }
@@ -525,7 +535,7 @@ namespace ersap {
          * @param fp      file pointer.
          * @return error code of 0 means OK. If there is an error, programs exits.
          */
-        int writeBuffer(const char* dataBuf, size_t nBytes, FILE* fp, bool debug) {
+        static int writeBuffer(const char* dataBuf, size_t nBytes, FILE* fp, bool debug) {
 
             size_t n, totalWritten = 0;
 
@@ -616,6 +626,7 @@ namespace ersap {
             // Start with sequence 0 in very first packet to be read
             uint32_t sequence = 0;
             uint32_t bytesPerPacket = 0;
+            uint64_t tick = 0;
 
             // Map to hold out-of-order packets.
             // map key = sequence from incoming packet
@@ -635,7 +646,7 @@ namespace ersap {
                 }
 
                 nBytes = getPacketizedBuffer(*userBuf, *userBufLen, udpSocket,
-                                             debug, firstRead, &last, &sequence,
+                                             debug, firstRead, &last, &tick, &sequence,
                                              &bytesPerPacket,outOfOrderPackets);
                 if (totalBytes < 0) {
                     if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
@@ -668,7 +679,7 @@ namespace ersap {
 
                 while (true) {
                     nBytes = getPacketizedBuffer(getDataFrom, remaningBytes, udpSocket,
-                                                 debug, firstRead, &last, &sequence,
+                                                 debug, firstRead, &last, &tick, &sequence,
                                                  &bytesPerPacket,outOfOrderPackets);
                     if (nBytes < 0) {
                         if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
@@ -720,4 +731,4 @@ namespace ersap {
 }
 
 
-#endif // EJFAT_ASSEMBLE_H
+#endif // EJFAT_ASSEMBLE_ERSAP_H
