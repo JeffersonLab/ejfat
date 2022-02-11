@@ -15,8 +15,8 @@
  * a special FPGA router. These packets will eventually be received at a given
  * UDP destination equipped to reassemble it.
  */
-#ifndef EJFAT_PACKETIZE_H
-#define EJFAT_PACKETIZE_H
+#ifndef EJFAT_PACKETIZE_ERSAP_H
+#define EJFAT_PACKETIZE_ERSAP_H
 
 
 
@@ -48,10 +48,10 @@
 
 #ifdef ADD_LB_HEADER
     #define LB_HEADER_BYTES 12
-    #define HEADER_BYTES    20
+    #define HEADER_BYTES    28
 #else
     #define LB_HEADER_BYTES 0
-    #define HEADER_BYTES    8
+    #define HEADER_BYTES    16
 #endif
 
 
@@ -85,22 +85,6 @@
 
 namespace ersap {
 namespace ejfat {
-
-
-    /** Union to facilitate unpacking of RE UDP header. */
-    union reHeader {
-        struct __attribute__((packed))re_hdr {
-            uint32_t version    : 4;
-            uint32_t reserved   : 10;
-            uint32_t first      : 1;
-            uint32_t last       : 1;
-            uint32_t data_id    : 16;
-            uint32_t sequence   : 32;
-        } reFields;
-
-        uint32_t reWords[2];
-    };
-
 
     static int getMTU(const char* interfaceName, bool debug) {
         // Default MTU
@@ -163,56 +147,27 @@ namespace ejfat {
     #endif
 
 
-        /**
-         * <p>Set the Reassembly Header data.
-         * The first 16 bits go as ordered. The dataId is put in network byte order.
-         * The offset is also put into network byte order.</p>
-         * Implemented using C++ bit fields.
-         *
-         * @param buffer  buffer in which to write the header.
-         * @param first   is this the first packet?
-         * @param last    is this the last packet?
-         * @param offset  the packet sequence number.
-         * @param version the version of this software.
-         * @param dataId  the data source id number.
-         */
-        static void setReMetadataBitField(char* buffer, bool first, bool last,
-                                          uint32_t offset, int version, uint16_t dataId) {
-
-            // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |Version|        Rsvd       |F|L|            Data-ID            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                  UDP Packet Offset                            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-            union reHeader* header = (union reHeader*)buffer;
-
-            header->reFields.version = version;
-            header->reFields.first = first;
-            header->reFields.last = last;
-            header->reFields.data_id = htons(dataId);
-            header->reFields.sequence = htonl(offset);
-        }
-
 
         /**
          * <p>Set the Reassembly Header data.
          * The first 16 bits go as ordered. The dataId is put in network byte order.
-         * The offset is also put into network byte order.</p>
+         * The offset and tick are also put into network byte order.</p>
          * Implemented <b>without</b> using C++ bit fields.
          *
          * @param buffer  buffer in which to write the header.
          * @param first   is this the first packet?
          * @param last    is this the last packet?
+         * @param tick    64 bit tick number used to tell the load balancer
+         *                which backend host to direct the packet to. Necessary to
+         *                disentangle packets from different ticks at one destination
+         *                as there may be overlap in time.
          * @param offset  the packet sequence number.
          * @param version the version of this software.
          * @param dataId  the data source id number.
          */
         static void setReMetadata(char* buffer, bool first, bool last,
-                                  uint32_t offset, int version, uint16_t dataId) {
+                                  uint64_t tick, uint32_t offset,
+                                  int version, uint16_t dataId) {
 
             // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
             // 0                   1                   2                   3
@@ -221,6 +176,10 @@ namespace ejfat {
             // |Version|        Rsvd       |F|L|            Data-ID            |
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             // |                  UDP Packet Offset                            |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |                                                               |
+            // +                              Tick                             +
+            // |                                                               |
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
             uint16_t firstShort = (version & 0x1f) | first << 14 | last << 15;
@@ -231,6 +190,7 @@ namespace ejfat {
             *((uint16_t *)buffer) = firstShort;
             *((uint16_t *)(buffer + 2)) = htons(dataId);
             *((uint32_t *)(buffer + 4)) = htonl(offset);
+            *((uint64_t *)(buffer + 8)) = htonll(tick);
         }
 
 
@@ -318,8 +278,9 @@ namespace ejfat {
             setLbMetadata(headerBuffer, tick, version, protocol);
 
             // Write RE meta data into buffer
-            setReMetadata(headerBuffer + LB_HEADER_BYTES, veryFirstPacket, veryLastPacket,
-                          packetCounter++, version, dataId);
+            setReMetadata(headerBuffer + LB_HEADER_BYTES,
+                          veryFirstPacket, veryLastPacket,
+                          tick, packetCounter++, version, dataId);
 
             // This is where and how many bytes to write for data
             iov[1].iov_base = (void *)getDataFrom;
@@ -433,12 +394,14 @@ namespace ejfat {
 
         if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-        return sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
-                                    tick, protocol, version, dataId, &offset, delay,
+        int err = sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
+                                      tick, protocol, version, dataId, &offset, delay,
                                    true, true, debug);
-    }
+         close(clientSocket);
+         return err;
+     }
 
 }
 }
 
-#endif // EJFAT_PACKETIZE_H
+#endif // EJFAT_PACKETIZE_ERSAP_H
