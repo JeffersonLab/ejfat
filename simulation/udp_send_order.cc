@@ -21,7 +21,7 @@
 
 
 
-#include "ejfat_packetize.hpp"
+#include "ejfat_packetize_ersap.hpp"
 
 using namespace ersap::ejfat;
 

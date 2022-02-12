@@ -14,7 +14,7 @@
  * This assumes there is an emulator or FPGA between this and the sending program.
  */
 
-#include "ejfat_assemble.hpp"
+#include "ejfat_assemble_ersap.hpp"
 
 using namespace ersap::ejfat;
 
@@ -200,6 +200,7 @@ int main(int argc, char **argv) {
     size_t totalRead = 0;
     bool last, firstRead = true;
     // Start with offset 0 in very first packet to be read
+    uint64_t tick = 0L;
     uint32_t offset = 0;
     char dataBuf[bufSize];
     uint32_t bytesPerPacket;
@@ -215,7 +216,7 @@ int main(int argc, char **argv) {
 
     while (true) {
         nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                     debug, firstRead, &last, &offset,
+                                     debug, firstRead, &last, &tick, &offset,
                                      &bytesPerPacket, outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
