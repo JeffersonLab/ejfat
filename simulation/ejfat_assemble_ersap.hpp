@@ -83,96 +83,6 @@ namespace ersap {
 
 
         /**
-         * Parse the load balance header at the start of the given buffer.
-         *
-         * @param buffer   buffer to parse.
-         * @param ll       return 1st byte as char.
-         * @param bb       return 2nd byte as char.
-         * @param version  return 3rd byte as integer version.
-         * @param protocol return 4th byte as integer protocol.
-         * @param tick     return last 8 bytes as 64 bit integer tick.
-         */
-        static void parseLbHeader(char* buffer, char* ll, char* bb,
-                                  uint32_t* version, uint32_t* protocol,
-                                  uint64_t* tick)
-        {
-            // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |       L       |       B       |    Version    |    Protocol   |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                                                               |
-            // +                              Tick                             +
-            // |                                                               |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            *ll = buffer[0];
-            *bb = buffer[1];
-            *version  = (uint32_t)buffer[2];
-            *protocol = (uint32_t)buffer[3];
-            *tick     = ntohll(*((uint64_t *)(&buffer[4])));
-        }
-
-
-        /**
-         * Parse the reassembly header at the start of the given buffer.
-         * Return parsed values in pointer args.
-         *
-         * @param buffer   buffer to parse.
-         * @param version  returned version.
-         * @param first    returned is-first-packet value.
-         * @param last     returned is-last-packet value.
-         * @param dataId   returned data source id.
-         * @param sequence returned packet sequence number.
-         * @param tick     returned tick value, also in LB meta data.
-         */
-        static void parseReHeader(char* buffer, int* version,
-                                  bool *first, bool *last,
-                                  uint16_t* dataId, uint32_t* sequence,
-                                  uint64_t *tick)
-        {
-            // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |Version|        Rsvd       |F|L|            Data-ID            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                  UDP Packet Offset                            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                                                               |
-            // +                              Tick                             +
-            // |                                                               |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-            // version (LSB) is first in buffer, last bit is last
-            uint16_t s = *((uint16_t *) buffer);
-
-            // If this is a little endian machine, we're good.
-            // If this is a big endian machine, we need to swap.
-            // If we call ntohs on a big endian machine it does nothing,
-            // then calling bswap_16 will make it little endian.
-            // If we call ntohs on a little endian machine, it makes things big endian,
-            // then calling bswap_16 makes it little again.
-            s = bswap_16(ntohs(s));
-
-            // Now pull out the component values
-            *version = s & 0x1f;
-            *first   = (s >> 14) & 1;
-            *last    = (s >> 15) & 1;
-
-            *dataId   = ntohs(*((uint16_t *) (buffer + 2)));
-            *sequence = ntohl(*((uint32_t *) (buffer + 4)));
-            *tick     = ntohll(*((uint64_t *) (buffer + 8)));
-        }
-
-
-        //-----------------------------------------------------------------------
-        // Be sure to print to stderr as programs may pipe data to stdout!!!
-        //-----------------------------------------------------------------------
-
-
-
-        /**
          * This routine takes a pointer and prints out (to stderr) the desired number of bytes
          * from the given position, in hex.
          *
@@ -245,6 +155,84 @@ namespace ersap {
             fprintf(stderr, "\n\n");
             fseek(fp, currentPos, SEEK_SET);
         }
+
+
+        /**
+         * Parse the load balance header at the start of the given buffer.
+         *
+         * @param buffer   buffer to parse.
+         * @param ll       return 1st byte as char.
+         * @param bb       return 2nd byte as char.
+         * @param version  return 3rd byte as integer version.
+         * @param protocol return 4th byte as integer protocol.
+         * @param tick     return last 8 bytes as 64 bit integer tick.
+         */
+        static void parseLbHeader(char* buffer, char* ll, char* bb,
+                                  uint32_t* version, uint32_t* protocol,
+                                  uint64_t* tick)
+        {
+            // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
+            // 0                   1                   2                   3
+            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |       L       |       B       |    Version    |    Protocol   |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |                                                               |
+            // +                              Tick                             +
+            // |                                                               |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            *ll = buffer[0];
+            *bb = buffer[1];
+            *version  = (uint32_t)buffer[2];
+            *protocol = (uint32_t)buffer[3];
+            *tick     = ntohll(*((uint64_t *)(&buffer[4])));
+        }
+
+
+        /**
+         * Parse the reassembly header at the start of the given buffer.
+         * Return parsed values in pointer args.
+         *
+         * @param buffer   buffer to parse.
+         * @param version  returned version.
+         * @param first    returned is-first-packet value.
+         * @param last     returned is-last-packet value.
+         * @param dataId   returned data source id.
+         * @param sequence returned packet sequence number.
+         * @param tick     returned tick value, also in LB meta data.
+         */
+        static void parseReHeader(char* buffer, int* version,
+                                  bool *first, bool *last,
+                                  uint16_t* dataId, uint32_t* sequence,
+                                  uint64_t *tick)
+        {
+            // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+            // 0                   1                   2                   3
+            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |Version|        Rsvd       |F|L|            Data-ID            |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |                  UDP Packet Offset                            |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            // |                                                               |
+            // +                              Tick                             +
+            // |                                                               |
+            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+            // Now pull out the component values
+            *version = (buffer[0] & 0xf0) >> 4;
+            *first   = (buffer[1] & 0x02) >> 1;
+            *last    =  buffer[1] & 0x01;
+
+            *dataId   = ntohs(*((uint16_t *) (buffer + 2)));
+            *sequence = ntohl(*((uint32_t *) (buffer + 4)));
+            *tick     = ntohll(*((uint64_t *) (buffer + 8)));
+        }
+
+
+        //-----------------------------------------------------------------------
+        // Be sure to print to stderr as programs may pipe data to stdout!!!
+        //-----------------------------------------------------------------------
 
 
         /**

@@ -182,12 +182,9 @@ namespace ejfat {
             // |                                                               |
             // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-            uint16_t firstShort = (version & 0x1f) | first << 14 | last << 15;
-            // When sending, we need to ensure that the LSB (version) goes first.
-            // Transform to big endian, then swap.
-            firstShort = bswap_16(htons(firstShort));
+            buffer[0] = version << 4;
+            buffer[1] = (first << 1) + last;
 
-            *((uint16_t *)buffer) = firstShort;
             *((uint16_t *)(buffer + 2)) = htons(dataId);
             *((uint32_t *)(buffer + 4)) = htonl(offset);
             *((uint64_t *)(buffer + 8)) = htonll(tick);
@@ -377,8 +374,8 @@ namespace ejfat {
             mtu = 1400;
         }
 
-        // 60 bytes = max IPv4 packet header, 8 bytes = max UDP packet header
-        int maxUdpPayload = mtu - 60 - 8 - HEADER_BYTES;
+        // 20 bytes = normal IPv4 packet header, 8 bytes = max UDP packet header
+        int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
         uint32_t offset = 0;
 
         // Create UDP socket
