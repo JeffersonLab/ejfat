@@ -17,6 +17,7 @@ tx=$(mktemp); cat <file> | pktzr_md -i 129.57.29.231  2> $tx
 
 the session log is in $tx
 
+NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
 
 -------------
 LB emulation:
@@ -30,6 +31,7 @@ e.g.,
 
 tx=$(mktemp); lb_emu -i "129.57.29.231" -p 19522 -t "129.57.29.232" -r 7777 2> $tx
 
+NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
 
 
 An alternate LB emulation can be accomplished using the netcat command as follows:
@@ -60,6 +62,8 @@ e.g.,
 
 t=$(mktemp); lb_rcv -i "129.57.29.232" -p 7777 > some_file_name 2> $tx
 
+NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
+
 
 Note that stderr is being redirected to temp file $tx (in /tmp) and contains the session log
 
@@ -76,6 +80,7 @@ nc -u -w 1 -l 129.57.87.14 7777 >  <file-with-first-12-bytes-stripped>
 
 
 Capabilities / Limitations (Bugs) / Next Steps:
+- supports both IPV4 and IPV6
 - pktzr_md repicates input data across as many (sequential) data_ids as specified 
 - lb_emu currently routes traffic to a single destination
 - lb_rcv suports up to 100 concurrent data_ids each with as many as 10 out-of-order packets pending output.
