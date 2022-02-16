@@ -1,0 +1,2 @@
+short_metadata.ingress_global_timestamp=1111111111111111 short_metadata.egress_spec=0000 short_metadata.processed=01 short_metadata.packet_length=00a6
+short_metadata.ingress_global_timestamp=2222222222222222 short_metadata.egress_spec=0000 short_metadata.processed=01 short_metadata.packet_length=00a6

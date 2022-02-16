@@ -1,0 +1,11 @@
+table_add dst_filter_table NoAction 0x00aabbccddee 0x0800 0x0000000000000000000000000a010203 =>
+table_add dst_filter_table NoAction 0x00aabbccddee 0x86dd 0xfe800000000000000000000000000002 =>
+table_add epoch_assign_table do_assign_epoch 0x0000000000000000/0 => 0x00000000 64
+table_add epoch_assign_table do_assign_epoch 0x0000000000000010/60 => 0x00000001 5
+table_add load_balance_calendar_table do_assign_member 0x00000000 0x00a => 0x0000
+table_add load_balance_calendar_table do_assign_member 0x00000001 0x014 => 0x0000
+table_add member_info_lookup_table do_ipv4_member_rewrite 0x0800 0x0000 => 0x112233445566 0xaabbccdd 0x4556
+table_add member_info_lookup_table do_ipv6_member_rewrite 0x86dd 0x0000 => 0x112233445566 0xfe800000000000000000000000000003 0x4556
+
+run_traffic packets
+
