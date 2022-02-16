@@ -21,7 +21,7 @@ using namespace std;
 
 const size_t max_pckt_sz = 1024;
 const size_t lblen       = 12;
-const size_t relen       = 8;
+const size_t relen       = 8+8;
 const size_t mdlen       = lblen + relen;
 
 void   Usage(void)
@@ -45,7 +45,7 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI, passedP, passed6 = false;
+    bool passedI=false, passedP=false, passed6=false;
 
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
@@ -142,16 +142,18 @@ if (passed6) {
 
     uint8_t*  pBufLb =  buffer;
     uint8_t*  pBufRe = &buffer[lblen];
-    uint64_t* pTick  = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
-    uint32_t* pSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)];
-    uint16_t* pDid   = (uint16_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint64_t* pTick   = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
+    uint64_t* pReTick = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
+    uint32_t* pSeq    = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
+    uint16_t* pDid    = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
     // meta-data in network order
 
-    pBufLb[0] = 'L';
-    pBufLb[1] = 'B';
-    pBufLb[2] = 1;
-    pBufLb[3] = 1;
+    pBufLb[0] = 'L'; // 0x4c
+    pBufLb[1] = 'B'; //0x42
+    pBufLb[2] = 1;   //version
+    pBufLb[3] = 1;   //protocol
     *pTick    = HTONLL(tick);
+    *pReTick  = HTONLL(tick);
 
     pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
     *pDid     = htons(data_id);
@@ -179,7 +181,8 @@ if (passed6) {
             fprintf( stderr, "RE Meta-data on the wire:");
             for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
             fprintf( stderr, "\nfor frst = %d / lst = %d ", frst, lst); 
-            fprintf( stderr, " / data_id = %d / seq = %d\n", data_id + didcnt, seq);	
+            fprintf( stderr, " / data_id = %d / seq = %d ", data_id + didcnt, seq);	
+            fprintf( stderr, "tick = %" PRIu64 "\n", tick);
 
             ssize_t rtCd = 0;
             /* now send a datagram */

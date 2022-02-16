@@ -17,18 +17,22 @@
 #include <string.h>
 #include <fstream>
 #include <iostream>
+#include <inttypes.h>
 #include <netdb.h>
 
 using namespace std;
+
+#define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
+#define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 
 #ifdef __APPLE__
 #include <ctype.h>
 #endif
 
-const size_t max_pckt_sz = 1024;
+const size_t max_pckt_sz  = 1024;
 const size_t max_data_ids = 100;  // support up to 100 data_ids
 const size_t max_ooo_pkts = 10;  // support up to 10 out of order packets
-const size_t relen        = 8;
+const size_t relen        = 8+8;
 const size_t mdlen        = relen;
 
 void   Usage(void)
@@ -56,7 +60,7 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI, passedP, passed6 = false;
+    bool passedI=false, passedP=false, passed6=false;
 
     char lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;   // listening ports
@@ -88,6 +92,7 @@ int main (int argc, char *argv[])
 
     if(!(passedI && passedP)) { Usage(); exit(1); }
 
+    // pre-open all data_id streams for tick
     ofstream rs[max_data_ids];
     for(uint16_t s = 0; s < max_data_ids; s++) {
         char x[64];
@@ -163,8 +168,9 @@ if (passed6) {
     }
     uint16_t num_data_ids = 0;  // number of data_ids encountered in this session
 
-    uint32_t* pSeq  = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)];
-    uint16_t* pDid  = (uint16_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint64_t* pReTick = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
+    uint32_t* pSeq    = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
+    uint16_t* pDid    = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
 
     do {
         // Try to receive any incoming UDP datagram. Address and port of
@@ -173,6 +179,7 @@ if (passed6) {
         nBytes = recvfrom(lstn_sckt, buffer, sizeof(buffer), 0, (struct sockaddr *)&src_addr, &addr_size);
 
         // decode to host encoding
+        uint64_t retick  = NTOHLL(*pReTick);
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
         uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
@@ -186,7 +193,8 @@ if (passed6) {
         }
         fprintf( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
         fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
-        fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
+        fprintf( stderr, " / data_id = %d / seq = %d ", data_id, seq);	
+        fprintf( stderr, "tick = %" PRIu64 "\n", retick);
 
         if(data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }
         data_ids_inuse[data_id] = true;

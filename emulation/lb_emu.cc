@@ -23,7 +23,7 @@
 
 const size_t max_pckt_sz = 1024;
 const size_t lblen       = 12;
-const size_t relen       = 8;
+const size_t relen       = 8+8;
 const size_t mdlen       = lblen + relen;
 
 
@@ -47,7 +47,7 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI, passedP, passedT, passedR, passed6 = false;
+    bool passedI=false, passedP=false, passedT=false, passedR=false, passed6=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
     uint16_t lstn_prt = 0x4c42, dst_prt;                          // listening, target ports
@@ -177,16 +177,17 @@ if (passed6) {
 
     uint8_t*  pBufLb =  buffer;
     uint8_t*  pBufRe = &buffer[lblen];
-    uint64_t* pTick  = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
-    uint32_t* pSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)];
-    uint16_t* pDid   = (uint16_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint64_t* pTick   = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
+    uint64_t* pReTick = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
+    uint32_t* pSeq    = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
+    uint16_t* pDid    = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
 
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
 
         // locate ingress data after lb+re meta data regions
-        if ((nBytes = recvfrom(lstn_sckt, buffer, sizeof(buffer), 0, 
+        if ((nBytes = recvfrom(lstn_sckt, buffer, mdlen + max_pckt_sz, 0, 
                         (struct sockaddr *)&src_addr, &addr_size)) < 0) {
             perror("recvfrom src socket");
             exit(1);
@@ -194,6 +195,7 @@ if (passed6) {
 
         // decode to host encoding
         uint64_t tick    = NTOHLL(*pTick);
+        uint64_t retick  = NTOHLL(*pReTick);
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
         uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
@@ -208,9 +210,9 @@ if (passed6) {
         fprintf( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
         fprintf( stderr, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
         fprintf( stderr, "tick = %" PRIu64 " ", tick);
-        fprintf( stderr, "tick = %" PRIx64 " ", tick);
         fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
         fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
+        fprintf( stderr, "tick = %" PRIx64 " ", retick);
         
         // forward data to sink skipping past lb meta data
         /* now send a datagram */
