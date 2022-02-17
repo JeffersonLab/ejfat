@@ -257,8 +257,13 @@ namespace ejfat {
         iov[0].iov_base = (void *)headerBuffer;
         iov[0].iov_len = HEADER_BYTES;
 
+        // Use this flag to allow transmission of a single zero-length buffer
+        bool firstLoop = true;
+
         startAgain:
-        while (remainingBytes > 0) {
+        while (firstLoop || remainingBytes > 0) {
+
+            firstLoop = false;
 
             // The number of regular data bytes to write into this packet
             bytesToWrite = remainingBytes > maxUdpPayload ? maxUdpPayload : remainingBytes;

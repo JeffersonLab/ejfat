@@ -384,6 +384,8 @@ namespace ersap {
                     return nBytes;
                 }
 
+                // TODO: What if we get a zero-length packet???
+
                 if (sequence == 0) {
                     firstReadForBuf = true;
                     *bytesPerPacket = nBytes - HEADER_BYTES;
