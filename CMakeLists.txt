@@ -25,6 +25,8 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ejfat VERSION 0.1)
 
+# define where we put FindZeroMQ.cmake file so zmq can be found
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -59,6 +61,7 @@ endif()
 
 
 set(EXEC_FILES
+        simulation/udp_rcv_et.cc
         simulation/udp_rcv_order.cc
         simulation/udp_send_order.cc
         simulation/udp_rcv.c
@@ -77,13 +80,39 @@ set(C_LIB_FILES
         )
 
 set(CPP_HEADER_FILES
-        simulation/ejfat_packetizer.hpp
-        simulation/ejfat_assemble.hpp
+        simulation/ejfat_packetizer_ersap.hpp
+        simulation/ejfat_assemble_ersap.hpp
+        simulation/ejfat_assemble_ersap2.hpp
+        simulation/zmq.h
+        simulation/zmq.hpp
         )
 
 set(CPP_LIB_FILES
         )
 
+
+# if you tell cmake to have code use USE_ZMQ preprocessor macro
+if (USE_ZMQ)
+    find_package(ZeroMQ)
+    if (ZeroMQ_FOUND)
+        add_compile_definitions(USE_ZMQ)
+    else()
+        message(STATUS "Zeromq cannot be found, compile without it")
+    endif()
+else()
+    message(STATUS "Compile without zeromq")
+endif()
+
+
+find_package(ET)
+if (ET_FOUND)
+    add_compile_definitions(USE_ET)
+else()
+    message(STATUS "Et cannot be found, compile without it")
+endif()
+
+message(STATUS "ET include dirs = " ${ET_INCLUDE_DIRS})
+message(STATUS "ET libs = " ${ET_LIBRARIES})
 
 #include(FindPackageHandleStandardArgs)
 #
@@ -166,8 +195,10 @@ if (DEFINED MAKE_EXAMPLES)
         add_executable(${execName} ${fileName})
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+        # Location of include files
+        target_include_directories(${execName} PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${ET_INCLUDE_DIRS})
         # Needs these libs
-        target_link_libraries(${execName})
+        target_link_libraries(${execName} ${ZeroMQ_LIBRARIES} ${ET_LIBRARIES})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)
