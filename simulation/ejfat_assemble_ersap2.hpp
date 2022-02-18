@@ -22,6 +22,7 @@
 #include <vector>
 #include <memory>
 #include <utility>
+#include <string>
 
 #include "et.h"
 #include "et_fifo.h"
@@ -48,7 +49,7 @@ namespace ersap {
          * @return return true if all data sources for a single tick have set the "last" bit,
          *         else false.
          */
-        static bool allLastBitsReceived(std::unordered_map<std::pair<uint64_t, uint16_t>, bool> & endCondition,
+        static bool allLastBitsReceived(std::map<std::pair<uint64_t, uint16_t>, bool> & endCondition,
                                         uint64_t tick) {
 
             bool allReceived = false;
@@ -85,13 +86,9 @@ namespace ersap {
          * or when the "last" bit is set in a packet.
          * This routine allows for out-of-order packets.
          *
-         * @param dataBuf       place to store assembled packets.
-         * @param bufLen        byte length of dataBuf.
          * @param udpSocket     UDP socket to read.
          * @param debug         turn debug printout on & off.
          * @param veryFirstRead this is the very first time data will be read for a sequence of same-tick packets.
-         * @param last          to be filled with "last" bit id from RE header,
-         *                      indicating the last packet in a series used to send data.
          * @param tick          to be filled with tick from RE header.
          * @param expSequence   value-result parameter which gives the next expected sequence to be
          *                      read from RE header and returns its updated value
@@ -110,13 +107,14 @@ namespace ersap {
          *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
          *         If cannot allocate memory, it will return OUT_OF_MEM.
          */
-        static int getPacketizedBuffers(int udpSocket, et_fifo_id fid, size_t bufSizeMax, uint64_t *finishedTick,
-                                        bool debug, bool veryFirstRead, bool *last,
-                                           std::unordered_map<uint16_t, uint32_t> & bytesPerPacket,
-                                           std::unordered_map<std::pair<uint64_t, uint16_t>, bool> & endCondition,
+        static int getPacketizedBuffers(int udpSocket, et_fifo_id fid, uint64_t *finishedTick,
+                                        et_fifo_entry **finishedEntry,
+                                        bool debug, bool veryFirstRead,
+                                           std::map<uint16_t, uint32_t> & bytesPerPacket,
+                                           std::map<std::pair<uint64_t, uint16_t>, bool> & endCondition,
                                            std::map<uint64_t, et_fifo_entry *> & buffers,
-                                           std::unordered_map<std::pair<uint64_t, uint16_t>, uint32_t> & expSequence,
-                                           std::unordered_map<std::tuple<uint32_t, uint16_t, uint64_t>,
+                                           std::map<std::pair<uint64_t, uint16_t>, uint32_t> & expSequence,
+                                           std::map<std::tuple<uint32_t, uint16_t, uint64_t>,
                                                               std::tuple<std::unique_ptr<std::vector<char>>, bool, bool>>
                                                         & outOfOrderPackets) {
 
@@ -125,18 +123,19 @@ namespace ersap {
             uint64_t tick;
             uint32_t sequence, expectedSequence;
 
-            bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
+            bool packetFirst, packetLast, firstReadForBuf = false;
 
             // Flag to indicate when to return from this routine.
             // Set when any single receiving buffer is full,
             // or when all buffers of the next tick have received the lastPacket.
             bool timeToReturn = false;
-            bool lastBitsReceived = false;
+
+            // Initial size to make internal buffers
+            size_t   bufSizeMax = et_fifo_getBufSize(fid);
+            size_t   remainingLen, totalBytesWritten;
 
             int  version, nBytes;
             uint16_t dataId;
-            size_t   maxPacketBytes = 0, remainingLen = bufSizeMax;
-            ssize_t  totalBytesWritten = 0;
 
             // Make this big enough to read a single jumbo packet
             size_t packetBufSize = 10000;
@@ -145,11 +144,12 @@ namespace ersap {
             // Buffer to copy data into
             char* buffer;
             char* readDataFrom;
-            et_fifo_entry *entry;
+            et_event *event = nullptr;
+            et_fifo_entry *entry = nullptr;
+            std::vector<char> *vec;
 
             // Key into buffers and expSequence maps and part of value in outOfOrderPackets
             std::pair<uint64_t, uint16_t> key;
-            std::vector<char> *vec;
 
 
  //           if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
@@ -184,32 +184,45 @@ namespace ersap {
                 // If fifo entry for this tick already exists ...
                 if (it != buffers.end()) {
                     entry = it->second;
-                    et_event* pe = et_fifo_getBuf(dataId, entry);
-                    if (pe == NULL) {
+                    event = et_fifo_getBuf(dataId, entry);
+                    if (event == NULL) {
                         // Major error
                         throw std::runtime_error("too many source ids for data to be held in fifo entry");
                     }
 
                     // Find the next expected sequence
-                    expectedSequence = expSequence[key];
+                    expectedSequence = expSequence[{tick, dataId}];
 
                     // Get data array
-                    buffer = reinterpret_cast<char *>(pe->pdata);
+                    buffer = reinterpret_cast<char *>(event->pdata);
 
                     // Bytes previously written into buffer
-                    totalBytesWritten = pe->length;
+                    totalBytesWritten = event->length;
+
+                    // Room for packet?
+                    if (totalBytesWritten + nBytes > bufSizeMax) {
+                        // No room in buffer, ET system event size needs to be changed to accommodate this!
+                        throw std::runtime_error("ET event too small, make > " +
+                                                 std::to_string(totalBytesWritten + nBytes) + " bytes");
+                    }
 
                     firstReadForBuf = false;
                     veryFirstRead = false;
                 }
                 else {
-                    // There is no fifo entry for this tick so get one and store in map
+                    // There is no fifo entry for this tick, so get one and store in map
                     int err = et_fifo_newEntry(fid, &entry);
                     if (err != ET_OK) {
                         throw std::runtime_error(et_perror(err));
                     }
-                    
-                    // If it does NOT exist, create it.
+
+                    // Put fifo entry into map for future access
+                    buffers[tick] = entry;
+
+                    // Get data array, assume room for 1 packet
+                    event = et_fifo_getBuf(dataId, entry);
+                    buffer = reinterpret_cast<char *>(event->pdata);
+
                     // First expected sequence is 0
                     expectedSequence = 0;
                     // Put expected seq into map for future access
@@ -217,37 +230,28 @@ namespace ersap {
                     // Bytes previously written into buffer
                     totalBytesWritten = 0;
 
-                    // Make a buffer in which to place data for this dataId and tick
-                    auto ptr = std::make_unique<std::vector<char>>(bufSizeMax);
-                    vec = ptr.get();
-                    buffer = ptr->data();
-                    // Put it into map for future access
-                    buffers.emplace(key, ptr);
-
                     firstReadForBuf = true;
                     veryFirstRead = true;
                 }
 
-
                 if (sequence == 0) {
-                    if (!packetLast) {
+                    if (!packetFirst) {
                         if (debug) fprintf(stderr, "Expecting first bit to be set on first packet but wasn't\n");
                         return BAD_FIRST_LAST_BIT;
                     }
 
                     // Each data source may come over a different network/interface and
                     // thus have a different number of bytes per packet. Track it.
-                    bytesPerPacket[dataId] = maxPacketBytes = nBytes;
+                    // If small payload (< MTU), then this is irrelevant, but save anyway.
+                    bytesPerPacket[dataId] = nBytes;
                 }
                 else if (packetFirst) {
                     if (debug) fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
                     return BAD_FIRST_LAST_BIT;
                 }
 
-
                 if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %llu, in packet #%d, last = %s, firstReadForBuf = %s\n",
                                    nBytes, dataId, tick, sequence, btoa(packetLast), btoa(firstReadForBuf));
-
 
                 // Check to see if packet is in sequence, if not ...
                 if (sequence != expectedSequence) {
@@ -291,8 +295,8 @@ namespace ersap {
                     memcpy(buffer + totalBytesWritten, readDataFrom, nBytes);
                     // Total bytes written into this buffer
                     totalBytesWritten += nBytes;
-                    // Tell vector how many bytes it now contains
-                    vec->resize(totalBytesWritten);
+                    // Tell event how many bytes it now contains
+                    et_event_setlength(event, totalBytesWritten);
                     // Number of bytes left in this buffer
                     remainingLen = bufSizeMax - totalBytesWritten;
                     // Next expected sequence
@@ -300,13 +304,6 @@ namespace ersap {
 
                     if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
                                        remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
-
-
-                    // Another mtu of data (as reckoned by source) will exceed buffer space, so return
-                    if (remainingLen < bytesPerPacket[dataId]) {
-                        tooLittleRoom = true;
-                        timeToReturn  = true;
-                    }
 
                     // Is this the last packet for a tick and data source?
                     if (packetLast) {
@@ -318,7 +315,6 @@ namespace ersap {
                         endCondition[kee] = packetLast;
 
                         if (allLastBitsReceived(endCondition, tick)) {
-                            lastBitsReceived = true;
                             timeToReturn = true;
                         }
                     }
@@ -354,6 +350,13 @@ namespace ersap {
                             if (debug) fprintf(stderr, "Go and add stored packet %u, size of map = %lu, last = %s\n",
                                                expectedSequence, outOfOrderPackets.size(), btoa(packetLast));
 
+                            // Room for packet?
+                            if (totalBytesWritten + nBytes > bufSizeMax) {
+                                // No room in buffer, ET system event size needs to be changed to accommodate this!
+                                throw std::runtime_error("ET event too small, make > " +
+                                                         std::to_string(totalBytesWritten + nBytes) + " bytes");
+                            }
+
                             // Write this packet into main buffer now
                             continue;
                         }
@@ -369,14 +372,15 @@ namespace ersap {
                 // read next packet
             }
 
-            if (lastBitsReceived) {
-                // TODO: Clean up if tick finished!!!! Perhaps better done is calling routine.
-                *finishedTick = tick;
-                return 0;
+            // Remove the finished entry from the map
+            auto iter = buffers.find(tick);
+            if (iter != buffers.end()) {
+                buffers.erase(iter);
             }
 
-            //if (debug) fprintf(stderr, "getPacketizedBuffer: passing offset = %u\n\n", expectedSequence);
-            return 1;
+            *finishedEntry = entry;
+            *finishedTick = tick;
+            return 0;
         }
 
 
@@ -440,14 +444,15 @@ namespace ersap {
             }
 
 
-            ssize_t nBytes, totalBytes = 0;
-            bool last, firstRead = true;
+            bool firstRead = true;
             // Start with sequence 0 in very first packet to be read
-            uint32_t sequence = 0;
             uint64_t tick = 0;
 
             //------------------------------------------------
-            // Maps used to store quantities while sorting
+            // Maps used to store quantities while sorting.
+            // Note: most of these could be unordered_maps but,
+            // unfortunately, pair and tuples cannot be used as
+            // keys in that case.
             //------------------------------------------------
 
             // Map to hold the ET fifo entry (multiple bufs) for each tick:
@@ -459,101 +464,54 @@ namespace ersap {
             //     key   = tuple of {sequence, dataId, tick} (unique for each packet)
             //     value = tuple of {smart ptr to vector of packet data bytes,
             //                       is last packet, is first packet}
-            std::unordered_map<std::tuple<uint32_t, uint16_t, uint64_t>,
+            std::map<std::tuple<uint32_t, uint16_t, uint64_t>,
                                std::tuple<std::unique_ptr<std::vector<char>>, bool, bool>> outOfOrderPackets;
 
             // Map to hold the max bytes per packet for each data source:
             //     key   = data source id
             //     value = max bytes per packet
-            std::unordered_map<uint16_t, uint32_t> bytesPerPacket;
+            std::map<uint16_t, uint32_t> bytesPerPacket;
 
             // Map to hold the status of the "last" packet bit for each tick-dataId combo:
             //     key   = pair of {tick, dataId}
             //     value = true if last bit received, else false
-            std::unordered_map<std::pair<uint64_t, uint16_t>, bool> endCondition;
+            std::map<std::pair<uint64_t, uint16_t>, bool> endCondition;
 
             // Map to hold the next expected sequence for each tick-dataId combo:
             //     key   = pair of {tick, dataId}
             //     value = next expected sequence
-            std::unordered_map<std::pair<uint64_t, uint16_t>, uint32_t> expSequence;
+            std::map<std::pair<uint64_t, uint16_t>, uint32_t> expSequence;
 
             //------------------------------------------------
+            // We're using buffers created in the ET system -
+            // one for each tick and dataId combo.
+            // We will have to keep looping to read everything,
+            // since we don't know how much data is coming or in what order.
+            //-----------------------------------------------
 
-
-            // We're using our own internally allocated buffers.
-            // We may have to loop through to read everything, since we don't know how much data is coming
-            // Create an internal buffer that we'll fill and return.
-            // If it's too small, it will be reallocated and data copied over.
-
-            // Initial size to make internal buffers
-            size_t dataBufLen = 100000;
-
+            et_fifo_entry *finishedEntry;
 
             while (true) {
-                err = getPacketizedBuffers(udpSocket, fid, dataBufLen, &tick,
-                                           debug, firstRead, &last,
+
+                // This will return when all the data for 1 tick is complete
+                err = getPacketizedBuffers(udpSocket, fid, &tick, &finishedEntry,
+                                           debug, firstRead,
                                            bytesPerPacket, endCondition,
                                            bufStore, expSequence,
                                            outOfOrderPackets);
                 if (err < 0) {
-                    if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
+                    if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %d\n", err);
                     // Return the error
                     return err;
                 }
-                else if (err == 0) {
-                    // Got all last bits
-                    // Pull out all buffers associated with "tick" and return to caller
-                    et_fifo_entry *pentry;
-                    for (auto & entry : bufStore) {
-                        // ignore other ticks
-                        if (entry.first != tick) {
-                            continue;
-                        }
 
-                        // Put fifo entry (buf array) back into ET
-                        pentry = entry.second;
-                        et_fifo_putEntry(pentry);
-                    }
-                    *bufTick = tick;
-                    return 0;
-                }
-                else if (err == 1) {
-                    // a particular buffer was too small
+                // Put complete array of buffers associated w/ one tick back into ET
+                et_fifo_putEntry(finishedEntry);
+                *bufTick = tick;
 
-                }
-
-                totalBytes += nBytes;
-                getDataFrom += nBytes;
-                remaningBytes -= nBytes;
                 firstRead = false;
 
-                //printBytes(dataBuf, nBytes, "buffer ---->");
-
-                if (last) {
-                    if (debug) fprintf(stderr, "Read last packet from incoming data, quit\n");
-                    break;
-                }
-
-                // Do we have to allocate more memory? Double it if so.
-                if (remaningBytes < bytesPerPacket) {
-                    dataBuf = (char *)realloc(dataBuf, 2*dataBufLen);
-                    if (dataBuf == nullptr) {
-                        return OUT_OF_MEM;
-                    }
-                    getDataFrom = dataBuf + totalBytes;
-                    dataBufLen *= 2;
-                    remaningBytes = dataBufLen - totalBytes;
-                    if (debug) fprintf(stderr, "Reallocate buffer to %u bytes\n", dataBufLen);
-                }
-
-                if (debug) fprintf(stderr, "Read %ld bytes from incoming reassembled packet\n", nBytes);
             }
-
-            *userBuf = dataBuf;
-            *userBufLen = totalBytes;
-
-
-            if (debug) fprintf(stderr, "Read %ld incoming data bytes\n", totalBytes);
 
             return 0;
         }

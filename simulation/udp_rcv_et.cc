@@ -50,13 +50,12 @@ static void printHelp(char *programName) {
  *
  * @param argc        arg count from main().
  * @param argv        arg list from main().
- * @param bufSize     filled with buffer size.
  * @param port        filled with UDP port to listen on.
  * @param debug       filled with debug flag.
  * @param fileName    filled with output file name.
  * @param listenAddr  filled with IP address to listen on.
  */
-static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port, bool *debug,
+static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
                       char *fileName, char *listenAddr) {
 
     int c, i_tmp;
@@ -154,7 +153,7 @@ int main(int argc, char **argv) {
     memset(fileName, 0, INPUT_LENGTH_MAX);
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &bufSize, &port, &debug, fileName, listeningAddr);
+    parseArgs(argc, argv, &port, &debug, fileName, listeningAddr);
 
     // Create UDP socket
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);

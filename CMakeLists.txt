@@ -19,17 +19,16 @@
 
 # This file came from evio-6.0 project
 
-# This call must be placed BEFORE "project" command
-cmake_minimum_required(VERSION 3.10)
-
-
+cmake_minimum_required(VERSION 3.5)
 project(ejfat VERSION 0.1)
 
+
 # define where we put FindZeroMQ.cmake file so zmq can be found
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
+#set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DEBUG_POSTFIX -dbg)
 
 set(MAKE_EXAMPLES 1)
@@ -58,6 +57,38 @@ if (DEFINED INSTALL_DIR)
 else()
     message(STATUS "Set the \"CODA\" env var or specify -DCODA_INSTALL=... on the command line or no installation possible!")
 endif()
+
+
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "No build type selected, default to Release")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+            Debug Release MinSizeRel RelWithDebInfo)
+endif()
+
+if(DEFINED ENV{ERSAP_HOME} AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    # Provide useful default paths when $ERSAP_HOME is defined
+    set(CMAKE_INSTALL_PREFIX "$ENV{ERSAP_HOME}" CACHE PATH "" FORCE)
+    list(APPEND CMAKE_PREFIX_PATH "$ENV{ERSAP_HOME}")
+endif()
+
+if(NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
+    set(CMAKE_INSTALL_PLUGINDIR plugins CACHE PATH "Ersap plugins directory (plugins)")
+endif()
+mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
+
+add_compile_options(-Wall -Wextra)
+
+if(APPLE)
+    set(CMAKE_MACOSX_RPATH ON)
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    set(CMAKE_INSTALL_RPATH @loader_path/../lib)
+endif()
+
+
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
+
 
 
 set(EXEC_FILES
@@ -89,6 +120,12 @@ set(CPP_HEADER_FILES
 
 set(CPP_LIB_FILES
         )
+
+
+#find_package(Ersap REQUIRED)
+
+#add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
+#add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
 
 
 # if you tell cmake to have code use USE_ZMQ preprocessor macro
