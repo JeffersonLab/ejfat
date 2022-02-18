@@ -138,39 +138,39 @@ if (passed6) {
     struct sockaddr_in6 dst_addr6;
     struct sockaddr_in dst_addr;
 
-if (passed6) {
+    if (passed6) {
 
-    /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
-    if ((dst_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-        perror("creating dst socket");
-        exit(1);
+        /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+        if ((dst_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+            perror("creating dst socket");
+            exit(1);
+        }
+
+        // Configure settings in address struct
+        /*Configure settings in address struct*/
+        /* clear it out */
+        memset(&dst_addr6, 0, sizeof(dst_addr6));
+        /* it is an INET address */
+        dst_addr6.sin6_family = AF_INET6; 
+        /* the port we are going to send to, in network byte order */
+        dst_addr6.sin6_port = htons(dst_prt);           // "LB" = 0x4c42 by spec (network order)
+        /* the server IP address, in network byte order */
+        inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
+
+    } else {
+
+        // Create UDP socket for transmission to sender
+        dst_sckt = socket(PF_INET, SOCK_DGRAM, 0);
+
+        // Configure settings in address struct
+        dst_addr.sin_family = AF_INET;
+        dst_addr.sin_port = htons(dst_prt); // data consumer port to send to
+        dst_addr.sin_addr.s_addr = inet_addr(dst_ip); // indra-s3 as data consumer
+        memset(dst_addr.sin_zero, '\0', sizeof dst_addr.sin_zero);
+
+        // Initialize size variable to be used later on
+        socklen_t addr_size = sizeof dst_addr;
     }
-
-    // Configure settings in address struct
-    /*Configure settings in address struct*/
-    /* clear it out */
-    memset(&dst_addr6, 0, sizeof(dst_addr6));
-    /* it is an INET address */
-    dst_addr6.sin6_family = AF_INET6; 
-    /* the port we are going to send to, in network byte order */
-    dst_addr6.sin6_port = htons(dst_prt);           // "LB" = 0x4c42 by spec (network order)
-    /* the server IP address, in network byte order */
-    inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
-
-} else {
-
-    // Create UDP socket for transmission to sender
-    dst_sckt = socket(PF_INET, SOCK_DGRAM, 0);
-
-    // Configure settings in address struct
-    dst_addr.sin_family = AF_INET;
-    dst_addr.sin_port = htons(dst_prt); // data consumer port to send to
-    dst_addr.sin_addr.s_addr = inet_addr(dst_ip); // indra-s3 as data consumer
-    memset(dst_addr.sin_zero, '\0', sizeof dst_addr.sin_zero);
-
-    // Initialize size variable to be used later on
-    socklen_t addr_size = sizeof dst_addr;
-}
 //=======================================================================
 
     uint8_t buffer[mdlen + max_pckt_sz];
@@ -216,21 +216,21 @@ if (passed6) {
         
         // forward data to sink skipping past lb meta data
         /* now send a datagram */
-	ssize_t rtCd = 0;
-if (passed6) {
-        if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
-                    (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-            perror("sendto failed");
-            exit(4);
+	    ssize_t rtCd = 0;
+        if (passed6) {
+                if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+                            (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
+                    perror("sendto failed");
+                    exit(4);
+                }
+        } else {
+                if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+                            (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
+                    perror("sendto failed");
+                    exit(4);
+                }
         }
-} else {
-        if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
-                    (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-            perror("sendto failed");
-            exit(4);
-        }
-}
-         fprintf( stderr, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+        fprintf( stderr, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
 
 /*** why is this not working ?
         if (getnameinfo((struct sockaddr*) &dst_addr6, sizeof(dst_addr6), gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
