@@ -36,10 +36,6 @@
 #include <cctype>
 #endif
 
-#ifdef USE_ZMQ
-#include <zmq.h>
-#endif
-
 #define HEADER_BYTES 16
 #define btoa(x) ((x)?"true":"false")
 

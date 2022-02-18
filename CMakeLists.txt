@@ -1,11 +1,19 @@
 # To use this, do the following the first time:
 #   % mkdir build
 #   % cd build
-#   % cmake .. -DCMAKE_BUILD_TYPE=release
+#   % cmake ..
 #   % make (install)
 #
-# To only build C libraries and executables, replace the 3rd cammand above with
-#   % cmake .. -DCMAKE_BUILD_TYPE=release -DC_ONLY=1
+# To build code that uses the ET system,
+#   % cmake .. -DBUILD_ET=1
+#
+# To build code that uses the ZMQ,
+#   % cmake .. -DBUILD_ZMQ=1
+#
+# To build ERSAP engine/service code, define env var ERSAP_HOME and
+#   % cmake .. -DBUILD_ERSAP=1
+#
+# These flag may be combined
 #
 # After doing this once can do the following to recompile
 #  % cd <top level evio dir>
@@ -31,7 +39,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DEBUG_POSTFIX -dbg)
 
-set(MAKE_EXAMPLES 1)
+# Make executables
+set(MAKE_EXEC 1)
+
+# Test code build is optional and set it to OFF by default
+option(BUILD_TEST "Build test code" OFF)
+
 
 # uncomment to put in debug symbols or do on command line with:
 # cmake -DCMAKE_BUILD_TYPE=Debug ..
@@ -78,7 +91,7 @@ if(NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
 endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
-add_compile_options(-Wall -Wextra)
+#add_compile_options(-Wall -Wextra)
 
 if(APPLE)
     set(CMAKE_MACOSX_RPATH ON)
@@ -90,49 +103,59 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 
-
-set(EXEC_FILES
-        simulation/udp_rcv_et.cc
-        simulation/udp_rcv_order.cc
-        simulation/udp_send_order.cc
-        simulation/udp_rcv.c
-        simulation/udp_send.c
-        simulation/re_header_test.cc
-        simulation/lb_emu2.cc
+set(EMU_EXEC_FILES
         emulation/lb_emu.cc
         emulation/lb_rcv.cc
         emulation/pktzr_md.cc
         )
 
-set(C_HEADER_FILES
+set(ET_EXEC_FILES
+        simulation/udp_rcv_et.cc
         )
 
-set(C_LIB_FILES
+set(SIM_EXEC_FILES
+        simulation/udp_rcv_order.cc
+        simulation/udp_send_order.cc
+        simulation/udp_rcv.c
+        simulation/udp_send.c
+        simulation/lb_emu2.cc
+        )
+
+set(TEST_FILES
+        simulation/re_header_test.cc
         )
 
 set(CPP_HEADER_FILES
         simulation/ejfat_packetizer_ersap.hpp
         simulation/ejfat_assemble_ersap.hpp
         simulation/ejfat_assemble_ersap2.hpp
-        simulation/zmq.h
-        simulation/zmq.hpp
-        )
-
-set(CPP_LIB_FILES
         )
 
 
-#find_package(Ersap REQUIRED)
+set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
 
-#add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
-#add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
 
+# Ersap build is optional and set it to OFF by default
+option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
+
+if(BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
+    find_package(Ersap REQUIRED)
+
+    add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
+    add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
+endif()
+
+
+
+# Zeromq build is optional and set it to OFF by default
+option(BUILD_ZMQ "Build ZMQ-related code" OFF)
 
 # if you tell cmake to have code use USE_ZMQ preprocessor macro
-if (USE_ZMQ)
+if (BUILD_ZMQ)
     find_package(ZeroMQ)
     if (ZeroMQ_FOUND)
-        add_compile_definitions(USE_ZMQ)
+        add_compile_definitions(BUILD_ZMQ)
+        set(EXEC_FILES ${EXEC_FILES} ${ZMQ_EXEC_FILES})
     else()
         message(STATUS "Zeromq cannot be found, compile without it")
     endif()
@@ -141,15 +164,22 @@ else()
 endif()
 
 
-find_package(ET)
-if (ET_FOUND)
-    add_compile_definitions(USE_ET)
+
+# ET build is optional and set it to OFF by default
+option(BUILD_ET "Build ET-related code" OFF)
+
+if (BUILD_ET)
+    find_package(ET)
+    if (ET_FOUND)
+        add_compile_definitions(BUILD_ET)
+        set(EXEC_FILES ${EXEC_FILES} ${ET_EXEC_FILES})
+    else()
+        message(STATUS "Et cannot be found, compile without it")
+    endif()
 else()
-    message(STATUS "Et cannot be found, compile without it")
+    message(STATUS "Compile without zeromq")
 endif()
 
-message(STATUS "ET include dirs = " ${ET_INCLUDE_DIRS})
-message(STATUS "ET libs = " ${ET_LIBRARIES})
 
 #include(FindPackageHandleStandardArgs)
 #
@@ -224,11 +254,12 @@ message(STATUS "ET libs = " ${ET_LIBRARIES})
 
 
 # Test programs
-if (DEFINED MAKE_EXAMPLES)
+if (DEFINED MAKE_EXEC)
     foreach(fileName ${EXEC_FILES})
         # Get file name with no directory or extension as executable name
         get_filename_component(execName ${fileName} NAME_WE)
         # Create executable from file
+        #message(STATUS "Create executable " ${execName})
         add_executable(${execName} ${fileName})
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
