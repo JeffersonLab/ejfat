@@ -44,6 +44,7 @@ void   Usage(void)
         -p listen port (number)  \n\
         -t send address (string)  \n\
         -r send port (number)  \n\
+        -u send UDP (default TCP)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -s\n";
@@ -62,12 +63,12 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI=false, passedP=false, passedT=false, passedR=false, passed6=false;
+    bool passedI=false, passedP=false, passedT=false, passedR=false, passed6=false, passedU=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
     uint16_t lstn_prt, dst_prt;                          // listening, target ports
 
-    while ((optc = getopt(argc, argv, "i:p:t:r:6")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:r:6u")) != -1)
     {
         switch (optc)
         {
@@ -92,6 +93,9 @@ int main (int argc, char *argv[])
         case 'r':
             dst_prt = (uint16_t) atoi((const char *) optarg) ;
             passedR = true;
+            break;
+        case 'u':
+            passedU = true;
             break;
         case '?':
             fprintf(stderr, "Unrecognised option: %d\n", optopt);
@@ -161,12 +165,11 @@ int main (int argc, char *argv[])
     struct sockaddr_in dst_addr;
 
     if (passed6 && passedT) {
-
-        /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
-        if ((dst_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating dst socket");
-            exit(1);
-        }
+	    /* create a socket in the INET6 protocol */
+	    if ((dst_sckt = socket(AF_INET6, passedU?SOCK_DGRAM:SOCK_STREAM, 0)) < 0) {
+	        perror("creating dst socket");
+	        exit(1);
+	    }
 
         // Configure settings in address struct
         /*Configure settings in address struct*/
@@ -180,9 +183,11 @@ int main (int argc, char *argv[])
         inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
 
     } else if (passedT){
-
-        // Create UDP socket for transmission to sender
-        dst_sckt = socket(PF_INET, SOCK_DGRAM, 0);
+        // Create  socket in the INET protocol
+        if ((dst_sckt = socket(PF_INET, passedU?SOCK_DGRAM:SOCK_STREAM, 0)) < 0) {
+	        perror("creating dst socket");
+	        exit(1);
+	    }
 
         // Configure settings in address struct
         dst_addr.sin_family = AF_INET;
@@ -193,6 +198,13 @@ int main (int argc, char *argv[])
         // Initialize size variable to be used later on
         socklen_t addr_size = sizeof dst_addr;
     }
+    if(!passedU) if (connect(dst_sckt, 
+                            passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
+                            passed6?sizeof dst_addr6:sizeof dst_addr) < 0) {
+        perror("connecting to dst socket");
+        exit(1);
+    }
+
 //=======================================================================
 
     uint8_t buffer[max_pckt_sz + relen];
@@ -254,20 +266,19 @@ int main (int argc, char *argv[])
             cerr << "writing seq " <<  seq << " size = " << int(nBytes-relen) << endl;
             if(passedT) {
                     // forward data to sink skipping past lb meta data
-                    /* now send a datagram */
 	            ssize_t rtCd = 0;
-                if (passed6) {
-                        if ((rtCd = sendto(dst_sckt, &buffer[relen], nBytes-relen, 0, 
-                                    (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-                            perror("sendto failed");
-                            exit(4);
-                        }
+                if(passedU) {
+                    if ((rtCd = sendto(dst_sckt, &buffer[relen], nBytes-relen, 0, 
+                                passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
+                                passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
+                        perror("sendto failed");
+                        exit(4);
+                    }
                 } else {
-                        if ((rtCd = sendto(dst_sckt, &buffer[relen], nBytes-relen, 0, 
-                                    (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-                            perror("sendto failed");
-                            exit(4);
-                        }
+                    if ((rtCd = send(dst_sckt, &buffer[relen], nBytes-relen, 0)) < 0) {
+                        perror("send failed");
+                        exit(4);
+                    }
                 }
             } else {
                 rs[data_id].write((char*)&buffer[relen], nBytes-relen);
@@ -282,18 +293,20 @@ int main (int argc, char *argv[])
                         // forward data to sink skipping past lb meta data
                         /* now send a datagram */
 	                ssize_t rtCd = 0;
-                    if (passed6) {
-                            if ((rtCd = sendto(dst_sckt, &buffer[relen], nBytes-relen, 0, 
-                                        (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-                                perror("sendto failed");
-                                exit(4);
-                            }
+                    if(passedU) {
+                        if ((rtCd = sendto(dst_sckt, &pckt_cache[data_id][did_seq[data_id]][relen], 
+                                            pckt_sz[data_id][did_seq[data_id]]-relen, 0, 
+                                            passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
+                                            passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
+                            perror("sendto failed");
+                            exit(4);
+                        }
                     } else {
-                            if ((rtCd = sendto(dst_sckt, &buffer[relen], nBytes-relen, 0, 
-                                        (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-                                perror("sendto failed");
-                                exit(4);
-                            }
+                        if ((rtCd = send(dst_sckt, &pckt_cache[data_id][did_seq[data_id]][relen], 
+                                            pckt_sz[data_id][did_seq[data_id]]-relen, 0)) < 0) {
+                            perror("send failed");
+                            exit(4);
+                        }
                     }
                 } else {
                     rs[data_id].write((char*)&pckt_cache[data_id][did_seq[data_id]][relen], 
