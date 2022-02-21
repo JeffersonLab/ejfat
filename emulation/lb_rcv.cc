@@ -47,7 +47,7 @@ void   Usage(void)
         -u send UDP (default TCP)  \n\
         -h help \n\n";
         cout<<usage_str;
-        cout<<"Required: -s\n";
+        cout<<"Required: -i -p\n";
 }
 
 uint16_t cnt_trues(bool b[], uint16_t n) // returns count of true values in array
@@ -165,11 +165,11 @@ int main (int argc, char *argv[])
     struct sockaddr_in dst_addr;
 
     if (passed6 && passedT) {
-	    /* create a socket in the INET6 protocol */
-	    if ((dst_sckt = socket(AF_INET6, passedU?SOCK_DGRAM:SOCK_STREAM, 0)) < 0) {
-	        perror("creating dst socket");
-	        exit(1);
-	    }
+        /* create a socket in the INET6 protocol */
+        if ((dst_sckt = socket(AF_INET6, passedU?SOCK_DGRAM:SOCK_STREAM, 0)) < 0) {
+            perror("creating dst socket");
+            exit(1);
+        }
 
         // Configure settings in address struct
         /*Configure settings in address struct*/
@@ -198,7 +198,7 @@ int main (int argc, char *argv[])
         // Initialize size variable to be used later on
         socklen_t addr_size = sizeof dst_addr;
     }
-    if(!passedU) if (connect(dst_sckt, 
+    if(!passedU && passedT) if (connect(dst_sckt, 
                             passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
                             passed6?sizeof dst_addr6:sizeof dst_addr) < 0) {
         perror("connecting to dst socket");
@@ -323,6 +323,6 @@ int main (int argc, char *argv[])
             cerr << "Received packet out of sequence: expected " <<  did_seq[data_id] << " recd " << seq << '\n';
             cerr << "store pckt " <<  seq << " in slot " << seq << endl;
         }
-    } while(cnt_trues(data_ids_inuse, max_data_ids) != cnt_trues(lst_pkt_rcd, max_data_ids));
+    } while(passedT?true:cnt_trues(data_ids_inuse, max_data_ids) != cnt_trues(lst_pkt_rcd, max_data_ids));
     return 0;
 }
