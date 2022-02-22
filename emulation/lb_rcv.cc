@@ -30,18 +30,22 @@ using namespace std;
 #endif
 
 const size_t max_pckt_sz  = 1024;
-const size_t max_data_ids = 100;  // support up to 100 data_ids
-const size_t max_ooo_pkts = 100;   // support up to 10 out of order packets
+const size_t max_data_ids = 10;   // support up to 10 data_ids
+const size_t max_ooo_pkts = 100;  // support up to 100 out of order packets
 const size_t relen        = 8+8;  // 8 for flags, data_id, 8 for tick
 const size_t mdlen        = relen;
 
 // set up some cachd buffers for out-of-sequence work
-char     pckt_cache[           max_data_ids][max_ooo_pkts][max_pckt_sz + relen];
-bool     pckt_cache_inuse[     max_data_ids][max_ooo_pkts];
-uint16_t pckt_sz[              max_data_ids][max_ooo_pkts];
-bool     data_ids_inuse[       max_data_ids];
-bool     lst_pkt_rcd[          max_data_ids];
-uint16_t did_seq[              max_data_ids];
+char     pckt_cache[      max_data_ids][max_ooo_pkts][max_pckt_sz + relen];
+bool     pckt_cache_inuse[max_data_ids][max_ooo_pkts];
+uint16_t pckt_sz[         max_data_ids][max_ooo_pkts];
+bool     data_ids_inuse[  max_data_ids];
+bool     lst_pkt_rcd[     max_data_ids];
+uint8_t  max_seq[         max_data_ids];
+uint16_t did_seq[         max_data_ids];
+
+uint8_t  in_buff[relen + max_pckt_sz];
+uint8_t out_buff[max_ooo_pkts*max_pckt_sz];
 
 void   Usage(void)
 {
@@ -215,18 +219,15 @@ int main (int argc, char *argv[])
 
 //=======================================================================
 
-    uint8_t   in_buff[relen            + max_pckt_sz];
-    // includes special short flag for ERSAP reassembly
-    uint8_t  out_buff[sizeof(uint16_t) + max_pckt_sz];
+    // RE neta data is at front of in_buff
     uint8_t* pBufRe = in_buff;
 
-    // RE neta data is at front of in_buff
-    union re* premd = (union re*)in_buff; 
     // start all data_id streams at seq = 0
     for(uint16_t i = 0; i < max_data_ids; i++) did_seq[i] = 0; 
     for(uint16_t i = 0; i < max_data_ids; i++) {
         data_ids_inuse[i] = false;
         lst_pkt_rcd[i] = false;
+        max_seq[i] = 0;
         for(uint16_t j = 0; j < max_ooo_pkts; j++)  {
             pckt_cache_inuse[i][j] = false;
             pckt_sz[i][j] = 0;
@@ -237,7 +238,6 @@ int main (int argc, char *argv[])
     uint64_t* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)];
     uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
     uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
-    uint16_t* pEflg   = (uint16_t*) out_buff;
 
     do {
         // Try to receive any incoming UDP datagram. Address and port of
@@ -266,27 +266,14 @@ int main (int argc, char *argv[])
         if(data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }
         data_ids_inuse[data_id] = true;
         lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
+        if(lst) max_seq[data_id] = seq;
         if(seq == did_seq[data_id]) { //the seq # we were expecting
             cerr << "writing seq " <<  seq << " size = " << int(nBytes-relen) << endl;
-            if(passedT) {
-                frst || lst ? *pEflg = 0 : *pEflg = nBytes;  // for ERSAP
-                 //setup egress buffer for ERSAP
-                memmove(&out_buff[sizeof(uint16_t)], &in_buff[relen], nBytes);
-                // forward data to sink skipping past lb meta data
-                ssize_t rtCd = 0;
-                if(passedU) {
-                    if ((rtCd = sendto(dst_sckt, out_buff, nBytes+sizeof(uint16_t), 0, 
-                                passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
-                                passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
-                        perror("sendto failed");
-                        exit(4);
-                    }
-                } else {
-                    if ((rtCd = send(dst_sckt, out_buff, nBytes+sizeof(uint16_t), 0)) < 0) {
-                        perror("send failed");
-                        exit(4);
-                    }
-                }
+            if(passedT) { // store for single blob event
+                if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
+                memmove(pckt_cache[data_id][seq], in_buff, nBytes);
+                pckt_sz[data_id][seq] = nBytes;
+                pckt_cache_inuse[data_id][seq] = true;
             } else {
                 rs[data_id].write((char*)&in_buff[relen], nBytes-relen);
                 rs[data_id].flush();
@@ -300,7 +287,6 @@ int main (int argc, char *argv[])
                     // decode to host encoding
                     uint8_t  frst    = (pBufRe[1] & 0x02) >> 1;
                     uint8_t  lst     =  pBufRe[1] & 0x01;
-                    frst || lst ? *pEflg = 0 : *pEflg = nBytes;  // for ERSAP
                     //setup egress buffer for ERSAP
                     memmove(&out_buff[sizeof(uint16_t)], &in_buff[relen], nBytes); //setup egress buffer for ERSAP
                         // forward data to sink skipping past lb meta data
@@ -335,6 +321,32 @@ int main (int argc, char *argv[])
             pckt_cache_inuse[data_id][seq] = true;
             cerr << "Received packet out of sequence: expected " <<  did_seq[data_id] << " recd " << seq << '\n';
             cerr << "store pckt " <<  seq << " in slot " << seq << endl;
+        }
+
+        if(cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts) == max_seq[data_id] + 1)  { //build blob and transfer
+            uint16_t evnt_sz = 0;
+            for(uint8_t i = 0; i < max_seq[data_id]; i++) {
+                 //setup egress buffer for ERSAP
+                memmove(&out_buff[sizeof(uint16_t) + evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
+                evnt_sz += pckt_sz[data_id][i];
+            }
+            // put event size in reserved short sized slot at head of out_buf
+            *((uint16_t*) out_buff) = evnt_sz; 
+            // forward data to sink skipping past lb meta data
+            ssize_t rtCd = 0;
+            if(passedU) {
+                if ((rtCd = sendto(dst_sckt, out_buff, evnt_sz + sizeof(uint16_t), 0, 
+                            passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
+                            passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
+                    perror("sendto failed");
+                    exit(4);
+                }
+            } else {
+                if ((rtCd = send(dst_sckt, out_buff, evnt_sz + sizeof(uint16_t), 0)) < 0) {
+                    perror("send failed");
+                    exit(4);
+                }
+            }
         }
     } while(passedT?true:cnt_trues(data_ids_inuse, max_data_ids) != cnt_trues(lst_pkt_rcd, max_data_ids));
     return 0;
