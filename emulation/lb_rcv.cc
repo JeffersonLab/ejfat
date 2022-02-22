@@ -31,9 +31,17 @@ using namespace std;
 
 const size_t max_pckt_sz  = 1024;
 const size_t max_data_ids = 100;  // support up to 100 data_ids
-const size_t max_ooo_pkts = 10;  // support up to 10 out of order packets
-const size_t relen        = 8+8;
+const size_t max_ooo_pkts = 100;   // support up to 10 out of order packets
+const size_t relen        = 8+8;  // 8 for flags, data_id, 8 for tick
 const size_t mdlen        = relen;
+
+// set up some cachd buffers for out-of-sequence work
+char     pckt_cache[           max_data_ids][max_ooo_pkts][max_pckt_sz + relen];
+bool     pckt_cache_inuse[     max_data_ids][max_ooo_pkts];
+uint16_t pckt_sz[              max_data_ids][max_ooo_pkts];
+bool     data_ids_inuse[       max_data_ids];
+bool     lst_pkt_rcd[          max_data_ids];
+uint16_t did_seq[              max_data_ids];
 
 void   Usage(void)
 {
@@ -207,20 +215,15 @@ int main (int argc, char *argv[])
 
 //=======================================================================
 
-    uint8_t buffer[max_pckt_sz + relen];
-    uint8_t* pBufRe = buffer;
+    uint8_t   in_buff[relen            + max_pckt_sz];
+    // includes special short flag for ERSAP reassembly
+    uint8_t  out_buff[sizeof(uint16_t) + max_pckt_sz];
+    uint8_t* pBufRe = in_buff;
 
-    // RE neta data is at front of buffer
-    union re* premd = (union re*)buffer; 
-    uint16_t did_seq[max_data_ids];
+    // RE neta data is at front of in_buff
+    union re* premd = (union re*)in_buff; 
     // start all data_id streams at seq = 0
     for(uint16_t i = 0; i < max_data_ids; i++) did_seq[i] = 0; 
-    // set up some cachd buffers for out-of-sequence work
-    char pckt_cache[max_data_ids][max_ooo_pkts][max_pckt_sz + relen];
-    bool pckt_cache_inuse[max_data_ids][max_ooo_pkts];
-    uint16_t pckt_sz[max_data_ids][max_ooo_pkts];
-    bool data_ids_inuse[max_data_ids];
-    bool lst_pkt_rcd[max_data_ids];
     for(uint16_t i = 0; i < max_data_ids; i++) {
         data_ids_inuse[i] = false;
         lst_pkt_rcd[i] = false;
@@ -229,25 +232,26 @@ int main (int argc, char *argv[])
             pckt_sz[i][j] = 0;
         }
     }
-    uint16_t num_data_ids = 0;  // number of data_ids encountered in this session
+    uint16_t  num_data_ids = 0;  // number of data_ids encountered in this session
 
-    uint64_t* pReTick = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
-    uint32_t* pSeq    = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-    uint16_t* pDid    = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint64_t* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)];
+    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
+    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint16_t* pEflg   = (uint16_t*) out_buff;
 
     do {
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
 
-        nBytes = recvfrom(lstn_sckt, buffer, sizeof(buffer), 0, (struct sockaddr *)&src_addr, &addr_size);
+        nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
 
         // decode to host encoding
         uint64_t retick  = NTOHLL(*pReTick);
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
-        uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
-        uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
-        uint8_t lst      =  pBufRe[1] & 0x01;
+        uint8_t  vrsn    = (pBufRe[0] & 0xf0) >> 4;
+        uint8_t  frst    = (pBufRe[1] & 0x02) >> 1;
+        uint8_t  lst     =  pBufRe[1] & 0x01;
 
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
@@ -261,49 +265,58 @@ int main (int argc, char *argv[])
 
         if(data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }
         data_ids_inuse[data_id] = true;
-        lst_pkt_rcd[data_id] = lst == 1;
+        lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
         if(seq == did_seq[data_id]) { //the seq # we were expecting
             cerr << "writing seq " <<  seq << " size = " << int(nBytes-relen) << endl;
             if(passedT) {
-                    // forward data to sink skipping past lb meta data
-	            ssize_t rtCd = 0;
+                frst || lst ? *pEflg = 0 : *pEflg = nBytes;  // for ERSAP
+                 //setup egress buffer for ERSAP
+                memmove(&out_buff[sizeof(uint16_t)], &in_buff[relen], nBytes);
+                // forward data to sink skipping past lb meta data
+                ssize_t rtCd = 0;
                 if(passedU) {
-                    if ((rtCd = sendto(dst_sckt, &buffer[relen], nBytes-relen, 0, 
+                    if ((rtCd = sendto(dst_sckt, out_buff, nBytes+sizeof(uint16_t), 0, 
                                 passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
                                 passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
                         perror("sendto failed");
                         exit(4);
                     }
                 } else {
-                    if ((rtCd = send(dst_sckt, &buffer[relen], nBytes-relen, 0)) < 0) {
+                    if ((rtCd = send(dst_sckt, out_buff, nBytes+sizeof(uint16_t), 0)) < 0) {
                         perror("send failed");
                         exit(4);
                     }
                 }
             } else {
-                rs[data_id].write((char*)&buffer[relen], nBytes-relen);
+                rs[data_id].write((char*)&in_buff[relen], nBytes-relen);
                 rs[data_id].flush();
             }
             // while we can find cached packets
             while(pckt_cache_inuse[data_id][++did_seq[data_id]] == true) { 
-                union re* premd1 = (union re*)pckt_cache[data_id][did_seq[data_id]];
                 cerr << "writing seq " <<  seq << " from slot " << did_seq[data_id] 
                      << " size = " << pckt_sz[did_seq[data_id]]-relen << endl;
                 if(passedT) {
+                    uint8_t* pBufRe = (uint8_t* )pckt_cache[data_id][did_seq[data_id]];
+                    // decode to host encoding
+                    uint8_t  frst    = (pBufRe[1] & 0x02) >> 1;
+                    uint8_t  lst     =  pBufRe[1] & 0x01;
+                    frst || lst ? *pEflg = 0 : *pEflg = nBytes;  // for ERSAP
+                    //setup egress buffer for ERSAP
+                    memmove(&out_buff[sizeof(uint16_t)], &in_buff[relen], nBytes); //setup egress buffer for ERSAP
                         // forward data to sink skipping past lb meta data
                         /* now send a datagram */
 	                ssize_t rtCd = 0;
                     if(passedU) {
-                        if ((rtCd = sendto(dst_sckt, &pckt_cache[data_id][did_seq[data_id]][relen], 
-                                            pckt_sz[data_id][did_seq[data_id]]-relen, 0, 
+                        if ((rtCd = sendto(dst_sckt, out_buff, 
+                                            pckt_sz[data_id][did_seq[data_id]]+sizeof(uint16_t), 0, 
                                             passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
                                             passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
                             perror("sendto failed");
                             exit(4);
                         }
                     } else {
-                        if ((rtCd = send(dst_sckt, &pckt_cache[data_id][did_seq[data_id]][relen], 
-                                            pckt_sz[data_id][did_seq[data_id]]-relen, 0)) < 0) {
+                        if ((rtCd = send(dst_sckt, out_buff, 
+                                            pckt_sz[data_id][did_seq[data_id]]+sizeof(uint16_t), 0)) < 0) {
                             perror("send failed");
                             exit(4);
                         }
@@ -317,7 +330,7 @@ int main (int argc, char *argv[])
             }
         } else { // out of expected order - save packet in associated slot
             if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
-            memmove(pckt_cache[data_id][seq], buffer, nBytes);
+            memmove(pckt_cache[data_id][seq], in_buff, nBytes);
             pckt_sz[data_id][seq] = nBytes;
             pckt_cache_inuse[data_id][seq] = true;
             cerr << "Received packet out of sequence: expected " <<  did_seq[data_id] << " recd " << seq << '\n';
