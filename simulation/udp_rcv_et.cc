@@ -14,7 +14,8 @@
  * This assumes there is an emulator or FPGA between this and the sending program.
  */
 
-#include "ejfat_assemble_ersap2.hpp"
+#include <string.h>
+#include "ejfat_assemble_ersap_et.hpp"
 
 using namespace ersap::ejfat;
 
@@ -33,13 +34,12 @@ using namespace ersap::ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] ",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
-            "        [-b <internal buffer size in bytes]",
-            "        <output file name>");
+            "        [-et <ET file name>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver.\n");
 }
@@ -56,15 +56,16 @@ static void printHelp(char *programName) {
  * @param listenAddr  filled with IP address to listen on.
  */
 static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
-                      char *fileName, char *listenAddr) {
+                      char *etFileName, char *listenAddr) {
 
-    int c, i_tmp;
+    int c, i_tmp, err=0;
     bool help = false;
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
             {
-             {0,       0, 0,    0}
+                    {"et", 1, NULL, 1},
+                    {0,    0, 0,    0}
             };
 
 
@@ -74,6 +75,14 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
             break;
 
         switch (c) {
+
+            case '1':
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "ET file name is too long\n");
+                    exit(-1);
+                }
+                strcpy(etFileName, optarg);
+                break;
 
             case 'p':
                 // PORT
@@ -121,19 +130,11 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
 
     }
 
-    // Grab any default args not in option list
-    if (   !optarg
-          && optind < argc // make sure optind is valid
-          && nullptr != argv[optind] // make sure it's not a null string
-          && '\0'    != argv[optind][0] // ... or an empty string
-          && '-'     != argv[optind][0] // ... or another option
-            ) {
-
-        strcpy(fileName, argv[optind]);
-        fprintf(stderr, "Copy optional arg, file = %s\n", fileName);
+    if (strlen(etFileName) < 1) {
+        err = 1;
     }
 
-    if (help) {
+    if (help || err) {
         printHelp(argv[0]);
         exit(2);
     }
@@ -143,17 +144,15 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
 int main(int argc, char **argv) {
 
     int udpSocket;
-    ssize_t nBytes;
     // Set this to max expected data size
-    int bufSize = 100000;
     uint16_t port = 7777;
-    bool debug = false;
+    bool debug = true;
 
-    char fileName[INPUT_LENGTH_MAX], listeningAddr[16];
-    memset(fileName, 0, INPUT_LENGTH_MAX);
+    char etFileName[INPUT_LENGTH_MAX], listeningAddr[16];
+    memset(etFileName, 0, INPUT_LENGTH_MAX);
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &port, &debug, fileName, listeningAddr);
+    parseArgs(argc, argv, &port, &debug, etFileName, listeningAddr);
 
     // Create UDP socket
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -178,72 +177,28 @@ int main(int argc, char **argv) {
         if (debug) fprintf(stderr, "bind socket error\n");
     }
 
-    // use filename provided as 1st argument (stdout by default)
-    bool writingToFile = false;
+    // Connect to ET system, by default connect to local sys
 
-    FILE *fp = nullptr;
-    if (strlen(fileName) > 0) {
-        fp = fopen (fileName, "w");
-        writingToFile = true;
-    }
-    else {
-        fp = stdout;
-    }
+    et_sys_id etid;
+    et_fifo_id fid;
+    et_openconfig openconfig;
 
-    // validate file open for reading
-    if (!fp) {
-        fprintf(stderr, "file open failed: %s\n", strerror(errno));
-        return 1;
-    }
-
-    size_t totalRead = 0;
-    bool last, firstRead = true;
-    // Start with offset 0 in very first packet to be read
-    uint64_t tick = 0L;
-    uint32_t offset = 0;
-    char dataBuf[bufSize];
-    uint32_t bytesPerPacket;
-
-    /*
-     * Map to hold out-of-order packets.
-     * map key = sequence/offset from incoming packet
-     * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes),
-     * (is last packet), (is first packet).
-     */
-    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
-
-
-    while (true) {
-        nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                     debug, firstRead, &last, &tick, &offset,
-                                     &bytesPerPacket, outOfOrderPackets);
-        if (nBytes < 0) {
-            if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
-            break;
-        }
-        totalRead += nBytes;
-        firstRead = false;
-
-        //printBytes(dataBuf, nBytes, "buffer ---->");
-
-        // Write out what was received
-        writeBuffer(dataBuf, nBytes, fp, debug);
-
-
-        if (last) {
-            if (debug) fprintf(stderr, "Read last packet from incoming data, quit\n");
-            break;
-        }
-
-        if (debug) fprintf(stderr, "Read %ld bytes from incoming reassembled packet\n", nBytes);
-    }
-
-    if (debug) fprintf(stderr, "Read %ld incoming data bytes\n", totalRead);
-
-    if (writingToFile && (fclose(fp) == -1)) {
-        if (debug) fprintf(stderr, "fclose: %s\n", strerror(errno));
+    et_open_config_init(&openconfig);
+    if (et_open(&etid, etFileName, openconfig) != ET_OK) {
+        printf("et_open problems\n");
         exit(1);
     }
+
+    // Tell ET-based FIFO what source ids are expected
+    int idCount = 2;
+    int bufIds[idCount];
+    bufIds[0]=1, bufIds[1]=2;
+
+    // We're a producer of FIFO data
+    et_fifo_openProducer(etid, &fid, bufIds, idCount);
+
+    // Call routine that reads packets, puts data into fifo entry, places entry into ET in a loop
+    getBuffers(udpSocket, fid, debug);
 
     return 0;
 }
