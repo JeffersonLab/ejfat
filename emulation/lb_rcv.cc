@@ -36,7 +36,7 @@ const size_t relen        = 8+8;  // 8 for flags, data_id, 8 for tick
 const size_t mdlen        = relen;
 
 // set up some cachd buffers for out-of-sequence work
-char     pckt_cache[      max_data_ids][max_ooo_pkts][max_pckt_sz + relen];
+char     pckt_cache[      max_data_ids][max_ooo_pkts][max_pckt_sz];
 bool     pckt_cache_inuse[max_data_ids][max_ooo_pkts];
 uint16_t pckt_sz[         max_data_ids][max_ooo_pkts];
 bool     data_ids_inuse[  max_data_ids];
@@ -268,33 +268,35 @@ int main (int argc, char *argv[])
         lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
         if(lst) max_seq[data_id] = seq;
         if(seq == did_seq[data_id]) { //the seq # we were expecting
-            cerr << "writing seq " <<  seq << " size = " << int(nBytes-relen) << endl;
             if(passedT) { // store for single blob event
                 if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
-                memmove(pckt_cache[data_id][seq], in_buff, nBytes);
-                pckt_sz[data_id][seq] = nBytes;
+                memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
+                pckt_sz[data_id][seq] = nBytes-relen;
                 pckt_cache_inuse[data_id][seq] = true;
             } else {
+                cerr << "writing seq " <<  seq << " size = " << int(nBytes-relen) << endl;
                 rs[data_id].write((char*)&in_buff[relen], nBytes-relen);
                 rs[data_id].flush();
             }
             // while we can find cached packets
-            while(pckt_cache_inuse[data_id][++did_seq[data_id]] == true) { 
+            if(!passedT) while(pckt_cache_inuse[data_id][++did_seq[data_id]] == true) { 
                 cerr << "writing seq " <<  seq << " from slot " << did_seq[data_id] 
-                     << " size = " << pckt_sz[did_seq[data_id]]-relen << endl;
+                     << " size = " << pckt_sz[did_seq[data_id]] << endl;
                 if(passedT) {
+/***
                     uint8_t* pBufRe = (uint8_t* )pckt_cache[data_id][did_seq[data_id]];
                     // decode to host encoding
                     uint8_t  frst    = (pBufRe[1] & 0x02) >> 1;
                     uint8_t  lst     =  pBufRe[1] & 0x01;
+***/
                     //setup egress buffer for ERSAP
-                    memmove(&out_buff[sizeof(uint16_t)], &in_buff[relen], nBytes); //setup egress buffer for ERSAP
+                    memmove(&out_buff[sizeof(uint16_t)], &in_buff[relen], nBytes-relen); //setup egress buffer for ERSAP
                         // forward data to sink skipping past lb meta data
                         /* now send a datagram */
 	                ssize_t rtCd = 0;
                     if(passedU) {
                         if ((rtCd = sendto(dst_sckt, out_buff, 
-                                            pckt_sz[data_id][did_seq[data_id]]+sizeof(uint16_t), 0, 
+                                            pckt_sz[data_id][did_seq[data_id]], 0, 
                                             passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
                                             passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
                             perror("sendto failed");
@@ -316,8 +318,8 @@ int main (int argc, char *argv[])
             }
         } else { // out of expected order - save packet in associated slot
             if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
-            memmove(pckt_cache[data_id][seq], in_buff, nBytes);
-            pckt_sz[data_id][seq] = nBytes;
+            memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
+            pckt_sz[data_id][seq] = nBytes-relen;
             pckt_cache_inuse[data_id][seq] = true;
             cerr << "Received packet out of sequence: expected " <<  did_seq[data_id] << " recd " << seq << '\n';
             cerr << "store pckt " <<  seq << " in slot " << seq << endl;
@@ -325,13 +327,15 @@ int main (int argc, char *argv[])
 
         if(cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts) == max_seq[data_id] + 1)  { //build blob and transfer
             uint16_t evnt_sz = 0;
-            for(uint8_t i = 0; i < max_seq[data_id]; i++) {
+            for(uint8_t i = 0; i <= max_seq[data_id]; i++) {
                  //setup egress buffer for ERSAP
                 memmove(&out_buff[sizeof(uint16_t) + evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
                 evnt_sz += pckt_sz[data_id][i];
+fprintf( stderr, "reassembling seq# %d size = %d\n", i, pckt_sz[data_id][i]);
             }
             // put event size in reserved short sized slot at head of out_buf
-            *((uint16_t*) out_buff) = evnt_sz; 
+fprintf( stderr, "evnt6_sz = %d or on network =  %x\n", evnt_sz, htons(evnt_sz));
+            *((uint16_t*) out_buff) = (evnt_sz); 
             // forward data to sink skipping past lb meta data
             ssize_t rtCd = 0;
             if(passedU) {
