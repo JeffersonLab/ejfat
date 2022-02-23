@@ -1,5 +1,5 @@
 #include "ejfat_assemble_service.hpp"
-#include "ejfat_assemble.hpp"
+#include "ejfat_assemble_ersap.hpp"
 
 #include <ejfat_assemble_engine.hpp>
 
