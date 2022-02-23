@@ -1,7 +1,7 @@
-//       Reassembly Engine Emulation
+//       Reassembly Engine - Volkswagon  Quality
 //
 // reads binary from well known ip/port
-// writes reassembled binary data to stdout
+// writes reassembled binary data to TCP port
 
 #include <unistd.h>
 #include <stdio.h>
@@ -41,8 +41,7 @@ bool     pckt_cache_inuse[max_data_ids][max_ooo_pkts];
 uint16_t pckt_sz[         max_data_ids][max_ooo_pkts];
 bool     data_ids_inuse[  max_data_ids];
 bool     lst_pkt_rcd[     max_data_ids];
-uint8_t  max_seq[         max_data_ids];
-uint16_t did_seq[         max_data_ids];
+int8_t   max_seq[         max_data_ids];
 
 uint8_t  in_buff[relen + max_pckt_sz];
 uint8_t out_buff[max_ooo_pkts*max_pckt_sz];
@@ -59,7 +58,7 @@ void   Usage(void)
         -u send UDP (default TCP)  \n\
         -h help \n\n";
         cout<<usage_str;
-        cout<<"Required: -i -p\n";
+        cout<<"Required: -i -p -t -r\n";
 }
 
 uint16_t cnt_trues(bool b[], uint16_t n) // returns count of true values in array
@@ -223,11 +222,10 @@ int main (int argc, char *argv[])
     uint8_t* pBufRe = in_buff;
 
     // start all data_id streams at seq = 0
-    for(uint16_t i = 0; i < max_data_ids; i++) did_seq[i] = 0; 
     for(uint16_t i = 0; i < max_data_ids; i++) {
         data_ids_inuse[i] = false;
         lst_pkt_rcd[i] = false;
-        max_seq[i] = 0;
+        max_seq[i] = -1; // -1 indicates max seq no. not yet known
         for(uint16_t j = 0; j < max_ooo_pkts; j++)  {
             pckt_cache_inuse[i][j] = false;
             pckt_sz[i][j] = 0;
@@ -267,65 +265,16 @@ int main (int argc, char *argv[])
         data_ids_inuse[data_id] = true;
         lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
         if(lst) max_seq[data_id] = seq;
-        if(seq == did_seq[data_id]) { //the seq # we were expecting
-            if(passedT) { // store for single blob event
-                if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
-                memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
-                pckt_sz[data_id][seq] = nBytes-relen;
-                pckt_cache_inuse[data_id][seq] = true;
-            } else {
-                cerr << "writing seq " <<  seq << " size = " << int(nBytes-relen) << endl;
-                rs[data_id].write((char*)&in_buff[relen], nBytes-relen);
-                rs[data_id].flush();
-            }
-            // while we can find cached packets
-            if(!passedT) while(pckt_cache_inuse[data_id][++did_seq[data_id]] == true) { 
-                cerr << "writing seq " <<  seq << " from slot " << did_seq[data_id] 
-                     << " size = " << pckt_sz[did_seq[data_id]] << endl;
-                if(passedT) {
-/***
-                    uint8_t* pBufRe = (uint8_t* )pckt_cache[data_id][did_seq[data_id]];
-                    // decode to host encoding
-                    uint8_t  frst    = (pBufRe[1] & 0x02) >> 1;
-                    uint8_t  lst     =  pBufRe[1] & 0x01;
-***/
-                    //setup egress buffer for ERSAP
-                    memmove(&out_buff[sizeof(uint16_t)], &in_buff[relen], nBytes-relen); //setup egress buffer for ERSAP
-                        // forward data to sink skipping past lb meta data
-                        /* now send a datagram */
-	                ssize_t rtCd = 0;
-                    if(passedU) {
-                        if ((rtCd = sendto(dst_sckt, out_buff, 
-                                            pckt_sz[data_id][did_seq[data_id]], 0, 
-                                            passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
-                                            passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
-                            perror("sendto failed");
-                            exit(4);
-                        }
-                    } else {
-                        if ((rtCd = send(dst_sckt, out_buff, 
-                                            pckt_sz[data_id][did_seq[data_id]]+sizeof(uint16_t), 0)) < 0) {
-                            perror("send failed");
-                            exit(4);
-                        }
-                    }
-                } else {
-                    rs[data_id].write((char*)&pckt_cache[data_id][did_seq[data_id]][relen], 
-                                        pckt_sz[data_id][did_seq[data_id]]-relen);
-                    rs[data_id].flush();
-                }
-                pckt_cache_inuse[data_id][did_seq[data_id]] = false;
-            }
-        } else { // out of expected order - save packet in associated slot
-            if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
-            memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
-            pckt_sz[data_id][seq] = nBytes-relen;
-            pckt_cache_inuse[data_id][seq] = true;
-            cerr << "Received packet out of sequence: expected " <<  did_seq[data_id] << " recd " << seq << '\n';
-            cerr << "store pckt " <<  seq << " in slot " << seq << endl;
-        }
+        if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
+        memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
+        pckt_sz[data_id][seq] = nBytes-relen;
+        pckt_cache_inuse[data_id][seq] = true;
 
-        if(cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts) == max_seq[data_id] + 1)  { //build blob and transfer
+fprintf( stderr, "cnt_trues %d max_seq[%i] = %d\n", 
+cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
+
+        if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
+                                                    == max_seq[data_id] + 1)  { //build blob and transfer
             uint16_t evnt_sz = 0;
             for(uint8_t i = 0; i <= max_seq[data_id]; i++) {
                  //setup egress buffer for ERSAP
@@ -351,7 +300,18 @@ fprintf( stderr, "evnt6_sz = %d or on network =  %x\n", evnt_sz, htons(evnt_sz))
                     exit(4);
                 }
             }
+            // start all data_id streams at seq = 0
+            for(uint16_t i = 0; i < max_data_ids; i++) {
+                data_ids_inuse[i] = false;
+                lst_pkt_rcd[i] = false;
+                max_seq[i] = -1;
+                for(uint16_t j = 0; j < max_ooo_pkts; j++)  {
+                    pckt_cache_inuse[i][j] = false;
+                    pckt_sz[i][j] = 0;
+                }
+            }
+            num_data_ids = 0;  // number of data_ids encountered in this session
         }
-    } while(passedT?true:cnt_trues(data_ids_inuse, max_data_ids) != cnt_trues(lst_pkt_rcd, max_data_ids));
+    } while(1);
     return 0;
 }
