@@ -58,8 +58,8 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
                       char *etFileName, char *listenAddr) {
 
-    int c, i_tmp, err=0;
-    bool help = false;
+    int c, i_tmp;
+    bool help=false, err=false;
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
@@ -69,14 +69,14 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:a:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
 
         switch (c) {
 
-            case '1':
+            case 1:
                 if (strlen(optarg) >= INPUT_LENGTH_MAX) {
                     fprintf(stderr, "ET file name is too long\n");
                     exit(-1);
@@ -93,15 +93,6 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
                 else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
                     exit(-1);
-                }
-                break;
-
-            case 'b':
-                // BUFFER SIZE
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp < 10000) {
-                    *port = 10000;
-                    fprintf(stderr, "Set buffer to minimum size of 10000 bytes\n");
                 }
                 break;
 
@@ -124,6 +115,7 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
                 break;
 
             default:
+                fprintf(stderr, "default error, switch = %c\n", c);
                 printHelp(argv[0]);
                 exit(2);
         }
@@ -131,7 +123,7 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
     }
 
     if (strlen(etFileName) < 1) {
-        err = 1;
+        err = true;
     }
 
     if (help || err) {
@@ -190,12 +182,27 @@ int main(int argc, char **argv) {
     }
 
     // Tell ET-based FIFO what source ids are expected
-    int idCount = 2;
-    int bufIds[idCount];
-    bufIds[0]=1, bufIds[1]=2;
+    //    int idCount = 3;
+    //    int bufIds[idCount];
+    //    bufIds[0]=1;
+    //    bufIds[1]=2;
+    //    bufIds[2]=77;
+
+        int idCount = 2;
+        int bufIds[idCount];
+        bufIds[0]=1;
+        bufIds[1]=2;
+
+//    int idCount = 1;
+//    int bufIds[idCount];
+//    bufIds[0]=1;
 
     // We're a producer of FIFO data
-    et_fifo_openProducer(etid, &fid, bufIds, idCount);
+    err = et_fifo_openProducer(etid, &fid, bufIds, idCount);
+    if (err != ET_OK) {
+        et_perror(err);
+        exit(1);
+    }
 
     // Call routine that reads packets, puts data into fifo entry, places entry into ET in a loop
     getBuffers(udpSocket, fid, debug);

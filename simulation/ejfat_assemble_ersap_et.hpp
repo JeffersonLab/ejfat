@@ -22,8 +22,8 @@
  * presents the ET system as a FIFO. By using the ET system, the reading of packets in this
  * frontend is decoupled from users on the backend that process the data.0
  */
-#ifndef EJFAT_ASSEMBLE_ERSAP2_H
-#define EJFAT_ASSEMBLE_ERSAP2_H
+#ifndef EJFAT_ASSEMBLE_ERSAP_ET_H
+#define EJFAT_ASSEMBLE_ERSAP_ET_H
 
 
 #include <set>
@@ -70,8 +70,12 @@ namespace ersap {
         {
             int idCount = bufIds.size();
 
+            fprintf(stderr, "\nallLastBitsReceived: id count = %d, endCondition size = %lu\n",
+                               idCount, endCondition.size());
+
             // There must be one end condition for each id
             if (endCondition.size() != idCount) {
+                fprintf(stderr, "  too few sources reporting an end\n");
                 return false;
             }
 
@@ -106,6 +110,8 @@ namespace ersap {
                 }
             }
 
+            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %llu\n",
+                    idCount, endCondition.size(), tick);
             return true;
         }
 
@@ -149,7 +155,7 @@ namespace ersap {
 
             // Initial size to make internal buffers
             size_t   bufSizeMax = et_fifo_getBufSize(fid);
-            size_t   remainingLen, totalBytesWritten;
+            size_t   remainingLen = bufSizeMax, totalBytesWritten = 0;
 
             int  version, nBytes;
             uint16_t dataId;
@@ -216,6 +222,7 @@ namespace ersap {
             // WE NEED TO KNOW FROM WHOM WE'RE EXPECTING DATA!
             //-----------------------------------------------
             int idCount = et_fifo_getIdCount(fid);
+            if (debug) fprintf(stderr, "found data sources count = %d\n", idCount);
             if (idCount < 1) {
                 if (debug) fprintf(stderr, "data sources were NOT specified when calling et_fifo_openProducer()!\n");
                 return(-1);
@@ -223,7 +230,7 @@ namespace ersap {
 
             int bufIds[idCount];
             int err = et_fifo_getBufIds(fid, bufIds);
-            if (err != ET_OK < 1) {
+            if (err != ET_OK) {
                 if (debug) fprintf(stderr, "data sources were NOT specified when calling et_fifo_openProducer()!\n");
                 return(-1);
             }
@@ -241,7 +248,7 @@ namespace ersap {
                 // Set true when all buffers of a tick have received the lastPacket
                 tickCompleted = false;
 
-                //           if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
+                if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
 
                 while (true) {
 
@@ -258,6 +265,10 @@ namespace ersap {
                     readDataFrom = packetBuffer + HEADER_BYTES;
 
                     parseReHeader(packetBuffer, &version, &packetFirst, &packetLast, &dataId, &sequence, &tick);
+                    if (debug) {
+                        fprintf(stderr, "\n\nPkt hdr: ver = %d, first = %s, last = %s, dataId = %hu, seq = %u, tick = %llu, nBytes = %d\n",
+                                version, btoa(packetFirst), btoa(packetLast), dataId, sequence, tick, nBytes);
+                    }
 
                     // Create the key to both the map of buffers and map of next-expected-sequence
                     key = {tick, dataId};
@@ -267,6 +278,7 @@ namespace ersap {
 
                     // If fifo entry for this tick already exists ...
                     if (it != buffers.end()) {
+if (debug) fprintf(stderr, "fifo entry already exists, look for id = %hu\n", dataId);
                         entry = it->second;
                         // Find the buffer associated with dataId or the first unused
                         event = et_fifo_getBuf(dataId, entry);
@@ -274,6 +286,7 @@ namespace ersap {
                             // Major error
                             throw std::runtime_error("too many source ids for data to be held in fifo entry");
                         }
+ if (debug) fprintf(stderr, "  ev len = %llu, id = %d, hasData = %d\n", event->length, event->control[0], event->control[1]);
 
                         // Find the next expected sequence
                         expectedSequence = expSequence[{tick, dataId}];
@@ -294,6 +307,7 @@ namespace ersap {
                         firstReadForBuf = false;
                     }
                     else {
+if (debug) fprintf(stderr, "fifo entry must be created\n");
                         entry = et_fifo_entryCreate(fid);
                         if (entry == nullptr) {
                             throw std::runtime_error("no memory");
@@ -310,6 +324,10 @@ namespace ersap {
 
                         // Get data array, assume room for 1 packet
                         event = et_fifo_getBuf(dataId, entry);
+                        if (event == NULL) {
+                            throw std::runtime_error("cannot find buf w/ id = " + std::to_string(dataId));
+                        }
+
                         buffer = reinterpret_cast<char *>(event->pdata);
 
                         // First expected sequence is 0
@@ -363,7 +381,8 @@ namespace ersap {
                         memcpy(ptr->data(), packetBuffer + HEADER_BYTES, nBytes);
                         ptr->resize(nBytes);
 
-                        if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s\n", sequence, btoa(packetLast));
+                        if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s, storage has %lu\n",
+                                           sequence, btoa(packetLast), outOfOrderPackets.size());
 
                         // Put it into map. The key of sequence & tick & dataId is unique for each packet
                         outOfOrderPackets.emplace(std::tuple<uint32_t, uint16_t, uint64_t>
@@ -416,7 +435,8 @@ namespace ersap {
                         // Since we have room and don't have all the last packets,
                         // check out-of-order packets for this tick and dataId
                         if (!outOfOrderPackets.empty()) {
-                            if (debug) fprintf(stderr, "We have stored packets\n");
+                            if (debug) fprintf(stderr, "We have stored packets, look for exp seq = %u, id = %hu, tick = %llu\n",
+                                               expectedSequence, dataId, tick);
 
                             // Create key (unique for every packet)
                             std::tuple<uint32_t, uint16_t, uint64_t> kee {expectedSequence, dataId, tick};
@@ -476,4 +496,4 @@ namespace ersap {
 
 
 
-#endif // EJFAT_ASSEMBLE_ERSAP2_H
+#endif // EJFAT_ASSEMBLE_ERSAP_ET_H

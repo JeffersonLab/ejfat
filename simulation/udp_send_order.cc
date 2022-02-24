@@ -31,7 +31,7 @@ using namespace ersap::ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] ",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -42,16 +42,19 @@ static void printHelp(char *programName) {
             "        [-ver <version>]",
             "        [-id <data id>]",
             "        [-pro <protocol>]",
+            "        [-c <# of times to read thru file or out-of-order (test) data w/ increasing tick>]",
             "        [-d <delay in millisec between packets>]",
             "        [<input file name (or \"test\")>]");
 
-    fprintf(stderr, "        This is an EJFAT UDP packet sender.\n");
+    fprintf(stderr, "        This is an EJFAT UDP packet sender. For out of order data, use \"test\" input file\n");
 }
 
 
 
-static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *version, uint16_t *id, uint16_t* port,
-                      uint64_t* tick, uint32_t* delay, bool *debug, char *fileName, char* host, char *interface) {
+static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
+                      int *version, uint16_t *id, uint16_t* port,
+                      uint64_t* tick, uint32_t* delay, uint32_t *cycleCount,
+                      bool *debug, char *fileName, char* host, char *interface) {
 
     *mtu = 0;
     int c, i_tmp;
@@ -69,7 +72,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *versi
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:c:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -108,6 +111,18 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *versi
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -d, packet delay > 0\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'c':
+                // CYCLE COUNT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *cycleCount = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -c, cycle count > 0\n");
                     exit(-1);
                 }
                 break;
@@ -216,8 +231,9 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol, int *versi
 int main(int argc, char **argv) {
 
     uint32_t offset = 0, delay = 0;
+    uint32_t cycleCount=1;  // # of times to cycle through sending same data but with advancing tick
     uint16_t port = 0x4c42; // FPGA port is default
-    uint64_t tick = 0xc0da;
+    uint64_t tick = 1;
     int mtu, version = 1, protocol = 1;
     uint16_t dataId = 1;
     bool debug = false;
@@ -232,7 +248,8 @@ int main(int argc, char **argv) {
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
 
-    parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick, &delay, &debug, fileName, host, interface);
+    parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick,
+              &delay, &cycleCount, &debug, fileName, host, interface);
 
 
     // Break data into multiple packets of max MTU size.
@@ -272,27 +289,30 @@ int main(int argc, char **argv) {
     int bufsize = (100000 / maxUdpPayload + 1) * maxUdpPayload;
 
     // For sending out-of-order
-    uint32_t *order;
     int packetCounter = 0;
-    const int testPacketCount = 15;
+    const int testPacketCount = 20;
+    const int lastSeq = 9;
+    //uint32_t seq[testPacketCount] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+//    uint32_t   seq[testPacketCount] {1, 2, 3, 0, 4, 5, 6, 8, 9, 7,      0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+//    uint64_t ticks[testPacketCount] {1, 1, 1, 1, 1, 1, 1, 1, 1, 1,      2, 2, 2, 2, 2, 2, 2, 2, 2, 2};
+      uint32_t seq[testPacketCount] {1, 2, 3, 0, 4, 5, 6, 0, 9, 8,     7, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    uint64_t ticks[testPacketCount] {1, 1, 1, 1, 1, 1, 1, 2, 1, 1,     1, 2, 2, 2, 2, 2, 2, 2, 2, 2};
+
 
 
     // Read from either file or stdin, or create test data
     FILE *fp = nullptr;
     if (strlen(fileName) > 0) {
-        fprintf(stderr, "File name = %s\n", fileName);
 
         if (strncmp(fileName, "test", 4) == 0) {
+            fprintf(stderr, "Testing OUT OF ORDER (test)\n");
             // Use test data generated right here
             testOutOfOrder = true;
             maxUdpPayload = 100;
             bufsize = mtu = maxUdpPayload + 60 + 8 + HEADER_BYTES;
-            uint32_t myOrder[testPacketCount] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
-            //uint32_t myOrder[testPacketCount] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
-            //uint32_t myOrder[testPacketCount] {1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 14};
-            order = myOrder;
         }
         else {
+            fprintf(stderr, "File name = %s\n", fileName);
             // Open and read file
             fp = fopen( fileName, "r");
             if (fp == nullptr) {
@@ -350,8 +370,10 @@ int main(int argc, char **argv) {
         else if (testOutOfOrder) {
             // Sending test data created here
 
-            offset = order[packetCounter];
-            lastBuffer = false;
+            offset = seq[packetCounter];
+            tick = ticks[packetCounter];
+
+            lastBuffer  = false;
             firstBuffer = false;
 
             // At the end of data
@@ -360,7 +382,7 @@ int main(int argc, char **argv) {
             }
 
             // Last packet (when properly ordered) to send
-            if (offset == (testPacketCount - 1)) {
+            if (offset == lastSeq) {
                 lastBuffer = true;
             }
 
@@ -384,6 +406,7 @@ int main(int argc, char **argv) {
             }
         }
 
+        fprintf(stderr, "Sending offset = %u, tick = %llu\n", offset, tick);
         int err = sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
                                        tick, protocol, version, dataId, &offset, delay,
                                        firstBuffer, lastBuffer, debug);
@@ -397,12 +420,31 @@ int main(int argc, char **argv) {
         firstBuffer = false;
         if (testOutOfOrder) {
             if (packetCounter == testPacketCount) {
+                if (--cycleCount > 0) {
+                    fprintf(stderr, "CYCLING AROUND AGAIN for ou-of-order");
+                    offset = 0;
+                    totalBytes = 0;
+                    packetCounter = 0;
+                    tick++;
+                    continue;
+                }
                 fprintf(stderr, "\n ******* last buffer sent, END reading\n\n");
                 break;
             }
         }
         else {
             if (lastBuffer) {
+                // If we're reading a file and sending it multiple times with increasing tick ...
+                if (readingFromFile && (--cycleCount > 0)) {
+                    fprintf(stderr, "CYCLING AROUND AGAINn");
+                    firstBuffer = true;
+                    lastBuffer  = false;
+                    offset = 0;
+                    totalBytes = 0;
+                    tick++;
+                    rewind(fp);
+                    continue;
+                }
                 fprintf(stderr, "\n ******* last buffer send, END reading\n\n");
                 break;
             }

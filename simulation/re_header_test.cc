@@ -276,7 +276,7 @@ static void parseReHeaderBitField(char* buffer, int* version,
 
 
 
-int main(int argc, char **argv) {
+int main1(int argc, char **argv) {
 
     uint32_t offset = 4;
     uint64_t tick = 0xc0da;
@@ -298,6 +298,32 @@ int main(int argc, char **argv) {
 //           dataId, version, btoa(first), btoa(last), offset);
 
     parseReHeader(buffer, &version, &first, &last, &dataId, &offset);
+    printf("From parseReHeader:  dataId = %hu, version = %d, first = %s, last = %s, seq = %u\n",
+           dataId, version, btoa(first), btoa(last), offset);
+
+
+    return 0;
+}
+
+int main(int argc, char **argv) {
+
+    uint32_t offset = 4;
+    uint64_t tick = 1;
+    int version = 2;
+    uint16_t dataId = 3;
+    bool first = true;
+    bool last  = true;
+
+    char buffer[RE_HEADER_BYTES];
+
+
+
+    printBytes(buffer, RE_HEADER_BYTES, "Written (network order) bytes");
+
+    //    parseReHeaderBitField(buffer, &version, &first, &last, &dataId, &offset);
+    //    printf("From parseReHeaderBitField:  dataId = %hu, version = %d, first = %s, last = %s, seq = %u\n",
+    //           dataId, version, btoa(first), btoa(last), offset);
+
     printf("From parseReHeader:  dataId = %hu, version = %d, first = %s, last = %s, seq = %u\n",
            dataId, version, btoa(first), btoa(last), offset);
 
