@@ -1,4 +1,8 @@
-
+# Note to user:
+# 99.999% of folks are only interested in ET_LIBRARY.
+# The only users who would find ET_REMOTE_LIBRARY useful are those
+# who are running on an operating system that can only use sockets
+# (not memory mapped file), for example vxWorks.
 
 set(PKG_CONFIG_USE_CMAKE_PREFIX_PATH ON)
 find_package(PkgConfig)
@@ -21,7 +25,7 @@ if(ET_LIBRARY)
     set(ET_FOUND ON)
 endif()
 
-set ( ET_LIBRARIES  ${ET_REMOTE_LIBRARY}  ${ET_LIBRARY} )
+set ( ET_LIBRARIES  ${ET_LIBRARY} )
 set ( ET_INCLUDE_DIRS  ${ET_INCLUDE_DIR} )
 
 if(NOT TARGET libet)
