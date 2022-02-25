@@ -34,6 +34,7 @@ void   Usage(void)
         -t tick  \n\
         -d data_id  \n\
         -n num_data_ids starting from initial  \n\
+        -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i\n";
@@ -45,7 +46,7 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI=false, passedP=false, passed6=false;
+    bool passedI=false, passedP=false, passed6=false, passedV=false;
 
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
@@ -59,7 +60,7 @@ int main (int argc, char *argv[])
     uint8_t lst           = 0;
     uint32_t seq          = 0;
 
-    while ((optc = getopt(argc, argv, "i:p:t:d:n:6")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:d:n:6v")) != -1)
     {
         switch (optc)
         {
@@ -86,8 +87,11 @@ int main (int argc, char *argv[])
         case 'n':
             num_data_ids = (uint16_t) atoi((const char *) optarg) ;
             break;
+        case 'v':
+            passedV = true;
+            break;
         case '?':
-            cerr<<"Unrecognised option: -"<<optopt<<'\n';
+            cerr <<"Unrecognised option: -"<<optopt<<'\n';
             Usage();
             exit(1);
         }
@@ -162,7 +166,7 @@ int main (int argc, char *argv[])
     do {
         f1.read((char*)&buffer[mdlen], max_pckt_sz);
         streamsize nr = f1.gcount();
-        cerr << "Num read from stdin: " << nr << endl;
+        if(passedV) cerr  << "Num read from stdin: " << nr << endl;
         if(nr != max_pckt_sz) {
             lst  = 1;
             pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
@@ -173,33 +177,35 @@ int main (int argc, char *argv[])
 
             *pDid = htons(data_id + didcnt);
 
-            fprintf( stderr, "LB Meta-data on the wire:");
-            for(uint8_t b = 0; b < lblen; b++) fprintf( stderr, " [%d] = %x ", b, pBufLb[b]);
-            fprintf( stderr, "\nfor tick = %" PRIu64 " ", *pTick);
-            fprintf( stderr, "tick = %" PRIx64 " ", *pTick);
-            fprintf( stderr, "for tick = %" PRIu64 "\n", tick);
-            fprintf( stderr, "RE Meta-data on the wire:");
-            for(uint8_t b = 0; b < relen; b++) fprintf( stderr, " [%d] = %x ", b, pBufRe[b]);
-            fprintf( stderr, "\nfor frst = %d / lst = %d ", frst, lst); 
-            fprintf( stderr, " / data_id = %d / seq = %d ", data_id + didcnt, seq);	
-            fprintf( stderr, "tick = %" PRIu64 "\n", tick);
+            if(passedV) {
+                fprintf ( stderr, "LB Meta-data on the wire:");
+                for(uint8_t b = 0; b < lblen; b++) fprintf ( stderr, " [%d] = %x ", b, pBufLb[b]);
+                fprintf ( stderr, "\nfor tick = %" PRIu64 " ", *pTick);
+                fprintf ( stderr, "tick = %" PRIx64 " ", *pTick);
+                fprintf ( stderr, "for tick = %" PRIu64 "\n", tick);
+                fprintf ( stderr, "RE Meta-data on the wire:");
+                for(uint8_t b = 0; b < relen; b++) fprintf ( stderr, " [%d] = %x ", b, pBufRe[b]);
+                fprintf ( stderr, "\nfor frst = %d / lst = %d ", frst, lst); 
+                fprintf ( stderr, " / data_id = %d / seq = %d ", data_id + didcnt, seq);	
+                fprintf ( stderr, "tick = %" PRIu64 "\n", tick);
+            }
 
             ssize_t rtCd = 0;
             /* now send a datagram */
-if (passed6) {
-            if ((rtCd = sendto(dst_sckt, buffer, mdlen + nr, 0, 
-                        (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-                perror("sendto failed");
-                exit(4);
+            if (passed6) {
+                if ((rtCd = sendto(dst_sckt, buffer, mdlen + nr, 0, 
+                            (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
+                    perror("sendto failed");
+                    exit(4);
+                }
+            } else {
+                if ((rtCd = sendto(dst_sckt, buffer, mdlen + nr, 0, 
+                            (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
+                    perror("sendto failed");
+                    exit(4);
+                }
             }
-} else {
-            if ((rtCd = sendto(dst_sckt, buffer, mdlen + nr, 0, 
-                        (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-                perror("sendto failed");
-                exit(4);
-            }
-}
-            fprintf( stderr, "Sending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+            if(passedV) fprintf ( stderr, "Sending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
 
         }
         frst = 0;

@@ -28,6 +28,7 @@ Usage:
         -t tick  
         -d data_id  
         -n num_data_ids starting from initial  
+        -v verbose mode (default is quiet)  \n\
         -h help 
 
 Required: -i
@@ -53,6 +54,7 @@ Usage:
         -p listen port (number)  
         -t send address (string)  
         -r send port (number)  
+        -v verbose mode (default is quiet)  \n\
         -h help 
 
 Required: -i -p -t -r
@@ -86,6 +88,7 @@ Usage:
         -t send address (string)  
         -r send port (number)  
         -u send UDP (default TCP)  
+        -v verbose mode (default is quiet)  \n\
         -h help 
 
 Required: -i -p

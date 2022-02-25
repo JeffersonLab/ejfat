@@ -47,12 +47,13 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI=false, passedP=false, passedT=false, passedR=false, passed6=false;
+    bool passedI=false, passedP=false, passedT=false, passedR=false, 
+        passed6=false, passedV=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
     uint16_t lstn_prt = 0x4c42, dst_prt;                          // listening, target ports
 
-    while ((optc = getopt(argc, argv, "i:p:t:r:6")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:r:6v")) != -1)
     {
         switch (optc)
         {
@@ -77,6 +78,9 @@ int main (int argc, char *argv[])
         case 'r':
             dst_prt = (uint16_t) atoi((const char *) optarg) ;
             passedR = true;
+            break;
+        case 'v':
+            passedV = true;
             break;
         case '?':
             fprintf(stderr, "Unrecognised option: %d\n", optopt);
@@ -207,30 +211,32 @@ if (passed6) {
                        sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV) ) {
             perror("getnameinfo ");
         }
-        fprintf( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
-        fprintf( stderr, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
-        fprintf( stderr, "tick = %" PRIu64 " ", tick);
-        fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
-        fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
-        fprintf( stderr, "tick = %" PRIx64 " ", retick);
+        if(passedV) {
+            fprintf( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
+            fprintf( stderr, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
+            fprintf( stderr, "tick = %" PRIu64 " ", tick);
+            fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
+            fprintf( stderr, " / data_id = %d / seq = %d\n", data_id, seq);	
+            fprintf( stderr, "tick = %" PRIx64 " ", retick);
+        }
         
         // forward data to sink skipping past lb meta data
         /* now send a datagram */
 	    ssize_t rtCd = 0;
         if (passed6) {
-                if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+            if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
                             (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-                    perror("sendto failed");
-                    exit(4);
-                }
+                perror("sendto failed");
+                exit(4);
+            }
         } else {
-                if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+            if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
                             (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-                    perror("sendto failed");
-                    exit(4);
-                }
+                perror("sendto failed");
+                exit(4);
+            }
         }
-        fprintf( stderr, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+        if(passedV) fprintf( stderr, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
 
 /*** why is this not working ?
         if (getnameinfo((struct sockaddr*) &dst_addr6, sizeof(dst_addr6), gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,

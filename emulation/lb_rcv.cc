@@ -56,6 +56,7 @@ void   Usage(void)
         -t send address (string)  \n\
         -r send port (number)  \n\
         -u send UDP (default TCP)  \n\
+        -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i -p -t -r\n";
@@ -74,12 +75,13 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI=false, passedP=false, passedT=false, passedR=false, passed6=false, passedU=false;
+    bool passedI=false, passedP=false, passedT=false, passedR=false, passed6=false,
+	passedU=false, passedV=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
     uint16_t lstn_prt, dst_prt;                          // listening, target ports
 
-    while ((optc = getopt(argc, argv, "i:p:t:r:6u")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:r:6uv")) != -1)
     {
         switch (optc)
         {
@@ -108,8 +110,11 @@ int main (int argc, char *argv[])
         case 'u':
             passedU = true;
             break;
+        case 'v':
+            passedV = true;
+            break;
         case '?':
-            fprintf(stderr, "Unrecognised option: %d\n", optopt);
+            fprintf (stderr, "Unrecognised option: %d\n", optopt);
             Usage();
             exit(1);
         }
@@ -256,22 +261,22 @@ int main (int argc, char *argv[])
                        sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV)) {
             perror("getnameinfo ");
         }
-        fprintf( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
-        fprintf( stderr, "frst = %d / lst = %d ", frst, lst); 
-        fprintf( stderr, " / data_id = %d / seq = %d ", data_id, seq);	
-        fprintf( stderr, "tick = %" PRIu64 "\n", retick);
+        if(passedV) fprintf ( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
+        if(passedV) fprintf ( stderr, "frst = %d / lst = %d ", frst, lst); 
+        if(passedV) fprintf ( stderr, " / data_id = %d / seq = %d ", data_id, seq);	
+        if(passedV) fprintf ( stderr, "tick = %" PRIu64 "\n", retick);
 
-        if(data_id >= max_data_ids) { cerr << "packet data_id exceeds bounds"; exit(1); }
+        if(data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds"; exit(1); }
         data_ids_inuse[data_id] = true;
         lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
         if(lst) max_seq[data_id] = seq;
-        if(seq >= max_ooo_pkts) { cerr << "out of order packet seq exceeds bounds"; exit(1); }	
+        if(seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded"; exit(1); }	
         memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
         pckt_sz[data_id][seq] = nBytes-relen;
         pckt_cache_inuse[data_id][seq] = true;
 
-fprintf( stderr, "cnt_trues %d max_seq[%i] = %d\n", 
-cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
+        if(passedV) fprintf ( stderr, "cnt_trues %d max_seq[%i] = %d\n", 
+	        cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
 
         if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
                                                     == max_seq[data_id] + 1)  { //build blob and transfer
@@ -280,10 +285,10 @@ cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
                  //setup egress buffer for ERSAP
                 memmove(&out_buff[sizeof(uint16_t) + evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
                 evnt_sz += pckt_sz[data_id][i];
-fprintf( stderr, "reassembling seq# %d size = %d\n", i, pckt_sz[data_id][i]);
+                if(passedV) fprintf ( stderr, "reassembling seq# %d size = %d\n", i, pckt_sz[data_id][i]);
             }
             // put event size in reserved short sized slot at head of out_buf
-fprintf( stderr, "evnt6_sz = %d or on network =  %x\n", evnt_sz, htons(evnt_sz));
+            if(passedV) fprintf ( stderr, "evnt6_sz = %d or on network =  %x\n", evnt_sz, htons(evnt_sz));
             *((uint16_t*) out_buff) = (evnt_sz); 
             // forward data to sink skipping past lb meta data
             ssize_t rtCd = 0;
