@@ -8,16 +8,18 @@ Data Source:
 
 tx=$(mktemp); cat <file> | pktzr_md -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
 
-the <num_data_ids> parm will determine how many replicates of the source data will be sent starting with the value of the parm <data_id>
+the <num_data_ids> parm will determine how many replicates of the source data will be sent with incremental data_ids starting with the value of the parm -d <data_id>
 
 
 e.g.,
 
 tx=$(mktemp); cat <file> | pktzr_md -i 129.57.29.231  2> $tx
 
+where 'cat <file>' represents anything that wil give pktzr_md something to read from stdin.
+
 the session log is in $tx
 
-NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
+NOTE: defaults to IPV4; to use IPV6 include a -6 flag in the invocation
 
 Usage: 
         -6 Use IPV6 
@@ -56,27 +58,9 @@ Usage:
 Required: -i -p -t -r
 
 
-An alternate LB emulation can be accomplished using the netcat command as follows:
-
-nc -U –4 -u -l <LB host ip> <lb-port>  | nc -p <arb_port> –U –4 -u <destination-ip> <destination-port>
-
-e.g.,
-
-nc -U –4 -u -l <LB host ip> <lb-port>  | nc –U –4 -u <destination-ip> <destination-port>
-
-
-Note that this does not remove the LB meta-data from the stream; attempting to do that with 
-
-nc -U –4 -u -l 129.57.87.13 19522 | tail -c +13 | nc –U –4 -u 129.57.87.14 7777
-
-fails. See netcat solution for Data Source above.
-
-
-
 -------------
 Data Sink:
 -------------
-(bash)
 
 tx=$(mktemp); lb_rcv -i "<Listen ip>" -p <Listen port>  >  <file> 2> $tx
 
@@ -107,21 +91,13 @@ Usage:
 Required: -i -p
 
 
-An alternate Data Source can be accomplished using the netcat command as follows:
-
-nc -u -w 1 -l <sink-ip> <sink-port> >  <file-with-first-12-bytes-stripped> 
-
-e.g.,
-
-nc -u -w 1 -l 129.57.87.14 7777 >  <file-with-first-12-bytes-stripped> 
-
-
 Capabilities / Limitations (Bugs) / Next Steps:
 - supports both IPV4 and IPV6
 - pktzr_md repicates input data across as many (sequential) data_ids as specified 
 - lb_emu currently routes traffic to a single destination
-- lb_rcv suports up to 100 concurrent data_ids each with as many as 10 out-of-order packets pending output.
-- lb_rcv suports sending to single network ip/port for multiple events
+- lb_rcv only supports contiguous events (ticks) at this time.
+- lb_rcv suports up to 100 concurrent data_ids each with as many as 100 out-of-order packets pending output.
+- lb_rcv suports sending to single TCP ip/port
 - 'netcat' (often soft-linked to 'nc') is not available on all systems, e.g., ifarm
 - send_file_lb and lb_send are deprecated and will be removed.
 
