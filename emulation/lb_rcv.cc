@@ -29,9 +29,9 @@ using namespace std;
 #include <ctype.h>
 #endif
 
-const size_t max_pckt_sz  = 1024;
+const size_t max_pckt_sz  = 9000;
 const size_t max_data_ids = 10;   // support up to 10 data_ids
-const size_t max_ooo_pkts = 100;  // support up to 100 out of order packets
+const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
 const size_t relen        = 8+8;  // 8 for flags, data_id, 8 for tick
 const size_t mdlen        = relen;
 
@@ -43,7 +43,7 @@ bool     data_ids_inuse[  max_data_ids];
 bool     lst_pkt_rcd[     max_data_ids];
 int8_t   max_seq[         max_data_ids];
 
-uint8_t  in_buff[relen + max_pckt_sz];
+uint8_t  in_buff[max_pckt_sz];
 uint8_t out_buff[max_ooo_pkts*max_pckt_sz];
 
 void   Usage(void)
@@ -83,6 +83,7 @@ int main (int argc, char *argv[])
 
     while ((optc = getopt(argc, argv, "i:p:t:r:6uv")) != -1)
     {
+        fprintf(stdout, "-%s ", optarg);
         switch (optc)
         {
         case 'h':
@@ -90,36 +91,44 @@ int main (int argc, char *argv[])
             exit(1);
         case '6':
             passed6 = true;
+            fprintf(stdout, "-6 ");
             break;
         case 'i':
             strcpy(lstn_ip, (const char *) optarg) ;
             passedI = true;
+            fprintf(stdout, "-i ");
             break;
         case 'p':
             lstn_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
+            fprintf(stdout, "-p ");
             break;
          case 't':
             strcpy(dst_ip, (const char *) optarg) ;
             passedT = true;
+            fprintf(stdout, "-t ");
             break;
         case 'r':
             dst_prt = (uint16_t) atoi((const char *) optarg) ;
             passedR = true;
+            fprintf(stdout, "-r ");
             break;
         case 'u':
             passedU = true;
+            fprintf(stdout, "-u ");
             break;
         case 'v':
             passedV = true;
+            fprintf(stdout, "-v ");
             break;
         case '?':
-            fprintf (stderr, "Unrecognised option: %d\n", optopt);
+            fprintf (stdout, "Unrecognised option: %d\n", optopt);
             Usage();
             exit(1);
         }
+        fprintf(stdout, "%s ", optarg);
     }
-
+    fprintf(stdout, "\n");
     if(!(passedI &&  passedP)) { Usage(); exit(1); }
     if(  passedT && !passedR)  { Usage(); exit(1); }
 
@@ -261,21 +270,21 @@ int main (int argc, char *argv[])
                        sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV)) {
             perror("getnameinfo ");
         }
-        if(passedV) fprintf ( stderr, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
-        if(passedV) fprintf ( stderr, "frst = %d / lst = %d ", frst, lst); 
-        if(passedV) fprintf ( stderr, " / data_id = %d / seq = %d ", data_id, seq);	
-        if(passedV) fprintf ( stderr, "tick = %" PRIu64 "\n", retick);
+        if(passedV) fprintf ( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
+        if(passedV) fprintf ( stdout, "frst = %d / lst = %d ", frst, lst); 
+        if(passedV) fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);	
+        if(passedV) fprintf ( stdout, "tick = %" PRIu64 "\n", retick);
 
-        if(data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds"; exit(1); }
+        if(data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
         data_ids_inuse[data_id] = true;
         lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
         if(lst) max_seq[data_id] = seq;
-        if(seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded"; exit(1); }	
+        if(seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded\n"; exit(1); }	
         memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
         pckt_sz[data_id][seq] = nBytes-relen;
         pckt_cache_inuse[data_id][seq] = true;
 
-        if(passedV) fprintf ( stderr, "cnt_trues %d max_seq[%i] = %d\n", 
+        if(passedV) fprintf ( stdout, "cnt_trues %d max_seq[%i] = %d\n", 
 	        cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
 
         if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
@@ -285,10 +294,10 @@ int main (int argc, char *argv[])
                  //setup egress buffer for ERSAP
                 memmove(&out_buff[sizeof(uint16_t) + evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
                 evnt_sz += pckt_sz[data_id][i];
-                if(passedV) fprintf ( stderr, "reassembling seq# %d size = %d\n", i, pckt_sz[data_id][i]);
+                if(passedV) fprintf ( stdout, "reassembling seq# %d size = %d\n", i, pckt_sz[data_id][i]);
             }
             // put event size in reserved short sized slot at head of out_buf
-            if(passedV) fprintf ( stderr, "evnt6_sz = %d or on network =  %x\n", evnt_sz, htons(evnt_sz));
+            if(passedV) fprintf ( stdout, "evnt6_sz = %d or on network =  %x\n", evnt_sz, htons(evnt_sz));
             *((uint16_t*) out_buff) = (evnt_sz); 
             // forward data to sink skipping past lb meta data
             ssize_t rtCd = 0;

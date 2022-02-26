@@ -19,7 +19,7 @@ using namespace std;
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 
-const size_t max_pckt_sz = 1024;
+const size_t max_pckt_sz = 9000;
 const size_t lblen       = 12;
 const size_t relen       = 8+8;
 const size_t mdlen       = lblen + relen;
@@ -69,34 +69,42 @@ int main (int argc, char *argv[])
             exit(1);
         case '6':
             passed6 = true;
+            fprintf(stdout, "-6 ");
             break;
         case 'i':
             strcpy(dst_ip, (const char *) optarg) ;
             passedI = true;
+            fprintf(stdout, "-i ");
             break;
         case 'p':
             dst_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
+            fprintf(stdout, "-p ");
             break;
         case 't':
             tick = (uint64_t) atoi((const char *) optarg) ;
+            fprintf(stdout, "-t ");
             break;
         case 'd':
             data_id = (uint16_t) atoi((const char *) optarg) ;
+            fprintf(stdout, "-d ");
             break;
         case 'n':
             num_data_ids = (uint16_t) atoi((const char *) optarg) ;
+            fprintf(stdout, "-n ");
             break;
         case 'v':
             passedV = true;
+            fprintf(stdout, "-v ");
             break;
         case '?':
-            cerr <<"Unrecognised option: -"<<optopt<<'\n';
+            cout <<"Unrecognised option: -"<<optopt<<'\n';
             Usage();
             exit(1);
         }
+        fprintf(stdout, "%s ", optarg);
     }
-
+    fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
 
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
@@ -142,7 +150,7 @@ int main (int argc, char *argv[])
 //=======================================================================
     inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
 
-    uint8_t buffer[mdlen + max_pckt_sz];
+    uint8_t buffer[max_pckt_sz];
 
     uint8_t*  pBufLb =  buffer;
     uint8_t*  pBufRe = &buffer[lblen];
@@ -164,10 +172,10 @@ int main (int argc, char *argv[])
     *pSeq     = htonl(seq);
 
     do {
-        f1.read((char*)&buffer[mdlen], max_pckt_sz);
+        f1.read((char*)&buffer[mdlen], max_pckt_sz-mdlen);
         streamsize nr = f1.gcount();
-        if(passedV) cerr  << "Num read from stdin: " << nr << endl;
-        if(nr != max_pckt_sz) {
+        if(passedV) cout  << "Num read from stdin: " << nr << endl;
+        if(nr != max_pckt_sz-mdlen) {
             lst  = 1;
             pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
         }
@@ -178,16 +186,16 @@ int main (int argc, char *argv[])
             *pDid = htons(data_id + didcnt);
 
             if(passedV) {
-                fprintf ( stderr, "LB Meta-data on the wire:");
-                for(uint8_t b = 0; b < lblen; b++) fprintf ( stderr, " [%d] = %x ", b, pBufLb[b]);
-                fprintf ( stderr, "\nfor tick = %" PRIu64 " ", *pTick);
-                fprintf ( stderr, "tick = %" PRIx64 " ", *pTick);
-                fprintf ( stderr, "for tick = %" PRIu64 "\n", tick);
-                fprintf ( stderr, "RE Meta-data on the wire:");
-                for(uint8_t b = 0; b < relen; b++) fprintf ( stderr, " [%d] = %x ", b, pBufRe[b]);
-                fprintf ( stderr, "\nfor frst = %d / lst = %d ", frst, lst); 
-                fprintf ( stderr, " / data_id = %d / seq = %d ", data_id + didcnt, seq);	
-                fprintf ( stderr, "tick = %" PRIu64 "\n", tick);
+                fprintf ( stdout, "LB Meta-data on the wire:");
+                for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufLb[b]);
+                fprintf ( stdout, "\nfor tick = %" PRIu64 " ", *pTick);
+                fprintf ( stdout, "tick = %" PRIx64 " ", *pTick);
+                fprintf ( stdout, "for tick = %" PRIu64 "\n", tick);
+                fprintf ( stdout, "RE Meta-data on the wire:");
+                for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
+                fprintf ( stdout, "\nfor frst = %d / lst = %d ", frst, lst); 
+                fprintf ( stdout, " / data_id = %d / seq = %d ", data_id + didcnt, seq);	
+                fprintf ( stdout, "tick = %" PRIu64 "\n", tick);
             }
 
             ssize_t rtCd = 0;
@@ -205,7 +213,7 @@ int main (int argc, char *argv[])
                     exit(4);
                 }
             }
-            if(passedV) fprintf ( stderr, "Sending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+            if(passedV) fprintf ( stdout, "Sending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
 
         }
         frst = 0;
