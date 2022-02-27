@@ -83,7 +83,6 @@ int main (int argc, char *argv[])
 
     while ((optc = getopt(argc, argv, "i:p:t:r:6uv")) != -1)
     {
-        fprintf(stdout, "-%s ", optarg);
         switch (optc)
         {
         case 'h':
@@ -270,10 +269,12 @@ int main (int argc, char *argv[])
                        sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV)) {
             perror("getnameinfo ");
         }
-        if(passedV) fprintf ( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
-        if(passedV) fprintf ( stdout, "frst = %d / lst = %d ", frst, lst); 
-        if(passedV) fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);	
-        if(passedV) fprintf ( stdout, "tick = %" PRIu64 "\n", retick);
+        if(passedV) {
+            fprintf ( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
+            fprintf ( stdout, "frst = %d / lst = %d ", frst, lst); 
+            fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);	
+            fprintf ( stdout, "tick = %" PRIu64 "\n", retick);
+        }
 
         if(data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
         data_ids_inuse[data_id] = true;
@@ -284,9 +285,9 @@ int main (int argc, char *argv[])
         pckt_sz[data_id][seq] = nBytes-relen;
         pckt_cache_inuse[data_id][seq] = true;
 
-        if(passedV) fprintf ( stdout, "cnt_trues %d max_seq[%i] = %d\n", 
-	        cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
 
+            if(passedV) fprintf (stdout, "cnt_trues %d max_seq[%i] = %d\n", 
+                        cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
         if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
                                                     == max_seq[data_id] + 1)  { //build blob and transfer
             uint16_t evnt_sz = 0;
