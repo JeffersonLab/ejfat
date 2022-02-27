@@ -19,11 +19,6 @@ using namespace std;
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 
-const size_t max_pckt_sz = 9000;
-const size_t lblen       = 12;
-const size_t relen       = 8+8;
-const size_t mdlen       = lblen + relen;
-
 void   Usage(void)
 {
     char usage_str[] =
@@ -35,6 +30,7 @@ void   Usage(void)
         -d data_id  \n\
         -n num_data_ids starting from initial  \n\
         -v verbose mode (default is quiet)  \n\
+        -s max packet size (default 9000)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i\n";
@@ -42,6 +38,11 @@ void   Usage(void)
 
 int main (int argc, char *argv[])
 {
+          size_t max_pckt_sz = 9000;
+    const size_t lblen       = 12;
+    const size_t relen       = 8+8;
+    const size_t mdlen       = lblen + relen;
+
     int optc;
     extern char *optarg;
     extern int   optind, optopt;
@@ -55,12 +56,12 @@ int main (int argc, char *argv[])
     uint16_t data_id      = 1;      // RE data_id
     uint16_t num_data_ids = 1;      // number of data_ids starting from initial
     const uint8_t vrsn    = 1;
-    const uint16_t rsrvd  = 2; // = 2 just for testing
+    const uint16_t rsrvd  = 2;      // = 2 just for testing
     uint8_t frst          = 1;
     uint8_t lst           = 0;
     uint32_t seq          = 0;
 
-    while ((optc = getopt(argc, argv, "i:p:t:d:n:6v")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:d:n:6vs:")) != -1)
     {
         switch (optc)
         {
@@ -91,6 +92,10 @@ int main (int argc, char *argv[])
             break;
         case 'n':
             num_data_ids = (uint16_t) atoi((const char *) optarg) ;
+            fprintf(stdout, "-n ");
+            break;
+        case 's':
+            max_pckt_sz = (size_t) atoi((const char *) optarg) ;
             fprintf(stdout, "-n ");
             break;
         case 'v':
@@ -214,7 +219,6 @@ int main (int argc, char *argv[])
                 }
             }
             if(passedV) fprintf ( stdout, "Sending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
-
         }
         frst = 0;
         pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
