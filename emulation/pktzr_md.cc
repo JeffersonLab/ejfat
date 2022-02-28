@@ -96,7 +96,7 @@ int main (int argc, char *argv[])
             break;
         case 's':
             max_pckt_sz = (size_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-n ");
+            fprintf(stdout, "-s ");
             break;
         case 'v':
             passedV = true;
@@ -113,6 +113,7 @@ int main (int argc, char *argv[])
     if(!(passedI && passedP)) { Usage(); exit(1); }
 
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
+    size_t num_to_read = max_pckt_sz-mdlen; // max bytes to read reserving space for metadata
 
 //===================== data destination setup ===================================
     int dst_sckt;
@@ -152,6 +153,11 @@ int main (int argc, char *argv[])
         // Initialize size variable to be used later on
         socklen_t addr_size = sizeof dst_addr;
     }
+    // set the don't fragment bit
+    {
+        int val = IP_PMTUDISC_DO;
+        setsockopt(dst_sckt, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+    }
 //=======================================================================
     inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
 
@@ -177,10 +183,10 @@ int main (int argc, char *argv[])
     *pSeq     = htonl(seq);
 
     do {
-        f1.read((char*)&buffer[mdlen], max_pckt_sz-mdlen);
+        f1.read((char*)&buffer[mdlen], num_to_read);
         streamsize nr = f1.gcount();
         if(passedV) cout  << "Num read from stdin: " << nr << endl;
-        if(nr != max_pckt_sz-mdlen) {
+        if(nr != num_to_read) {
             lst  = 1;
             pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
         }
@@ -205,14 +211,15 @@ int main (int argc, char *argv[])
 
             ssize_t rtCd = 0;
             /* now send a datagram */
+            size_t num_to_send = nr+mdlen; // max bytes to send including metadata
             if (passed6) {
-                if ((rtCd = sendto(dst_sckt, buffer, mdlen + nr, 0, 
+                if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
                             (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
                     perror("sendto failed");
                     exit(4);
                 }
             } else {
-                if ((rtCd = sendto(dst_sckt, buffer, mdlen + nr, 0, 
+                if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
                             (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
                     perror("sendto failed");
                     exit(4);
