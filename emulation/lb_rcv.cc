@@ -30,7 +30,7 @@ using namespace std;
 #endif
 
 const size_t max_pckt_sz  = 9000;
-const size_t max_data_ids = 10;   // support up to 10 data_ids
+const size_t max_data_ids = 100;   // support up to 10 data_ids
 const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
 const size_t relen        = 8+8;  // 8 for flags, data_id, 8 for tick
 const size_t mdlen        = relen;
@@ -285,9 +285,9 @@ int main (int argc, char *argv[])
         pckt_sz[data_id][seq] = nBytes-relen;
         pckt_cache_inuse[data_id][seq] = true;
 
-
-            if(passedV) fprintf (stdout, "cnt_trues %d max_seq[%i] = %d\n", 
+        if(passedV) fprintf (stdout, "cnt_trues %d max_seq[%i] = %d\n", 
                         cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
+
         if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
                                                     == max_seq[data_id] + 1)  { //build blob and transfer
             uint16_t evnt_sz = 0;
@@ -327,6 +327,7 @@ int main (int argc, char *argv[])
             }
             num_data_ids = 0;  // number of data_ids encountered in this session
         }
+        if(passedV) cout << endl;
     } while(1);
     return 0;
 }
