@@ -33,6 +33,7 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -91,7 +92,6 @@ namespace ejfat {
         int mtu = 1500;
 
         int sock = socket(PF_INET, SOCK_DGRAM, 0);
-        //int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         struct ifreq ifr;
         strcpy(ifr.ifr_name, interfaceName);
         if (!ioctl(sock, SIOCGIFMTU, &ifr)) {
@@ -99,14 +99,66 @@ namespace ejfat {
             if (debug) fprintf(stderr, "ioctl says MTU = %d\n", mtu);
         }
         else {
-            if (debug) fprintf(stderr, "Using default MTU = %d\n", mtu);
+            if (debug) fprintf(stderr, "Using default MTU\n");
         }
         close(sock);
         return mtu;
     }
 
 
-    #ifdef ADD_LB_HEADER
+    /**
+     * Attempt to set the MTU value for UDP packets on the given interface.
+     * Miminum 500, maximum 9000.
+     *
+     * @param interfaceName name of network interface (e.g. eth0).
+     * @param sock UDP socket on which to set mtu value.
+     * @param mtu the successfully set mtu value or -1 if could not be set.
+     * @param debug true for debug output.
+     * @return
+     */
+    static int setMTU(const char* interfaceName, int sock, int mtu, bool debug) {
+
+        if (mtu < 500) {
+            mtu = 500;
+        }
+        if (mtu > 9000) {
+            mtu = 9000;
+        }
+
+        struct ifreq ifr;
+        strcpy(ifr.ifr_name, interfaceName);
+        ifr.ifr_mtu = mtu;
+
+        if(!ioctl(sock, SIOCSIFMTU, &ifr)) {
+            // Mtu changed successfully
+            mtu = ifr.ifr_mtu;
+            if (debug) fprintf(stderr, "set MTU to %d\n", mtu);
+        }
+        else {
+            if (!ioctl(sock, SIOCGIFMTU, &ifr)) {
+                mtu = ifr.ifr_mtu;
+                if (debug) fprintf(stderr, "Failed to set mtu, using default = %d\n", mtu);
+            }
+            else {
+                if (debug) fprintf(stderr, "Using default MTU\n");
+                return -1;
+            }
+        }
+
+#ifdef __linux__
+        // For jumbo (> 1500 B) frames we need to set the "no fragment" flag.
+        // Only possible on linux, not mac.
+        if (mtu > 1500) {
+            int val = IP_PMTUDISC_DO;
+            setsockopt(sock, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+        }
+#endif
+
+        return mtu;
+    }
+
+
+#ifdef ADD_LB_HEADER
 
         /**
          * Set the Load Balancer header data.
@@ -370,12 +422,8 @@ namespace ejfat {
             }
         }
 
-        // Jumbo (> 1500) ethernet frames are 9000 bytes max. Don't exceed this limit.
-        if (mtu > 9000) {
-            mtu = 9000;
-        }
-        else if (mtu == 0) {
-            // If we still can't figure this out, set it to a safe value.
+        // If we still can't figure this out, set it to a safe value.
+        if (mtu == 0) {
             mtu = 1400;
         }
 
@@ -393,6 +441,9 @@ namespace ejfat {
         serverAddr.sin_addr.s_addr = inet_addr(host.c_str());
         memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
+        // Set the MTU, which is necessary for jumbo (> 1500, 9000 max) packets. Don't exceed this limit.
+        // If trying to set Jumbo packet, set no-fragment flag on linux.
+        mtu = setMTU(interface.c_str(), clientSocket, mtu, debug);
 
         if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
