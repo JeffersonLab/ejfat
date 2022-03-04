@@ -35,7 +35,7 @@ project(ejfat VERSION 0.1)
 #set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
 set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DEBUG_POSTFIX -dbg)
 
@@ -93,13 +93,6 @@ mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
 #add_compile_options(-Wall -Wextra)
 
-if(APPLE)
-    set(CMAKE_MACOSX_RPATH ON)
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    set(CMAKE_INSTALL_RPATH @loader_path/../lib)
-endif()
-
-
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 
@@ -111,6 +104,7 @@ set(EMU_EXEC_FILES
 
 set(ET_EXEC_FILES
         simulation/udp_rcv_et.cc
+        simulation/ersap_et_consumer.cc
         )
 
 set(SIM_EXEC_FILES
@@ -118,7 +112,6 @@ set(SIM_EXEC_FILES
         simulation/udp_send_order.cc
         simulation/udp_rcv.c
         simulation/udp_send.c
-        simulation/lb_emu2.cc
         )
 
 set(TEST_FILES
@@ -146,7 +139,6 @@ if(BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
 endif()
 
 
-
 # Zeromq build is optional and set it to OFF by default
 option(BUILD_ZMQ "Build ZMQ-related code" OFF)
 
@@ -164,7 +156,6 @@ else()
 endif()
 
 
-
 # ET build is optional and set it to OFF by default
 option(BUILD_ET "Build ET-related code" OFF)
 
@@ -178,6 +169,11 @@ if (BUILD_ET)
     endif()
 else()
     message(STATUS "Compile without zeromq")
+endif()
+
+
+if (BUILD_TEST)
+    set(EXEC_FILES ${EXEC_FILES} ${TEST_FILES})
 endif()
 
 
@@ -266,7 +262,7 @@ if (DEFINED MAKE_EXEC)
         # Location of include files
         target_include_directories(${execName} PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${ET_INCLUDE_DIRS})
         # Needs these libs
-        target_link_libraries(${execName} ${ZeroMQ_LIBRARIES} ${ET_LIBRARIES})
+        target_link_libraries(${execName} ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)
