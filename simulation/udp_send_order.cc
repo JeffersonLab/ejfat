@@ -21,7 +21,7 @@
 
 
 
-#include "ejfat_packetize_ersap.hpp"
+#include "ejfat_packetize_ersap_HPerf.hpp"
 
 using namespace ersap::ejfat;
 
@@ -280,6 +280,12 @@ int main(int argc, char **argv) {
     serverAddr.sin_addr.s_addr = inet_addr(host);
     memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
+    int err = connect(clientSocket, (const sockaddr *)&serverAddr, sizeof(struct sockaddr_in));
+    if (err < 0) {
+        if (debug) perror("Error connecting UDP socket:");
+        close(clientSocket);
+        return err;
+    }
 
     // use filename provided as 1st argument (stdin by default)
     bool readingFromFile = false;
@@ -407,7 +413,10 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "Sending offset = %u, tick = %llu\n", offset, tick);
-        int err = sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
+//        err = sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
+//                                       tick, protocol, version, dataId, &offset, delay,
+//                                       firstBuffer, lastBuffer, debug);
+        err = sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket,
                                        tick, protocol, version, dataId, &offset, delay,
                                        firstBuffer, lastBuffer, debug);
         if (err < 0) {
