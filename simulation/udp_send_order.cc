@@ -21,7 +21,7 @@
 
 
 
-#include "ejfat_packetize_ersap_HPerf.hpp"
+#include "ejfat_packetize.hpp"
 
 using namespace ersap::ejfat;
 
@@ -345,6 +345,7 @@ int main(int argc, char **argv) {
     if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
     char buf[bufsize];
+    int64_t packetsSent = 0;
     size_t nBytes, totalBytes = 0;
     bool firstBuffer = true;
     bool lastBuffer  = false;
@@ -413,12 +414,9 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "Sending offset = %u, tick = %llu\n", offset, tick);
-//        err = sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket, &serverAddr,
-//                                       tick, protocol, version, dataId, &offset, delay,
-//                                       firstBuffer, lastBuffer, debug);
-        err = sendPacketizedBuffer(buf, nBytes, maxUdpPayload, clientSocket,
+        err = sendPacketizedBufferSend(buf, nBytes, maxUdpPayload, clientSocket,
                                        tick, protocol, version, dataId, &offset, delay,
-                                       firstBuffer, lastBuffer, debug);
+                                       firstBuffer, lastBuffer, debug, &packetsSent);
         if (err < 0) {
             // Should be more info in errno
             //perror("sendPacketizedBuffer:");

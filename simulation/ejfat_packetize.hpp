@@ -250,11 +250,12 @@ namespace ejfat {
       * in a loop, with the offset arg providing necessary feedback.
       * The receiver is responsible for reassembling these packets back into the original data.</p>
       *
-      * Optimize by minimizing copying of data.
+      * Optimize by minimizing copying of data and calling "send" on a connected socket.
       * The very first packet is sent in buffer of copied data.
-      * For subsequent writes: place pointer HEADER_BYTES before data to be sent, write new header there and send.
-      * The original buffer changes but since the packetizer in ERSAP is a terminal service,
-      * we can modify the buffer with the data in it.
+      * However, for subsequent writes it places the pointer (to read from) HEADER_BYTES before data to be sent,
+      * writes the new header there, and then sends.
+      * <b>Be warned that the original buffer will be changed after calling this routine!</b>
+      * In ERSAP, the packetizer is a terminal service, so we can modify the buffer with the data in it.
       *
       * @param dataBuffer     data to be sent.
       * @param dataLen        number of bytes to be sent.
@@ -274,12 +275,12 @@ namespace ejfat {
       *
       * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
-    static int sendPacketizedBufferSendErsap(char* dataBuffer, size_t dataLen, int maxUdpPayload,
-                                             int clientSocket, uint64_t tick, int protocol,
-                                             int version, uint16_t dataId,
-                                             uint32_t *offset, uint32_t delay,
-                                             bool firstBuffer, bool lastBuffer, bool debug,
-                                             int64_t *packetsSent) {
+    static int sendPacketizedBufferFast(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+                                        int clientSocket, uint64_t tick, int protocol,
+                                        int version, uint16_t dataId,
+                                        uint32_t *offset, uint32_t delay,
+                                        bool firstBuffer, bool lastBuffer, bool debug,
+                                        int64_t *packetsSent) {
 
         int err;
         int64_t sentPackets=0;
@@ -384,12 +385,17 @@ namespace ejfat {
     }
 
 
-    /**
+    /** <p>
      * Send a buffer to a given destination by breaking it up into smaller
      * packets and sending these by UDP. This buffer may contain only part
      * of a larger buffer that needs to be sent. This method can then be called
      * in a loop, with the offset arg providing necessary feedback.
-     * The receiver is responsible for reassembling these packets back into the original data.
+     * The receiver is responsible for reassembling these packets back into the original data.</p>
+     *
+     * This routine calls "send" on a connected socket.
+     * All data (header and actual data from dataBuffer arg) are copied into a separate
+     * buffer and sent. Unlike the {@link #sendPacketizedBufferFastd} routine, the
+     * original data is unchanged.
      *
      * @param dataBuffer     data to be sent.
      * @param dataLen        number of bytes to be sent.
@@ -409,7 +415,7 @@ namespace ejfat {
      *
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
      */
-    static int sendPacketizedBufferSend(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+    static int sendPacketizedBufferSend(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                         int clientSocket, uint64_t tick, int protocol,
                                         int version, uint16_t dataId,
                                         uint32_t *offset, uint32_t delay,
@@ -419,7 +425,7 @@ namespace ejfat {
         int err;
         int64_t sentPackets=0;
         size_t bytesToWrite, totalDataBytesSent = 0, remainingBytes = dataLen;
-        char *getDataFrom = dataBuffer;
+        const char *getDataFrom = dataBuffer;
         // Allocate something that'll hold one packet, possibly jumbo.
         // This will have LB and RE headers and the payload data.
         char buffer[10000];
@@ -540,7 +546,7 @@ namespace ejfat {
      *
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
      */
-        static int sendPacketizedBufferSendto(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+        static int sendPacketizedBufferSendto(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                               int clientSocket, struct sockaddr_in* destination,
                                               uint64_t tick, int protocol, int version, uint16_t dataId,
                                               uint32_t *offset, uint32_t delay,
@@ -550,7 +556,7 @@ namespace ejfat {
             int err;
             int64_t sentPackets=0;
             size_t bytesToWrite, totalDataBytesSent = 0, remainingBytes = dataLen;
-            char *getDataFrom = dataBuffer;
+            const char *getDataFrom = dataBuffer;
             // Allocate something that'll hold one packet, possibly jumbo.
             // This will have LB and RE headers and the payload data.
             char buffer[10000];
@@ -665,7 +671,7 @@ namespace ejfat {
      *
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
      */
-    static int sendPacketizedBufferSendmsg(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+    static int sendPacketizedBufferSendmsg(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                            int clientSocket, struct sockaddr_in* destination,
                                            uint64_t tick, int protocol, int version, uint16_t dataId,
                                            uint32_t *offset, uint32_t delay,
@@ -675,7 +681,7 @@ namespace ejfat {
         int64_t sentPackets=0;
         int totalDataBytesSent = 0;
         int remainingBytes = dataLen;
-        char *getDataFrom = dataBuffer;
+        const char *getDataFrom = dataBuffer;
         int bytesToWrite;
         char headerBuffer[HEADER_BYTES];
 
@@ -802,13 +808,16 @@ namespace ejfat {
       * @param dataId     data id in reassembly header.
       * @param delay      delay in millisec between each packet being sent.
       * @param debug      turn debug printout on & off.
+      * @param fast       if true, call {@link #sendPacketizedBufferFast}, else call
+      *                   {@link #sendPacketizedBufferSend}. Be warned that the "Fast"
+      *                   routine changes the data in buffer.
       *
       * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
                           int mtu, uint16_t port, uint64_t tick, int protocol,
                           int version, uint16_t dataId, uint32_t delay,
-                          bool debug, bool sendto, bool sendmsg) {
+                          bool debug, bool fast) {
 
         if (host.empty()) {
             // Default to sending to local host
@@ -859,15 +868,10 @@ namespace ejfat {
 
         if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-        if (sendto) {
-            err = sendPacketizedBufferSendto(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
+        if (fast) {
+            err = sendPacketizedBufferFast(buffer, bufLen, maxUdpPayload, clientSocket,
                                              tick, protocol, version, dataId, &offset, delay,
                                              true, true, debug, &packetsSent);
-        }
-        else if (sendmsg) {
-            err = sendPacketizedBufferSendmsg(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
-                                              tick, protocol, version, dataId, &offset, delay,
-                                              true, true, debug, &packetsSent);
         }
         else {
             err = sendPacketizedBufferSend(buffer, bufLen, maxUdpPayload, clientSocket,

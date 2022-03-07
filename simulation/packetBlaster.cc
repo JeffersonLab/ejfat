@@ -22,7 +22,7 @@
 
 #include <cstdlib>
 #include <time.h>
-#include "ejfat_packetize_ersap_HPerf.hpp"
+#include "ejfat_packetize.hpp"
 
 using namespace ersap::ejfat;
 
@@ -331,10 +331,10 @@ int main(int argc, char **argv) {
 
     while (true) {
         if (sendnocp) {
-            err = sendPacketizedBufferSendErsap(buf, bufsize,
-                                                maxUdpPayload, clientSocket,
-                                                tick, protocol, version, dataId, &offset, delay,
-                                                firstBuffer, lastBuffer, debug, &packetsSent);
+            err = sendPacketizedBufferFast(buf, bufsize,
+                                           maxUdpPayload, clientSocket,
+                                           tick, protocol, version, dataId, &offset, delay,
+                                           firstBuffer, lastBuffer, debug, &packetsSent);
         }
         else if (send) {
             err = sendPacketizedBufferSend(buf, bufsize, maxUdpPayload, clientSocket,

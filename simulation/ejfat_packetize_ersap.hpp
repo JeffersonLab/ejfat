@@ -268,11 +268,11 @@ namespace ejfat {
       *
       * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
-    static int sendPacketizedBuffer(char* dataBuffer, size_t dataLen, int maxUdpPayload,
-                                   int clientSocket, struct sockaddr_in* destination,
-                                   uint64_t tick, int protocol, int version, uint16_t dataId,
-                                   uint32_t *offset, uint32_t delay,
-                                   bool firstBuffer, bool lastBuffer, bool debug) {
+    static int sendPacketizedBufferSendmsg(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+                                           int clientSocket, struct sockaddr_in* destination,
+                                           uint64_t tick, int protocol, int version, uint16_t dataId,
+                                           uint32_t *offset, uint32_t delay,
+                                           bool firstBuffer, bool lastBuffer, bool debug) {
 
         int totalDataBytesSent = 0;
         int remainingBytes = dataLen;
@@ -447,8 +447,8 @@ namespace ejfat {
 
         if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-        int err = sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
-                                      tick, protocol, version, dataId, &offset, delay,
+        int err = sendPacketizedBufferSendmsg(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
+                                              tick, protocol, version, dataId, &offset, delay,
                                    true, true, debug);
          close(clientSocket);
          return err;
