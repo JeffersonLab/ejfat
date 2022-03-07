@@ -243,12 +243,18 @@ namespace ejfat {
         }
 
 
-     /**
+     /** <p>
       * Send a buffer to a given destination by breaking it up into smaller
       * packets and sending these by UDP. This buffer may contain only part
       * of a larger buffer that needs to be sent. This method can then be called
       * in a loop, with the offset arg providing necessary feedback.
-      * The receiver is responsible for reassembling these packets back into the original data.
+      * The receiver is responsible for reassembling these packets back into the original data.</p>
+      *
+      * Optimize by minimizing copying of data.
+      * The very first packet is sent in buffer of copied data.
+      * For subsequent writes: place pointer HEADER_BYTES before data to be sent, write new header there and send.
+      * The original buffer changes but since the packetizer in ERSAP is a terminal service,
+      * we can modify the buffer with the data in it.
       *
       * @param dataBuffer     data to be sent.
       * @param dataLen        number of bytes to be sent.
@@ -262,18 +268,156 @@ namespace ejfat {
       *                       and returns the sequence to use for next packet to be sent.
       * @param delay          delay in millisec between each packet being sent.
       * @param firstBuffer    if true, this is the first buffer to send in a sequence.
-      * @param lastBuffer     if true, this is the last buffer to send in a sequence.
+      * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
       * @param debug          turn debug printout on & off.
+      * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
       *
       * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
-    static int sendPacketizedBuffer(char* dataBuffer, size_t dataLen,
-                                    int maxUdpPayload, int clientSocket,
-                                    uint64_t tick, int protocol, int version, uint16_t dataId,
-                                    uint32_t *offset, uint32_t delay,
-                                    bool firstBuffer, bool lastBuffer, bool debug) {
+    static int sendPacketizedBufferSendErsap(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+                                             int clientSocket, uint64_t tick, int protocol,
+                                             int version, uint16_t dataId,
+                                             uint32_t *offset, uint32_t delay,
+                                             bool firstBuffer, bool lastBuffer, bool debug,
+                                             int64_t *packetsSent) {
 
         int err;
+        int64_t sentPackets=0;
+        size_t bytesToWrite;
+
+        // The very first packet goes in here
+        char packetStorage[maxUdpPayload + HEADER_BYTES];
+        char *writeHeaderTo = packetStorage;
+
+        // If this packet is the very first packet sent in this series of data buffers(offset = 0)
+        bool veryFirstPacket = false;
+        // If this packet is the very last packet sent in this series of data buffers
+        bool veryLastPacket  = false;
+
+        if (firstBuffer) {
+            veryFirstPacket = true;
+        }
+
+        uint32_t packetCounter = *offset;
+        // Use this flag to allow transmission of a single zero-length buffer
+        bool firstLoop = true;
+
+        startAgain:
+        while (firstLoop || dataLen > 0) {
+
+            // The number of regular data bytes to write into this packet
+            bytesToWrite = dataLen > maxUdpPayload ? maxUdpPayload : dataLen;
+
+            // Is this the very last packet for all buffers?
+            if ((bytesToWrite == dataLen) && lastBuffer) {
+                veryLastPacket = true;
+            }
+
+            if (debug) fprintf(stderr, "Send %lu bytes, last buf = %s, very first = %s, very last = %s\n",
+                              bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
+
+            // Write LB meta data into buffer
+            setLbMetadata(writeHeaderTo, tick, version, protocol);
+
+            // Write RE meta data into buffer
+            setReMetadata(writeHeaderTo + LB_HEADER_BYTES,
+                          veryFirstPacket, veryLastPacket,
+                          tick, packetCounter++, version, dataId);
+
+            if (firstLoop) {
+                // Copy data for very first packet only
+                memcpy(writeHeaderTo + HEADER_BYTES, dataBuffer, bytesToWrite);
+            }
+
+            // "UNIX Network Programming" points out that a connect call made on a UDP client side socket
+            // figures out and stores all the state about the destination socket address in advance
+            // (masking, selecting interface, etc.), saving the cost of doing so on every ::sendto call.
+            // This book claims that ::send vs ::sendto can be up to 3x faster because of this reduced overhead -
+            // data can go straight to the NIC driver bypassing most IP stack processing.
+            // In our case, the calling function connected the socket, so we call "send".
+
+            // Send message to receiver
+            err = send(clientSocket, writeHeaderTo, bytesToWrite + HEADER_BYTES, 0);
+            if (err == -1) {
+                if ((errno == EMSGSIZE) && (veryFirstPacket)) {
+                    // The UDP packet is too big, so we need to reduce it.
+                    // If this is still the first packet, we can try again. Try 20% reduction.
+                    maxUdpPayload = maxUdpPayload * 8 / 10;
+                    veryLastPacket = false;
+                    packetCounter--;
+                    if (debug) fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
+                    goto startAgain;
+                }
+                else {
+                    // All other errors are unrecoverable
+                    *packetsSent = sentPackets;
+                    return (-1);
+                }
+            }
+
+            if (firstLoop) {
+                // Switch from local array to writing from dataBuffer for rest of packets
+                writeHeaderTo = dataBuffer - HEADER_BYTES;
+            }
+
+            sentPackets++;
+
+            // delay if any
+            if (delay > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            }
+
+            dataLen -= bytesToWrite;
+            writeHeaderTo += bytesToWrite;
+            veryFirstPacket = false;
+            firstLoop = false;
+
+            if (debug) fprintf(stderr, "Sent pkt %u, remaining bytes = %lu\n\n",
+                              (packetCounter - 1), dataLen);
+        }
+
+        *offset = packetCounter;
+        *packetsSent = sentPackets;
+        if (debug) fprintf(stderr, "Set next offset to = %d\n", packetCounter);
+
+        return 0;
+    }
+
+
+    /**
+     * Send a buffer to a given destination by breaking it up into smaller
+     * packets and sending these by UDP. This buffer may contain only part
+     * of a larger buffer that needs to be sent. This method can then be called
+     * in a loop, with the offset arg providing necessary feedback.
+     * The receiver is responsible for reassembling these packets back into the original data.
+     *
+     * @param dataBuffer     data to be sent.
+     * @param dataLen        number of bytes to be sent.
+     * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
+     * @param clientSocket   UDP sending socket.
+     * @param tick           value used by load balancer in directing packets to final host.
+     * @param protocol       protocol in laad balance header.
+     * @param version        version in reassembly header.
+     * @param dataId         data id in reassembly header.
+     * @param offset         value-result parameter that passes in the sequence number of first packet
+     *                       and returns the sequence to use for next packet to be sent.
+     * @param delay          delay in millisec between each packet being sent.
+     * @param firstBuffer    if true, this is the first buffer to send in a sequence.
+     * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
+     * @param debug          turn debug printout on & off.
+     * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
+     *
+     * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
+     */
+    static int sendPacketizedBufferSend(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+                                        int clientSocket, uint64_t tick, int protocol,
+                                        int version, uint16_t dataId,
+                                        uint32_t *offset, uint32_t delay,
+                                        bool firstBuffer, bool lastBuffer, bool debug,
+                                        int64_t *packetsSent) {
+
+        int err;
+        int64_t sentPackets=0;
         size_t bytesToWrite, totalDataBytesSent = 0, remainingBytes = dataLen;
         char *getDataFrom = dataBuffer;
         // Allocate something that'll hold one packet, possibly jumbo.
@@ -307,7 +451,7 @@ namespace ejfat {
             }
 
             if (debug) fprintf(stderr, "Send %lu bytes, last buf = %s, very first = %s, very last = %s\n",
-                              bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
+                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
             // Write LB meta data into buffer
             setLbMetadata(buffer, tick, version, protocol);
@@ -341,9 +485,12 @@ namespace ejfat {
                 }
                 else {
                     // All other errors are unrecoverable
+                    *packetsSent = sentPackets;
                     return (-1);
                 }
             }
+
+            sentPackets++;
 
             // delay if any
             if (delay > 0) {
@@ -356,17 +503,286 @@ namespace ejfat {
             veryFirstPacket = false;
 
             if (debug) fprintf(stderr, "Sent pkt %u, total %lu, remaining bytes = %lu\n\n",
-                              (packetCounter - 1), totalDataBytesSent, remainingBytes);
+                               (packetCounter - 1), totalDataBytesSent, remainingBytes);
         }
 
         *offset = packetCounter;
+        *packetsSent = sentPackets;
         if (debug) fprintf(stderr, "Set next offset to = %d\n", packetCounter);
 
         return 0;
     }
 
 
-     /**
+    /**
+     * Send a buffer to a given destination by breaking it up into smaller
+     * packets and sending these by UDP. This buffer may contain only part
+     * of a larger buffer that needs to be sent. This method can then be called
+     * in a loop, with the offset arg providing necessary feedback.
+     * The receiver is responsible for reassembling these packets back into the original data.
+     *
+     * @param dataBuffer     data to be sent.
+     * @param dataLen        number of bytes to be sent.
+     * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
+     * @param clientSocket   UDP sending socket.
+     * @param destination    destination host and port of packets.
+     * @param tick           value used by load balancer in directing packets to final host.
+     * @param protocol       protocol in laad balance header.
+     * @param version        version in reassembly header.
+     * @param dataId         data id in reassembly header.
+     * @param offset         value-result parameter that passes in the sequence number of first packet
+     *                       and returns the sequence to use for next packet to be sent.
+     * @param delay          delay in millisec between each packet being sent.
+     * @param firstBuffer    if true, this is the first buffer to send in a sequence.
+     * @param lastBuffer     if true, this is the last buffer to send in a sequence.
+     * @param debug          turn debug printout on & off.
+     * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
+     *
+     * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
+     */
+        static int sendPacketizedBufferSendto(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+                                              int clientSocket, struct sockaddr_in* destination,
+                                              uint64_t tick, int protocol, int version, uint16_t dataId,
+                                              uint32_t *offset, uint32_t delay,
+                                              bool firstBuffer, bool lastBuffer, bool debug,
+                                              int64_t *packetsSent) {
+
+            int err;
+            int64_t sentPackets=0;
+            size_t bytesToWrite, totalDataBytesSent = 0, remainingBytes = dataLen;
+            char *getDataFrom = dataBuffer;
+            // Allocate something that'll hold one packet, possibly jumbo.
+            // This will have LB and RE headers and the payload data.
+            char buffer[10000];
+
+            // If this packet is the very first packet sent in this series of data buffers(offset = 0)
+            bool veryFirstPacket = false;
+            // If this packet is the very last packet sent in this series of data buffers
+            bool veryLastPacket  = false;
+
+            if (firstBuffer) {
+                veryFirstPacket = true;
+            }
+
+            uint32_t packetCounter = *offset;
+            // Use this flag to allow transmission of a single zero-length buffer
+            bool firstLoop = true;
+
+            startAgain:
+            while (firstLoop || remainingBytes > 0) {
+
+                firstLoop = false;
+
+                // The number of regular data bytes to write into this packet
+                bytesToWrite = remainingBytes > maxUdpPayload ? maxUdpPayload : remainingBytes;
+
+                // Is this the very last packet for all buffers?
+                if ((bytesToWrite == remainingBytes) && lastBuffer) {
+                    veryLastPacket = true;
+                }
+
+                if (debug) fprintf(stderr, "Send %lu bytes, last buf = %s, very first = %s, very last = %s\n",
+                                   bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
+
+                // Write LB meta data into buffer
+                setLbMetadata(buffer, tick, version, protocol);
+
+                // Write RE meta data into buffer
+                setReMetadata(buffer + LB_HEADER_BYTES,
+                              veryFirstPacket, veryLastPacket,
+                              tick, packetCounter++, version, dataId);
+
+                // This is where and how many bytes to write for data
+                memcpy(buffer + HEADER_BYTES, (const void *)getDataFrom, bytesToWrite);
+
+                // Send message to receiver
+                err = sendto(clientSocket, buffer, bytesToWrite + HEADER_BYTES, 0,
+                             (const struct sockaddr *)destination, sizeof(struct sockaddr_in));
+                if (err == -1) {
+                    if ((errno == EMSGSIZE) && (veryFirstPacket)) {
+                        // The UDP packet is too big, so we need to reduce it.
+                        // If this is still the first packet, we can try again. Try 20% reduction.
+                        maxUdpPayload = maxUdpPayload * 8 / 10;
+                        veryLastPacket = false;
+                        packetCounter--;
+                        if (debug) fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
+                        goto startAgain;
+                    }
+                    else {
+                        // All other errors are unrecoverable
+                        *packetsSent = sentPackets;
+                        return (-1);
+                    }
+                }
+
+                sentPackets++;
+
+                // delay if any
+                if (delay > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                }
+
+                totalDataBytesSent += bytesToWrite;
+                remainingBytes -= bytesToWrite;
+                getDataFrom += bytesToWrite;
+                veryFirstPacket = false;
+
+                if (debug) fprintf(stderr, "Sent pkt %u, total %lu, remaining bytes = %lu\n\n",
+                                   (packetCounter - 1), totalDataBytesSent, remainingBytes);
+            }
+
+            *offset = packetCounter;
+            *packetsSent = sentPackets;
+            if (debug) fprintf(stderr, "Set next offset to = %d\n", packetCounter);
+
+            return 0;
+        }
+
+
+    /**
+     * Send a buffer to a given destination by breaking it up into smaller
+     * packets and sending these by UDP. This buffer may contain only part
+     * of a larger buffer that needs to be sent. This method can then be called
+     * in a loop, with the offset arg providing necessary feedback.
+     * The receiver is responsible for reassembling these packets back into the original data.
+     *
+     * @param dataBuffer     data to be sent.
+     * @param dataLen        number of bytes to be sent.
+     * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
+     * @param clientSocket   UDP sending socket.
+     * @param destination    FPGA address.
+     * @param tick           value used by load balancer in directing packets to final host.
+     * @param protocol       protocol in laad balance header.
+     * @param version        version in reassembly header.
+     * @param dataId         data id in reassembly header.
+     * @param offset         value-result parameter that passes in the sequence number of first packet
+     *                       and returns the sequence to use for next packet to be sent.
+     * @param delay          delay in millisec between each packet being sent.
+     * @param firstBuffer    if true, this is the first buffer to send in a sequence.
+     * @param lastBuffer     if true, this is the last buffer to send in a sequence.
+     * @param debug          turn debug printout on & off.
+     * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
+     *
+     * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
+     */
+    static int sendPacketizedBufferSendmsg(char* dataBuffer, size_t dataLen, int maxUdpPayload,
+                                           int clientSocket, struct sockaddr_in* destination,
+                                           uint64_t tick, int protocol, int version, uint16_t dataId,
+                                           uint32_t *offset, uint32_t delay,
+                                           bool firstBuffer, bool lastBuffer, bool debug,
+                                           int64_t *packetsSent) {
+
+        int64_t sentPackets=0;
+        int totalDataBytesSent = 0;
+        int remainingBytes = dataLen;
+        char *getDataFrom = dataBuffer;
+        int bytesToWrite;
+        char headerBuffer[HEADER_BYTES];
+
+        // Prepare a msghdr structure to send 2 buffers with one system call.
+        // One buffer has LB and RE headers and the other with data to be sent.
+        // Doing things this way also eliminates having to copy all the data.
+        // Note that in Linux, "send" and "sendto" are just wrappers for sendmsg
+        // that build the struct msghdr for you. So no loss of efficiency to do it this way.
+        struct msghdr msg;
+        struct iovec  iov[2];
+
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_name = (void *) destination;
+        msg.msg_namelen = sizeof(struct sockaddr_in);
+        msg.msg_iov = iov;
+        msg.msg_iovlen = 2;
+
+        // If this packet is the very first packet sent in this series of data buffers(offset = 0)
+        bool veryFirstPacket = false;
+        // If this packet is the very last packet sent in this series of data buffers
+        bool veryLastPacket  = false;
+
+        if (firstBuffer) {
+            veryFirstPacket = true;
+        }
+
+        uint32_t packetCounter = *offset;
+
+        // This is where and how many bytes to write for a packet's combined LB and RE headers
+        iov[0].iov_base = (void *)headerBuffer;
+        iov[0].iov_len = HEADER_BYTES;
+
+        // Use this flag to allow transmission of a single zero-length buffer
+        bool firstLoop = true;
+
+        startAgain:
+        while (firstLoop || remainingBytes > 0) {
+
+            firstLoop = false;
+
+            // The number of regular data bytes to write into this packet
+            bytesToWrite = remainingBytes > maxUdpPayload ? maxUdpPayload : remainingBytes;
+
+            // Is this the very last packet for all buffers?
+            if ((bytesToWrite == remainingBytes) && lastBuffer) {
+                veryLastPacket = true;
+            }
+
+            if (debug) fprintf(stderr, "Send %d bytes, last buf = %s, very first = %s, very last = %s\n",
+                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
+
+            // Write LB meta data into buffer
+            setLbMetadata(headerBuffer, tick, version, protocol);
+
+            // Write RE meta data into buffer
+            setReMetadata(headerBuffer + LB_HEADER_BYTES,
+                          veryFirstPacket, veryLastPacket,
+                          tick, packetCounter++, version, dataId);
+
+            // This is where and how many bytes to write for data
+            iov[1].iov_base = (void *)getDataFrom;
+            iov[1].iov_len = bytesToWrite;
+
+            // Send message to receiver
+            int err = sendmsg(clientSocket, &msg, 0);
+            if (err == -1) {
+                if ((errno == EMSGSIZE) && (veryFirstPacket)) {
+                    // The UDP packet is too big, so we need to reduce it.
+                    // If this is still the first packet, we can try again. Try 20% reduction.
+                    maxUdpPayload = maxUdpPayload * 8 / 10;
+                    veryLastPacket = false;
+                    packetCounter--;
+                    if (debug) fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
+                    goto startAgain;
+                }
+                else {
+                    // All other errors are unrecoverable
+                    *packetsSent = sentPackets;
+                    return (-1);
+                }
+            }
+
+            sentPackets++;
+
+            // delay if any
+            if (delay > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            }
+
+            totalDataBytesSent += bytesToWrite;
+            remainingBytes -= bytesToWrite;
+            getDataFrom += bytesToWrite;
+            veryFirstPacket = false;
+
+            if (debug) fprintf(stderr, "Sent pkt %u, total %d, remaining bytes = %d\n\n",
+                               (packetCounter - 1), totalDataBytesSent, remainingBytes);
+        }
+
+        *offset = packetCounter;
+        *packetsSent = sentPackets;
+        if (debug) fprintf(stderr, "Set next offset to = %d\n", packetCounter);
+
+        return 0;
+    }
+
+
+        /**
       * Send this entire buffer to the host and port of an FPGA-based load balancer.
       * This is done by breaking it up into smaller size UDP packets - each with 2 headers.
       * The first header is meta data used by the load balancer and stripped off before
@@ -391,7 +807,8 @@ namespace ejfat {
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
                           int mtu, uint16_t port, uint64_t tick, int protocol,
-                          int version, uint16_t dataId, uint32_t delay, bool debug) {
+                          int version, uint16_t dataId, uint32_t delay,
+                          bool debug, bool sendto, bool sendmsg) {
 
         if (host.empty()) {
             // Default to sending to local host
@@ -417,6 +834,7 @@ namespace ejfat {
         // 20 bytes = normal IPv4 packet header, 8 bytes = max UDP packet header
         int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
         uint32_t offset = 0;
+        int64_t packetsSent = 0;
 
         // Create UDP socket
         int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
@@ -441,9 +859,21 @@ namespace ejfat {
 
         if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-        err = sendPacketizedBuffer(buffer, bufLen, maxUdpPayload, clientSocket,
-                                      tick, protocol, version, dataId, &offset, delay,
-                                   true, true, debug);
+        if (sendto) {
+            err = sendPacketizedBufferSendto(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
+                                             tick, protocol, version, dataId, &offset, delay,
+                                             true, true, debug, &packetsSent);
+        }
+        else if (sendmsg) {
+            err = sendPacketizedBufferSendmsg(buffer, bufLen, maxUdpPayload, clientSocket, &serverAddr,
+                                              tick, protocol, version, dataId, &offset, delay,
+                                              true, true, debug, &packetsSent);
+        }
+        else {
+            err = sendPacketizedBufferSend(buffer, bufLen, maxUdpPayload, clientSocket,
+                                           tick, protocol, version, dataId, &offset, delay,
+                                           true, true, debug, &packetsSent);
+        }
          close(clientSocket);
          return err;
      }
