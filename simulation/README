@@ -6,11 +6,6 @@ They can communicate directly with eachother if, in ejfat_packetize.hpp, you com
 line near the top of the file. If, however, you want to use this with the ejfat emulater,
 it must not be commented out.
 
-The ejfat emulator is lb_emu2.cc which is mostly the same as emulation/lb_emu.cc except
-for a few small changes that clear up C++ getting confused as to which "bind" to use.
-It also writes and parses the header without bit fields. But that doesn't seem to
-affect anything.
-
 Most of the hard work is done in ejfat_packetize.hpp and ejfat_assemble.hpp.
 These 2 files are copied over to ersap-ejfat for implementing the packetizing
 and reassembly services and engines.
