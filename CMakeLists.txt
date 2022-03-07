@@ -92,6 +92,7 @@ endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
 #add_compile_options(-Wall -Wextra)
+add_compile_options(-O3)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
@@ -112,6 +113,7 @@ set(SIM_EXEC_FILES
         simulation/udp_send_order.cc
         simulation/udp_rcv.c
         simulation/udp_send.c
+        simulation/packetBlaster.cc
         )
 
 set(TEST_FILES
