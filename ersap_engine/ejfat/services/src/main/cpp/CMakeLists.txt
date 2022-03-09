@@ -2,6 +2,7 @@
 set(DEMO_SERVICES
         ejfat_packetize_service
         ejfat_assemble_service
+        ejfat_assemble_et_service
 )
 
 foreach(service ${DEMO_SERVICES})
