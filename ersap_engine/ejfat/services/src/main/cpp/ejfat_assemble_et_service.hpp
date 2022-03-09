@@ -6,23 +6,26 @@
 #include <atomic>
 #include <memory>
 
+#include "et.h"
+#include "et_fifo.h"
+
 namespace ersap {
 namespace ejfat {
 
-class EjfatAssembleEngine;
+class EjfatAssembleEtEngine;
 
-class EjfatAssembleService : public ersap::Engine
+class EjfatAssembleEtService : public ersap::Engine
 {
 public:
-    EjfatAssembleService() = default;
+    EjfatAssembleEtService() = default;
 
-    EjfatAssembleService(const EjfatAssembleService&) = delete;
-    EjfatAssembleService& operator=(const EjfatAssembleService&) = delete;
+    EjfatAssembleEtService(const EjfatAssembleEtService&) = delete;
+    EjfatAssembleEtService& operator=(const EjfatAssembleEtService&) = delete;
 
-    EjfatAssembleService(EjfatAssembleService&&) = default;
-    EjfatAssembleService& operator=(EjfatAssembleService&&) = default;
+    EjfatAssembleEtService(EjfatAssembleEtService&&) = default;
+    EjfatAssembleEtService& operator=(EjfatAssembleEtService&&) = default;
 
-    ~EjfatAssembleService() override = default;
+    ~EjfatAssembleEtService();
 
 public:
     ersap::EngineData configure(ersap::EngineData&) override;
@@ -48,10 +51,28 @@ public:
     std::string version() const override;
 
 private:
-    std::shared_ptr<EjfatAssembleEngine> engine_{};
 
-    std::string interface;
+    static const int maxSourceIds = 1024;
+
+    std::shared_ptr<EjfatAssembleEtEngine> engine_{};
+
+    bool debug;
+
     int port;
+    int sock;
+
+    // ET system file name
+    std::string etName;
+    et_sys_id id;
+    et_openconfig openconfig;
+
+    // ET FIFO stuff
+    et_fifo_id fid;
+
+    // Data source ids
+    int ids[maxSourceIds];
+    int idCount;
+
 };
 
 } // end namespace jana
