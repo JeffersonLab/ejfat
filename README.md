@@ -30,7 +30,7 @@ ESnet-JLab FPGA Accelerated Transport
 - setenv ERSAP_HOME \<ERSAP installtion directory\>
 - mkdir build
 - cd build
-- cmake .. -DBUILD_ERSAP=1 -DBUILD_ET=1 
+- cmake .. -DBUILD_ERSAP=1 -DBUILD_ET=1 -DBUILD_ZMQ=1
 - make install
 
 ###### This will place the compiled executables into build/bin directory and the engine/services libraries into ERSAP_HOME
