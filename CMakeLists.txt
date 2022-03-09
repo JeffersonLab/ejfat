@@ -113,6 +113,7 @@ set(SIM_EXEC_FILES
         simulation/udp_send_order.cc
         simulation/udp_rcv.c
         simulation/udp_send.c
+        simulation/packetBlastee.cc
         simulation/packetBlaster.cc
         )
 
@@ -128,18 +129,6 @@ set(CPP_HEADER_FILES
 
 
 set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
-
-
-# Ersap build is optional and set it to OFF by default
-option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
-
-if(BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
-    find_package(Ersap REQUIRED)
-
-    add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
-    add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
-endif()
-
 
 # Zeromq build is optional and set it to OFF by default
 option(BUILD_ZMQ "Build ZMQ-related code" OFF)
@@ -171,6 +160,17 @@ if (BUILD_ET)
     endif()
 else()
     message(STATUS "Compile without zeromq")
+endif()
+
+
+# Ersap build is optional and set it to OFF by default
+option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
+
+if(BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
+    find_package(Ersap REQUIRED)
+
+    add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
+    add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
 endif()
 
 
