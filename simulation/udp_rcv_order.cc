@@ -198,12 +198,12 @@ int main(int argc, char **argv) {
     }
 
     size_t totalRead = 0;
-    bool last, firstRead = true;
+    bool last, firstRead = true, useRecvfrom = true;
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
     uint32_t offset = 0;
     char dataBuf[bufSize];
-    uint32_t bytesPerPacket;
+    uint32_t bytesPerPacket, packetCount;
 
     /*
      * Map to hold out-of-order packets.
@@ -216,8 +216,8 @@ int main(int argc, char **argv) {
 
     while (true) {
         nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                     debug, firstRead, &last, &tick, &offset,
-                                     &bytesPerPacket, outOfOrderPackets);
+                                     debug, firstRead, &last, useRecvfrom, &tick, &offset,
+                                     &bytesPerPacket, &packetCount, outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
             break;
@@ -229,7 +229,6 @@ int main(int argc, char **argv) {
 
         // Write out what was received
         writeBuffer(dataBuf, nBytes, fp, debug);
-
 
         if (last) {
             if (debug) fprintf(stderr, "Read last packet from incoming data, quit\n");

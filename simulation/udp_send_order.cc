@@ -414,7 +414,7 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "Sending offset = %u, tick = %llu\n", offset, tick);
-        err = sendPacketizedBufferSend(buf, nBytes, maxUdpPayload, clientSocket,
+        err = sendPacketizedBufferFast(buf, nBytes, maxUdpPayload, clientSocket,
                                        tick, protocol, version, dataId, &offset, delay,
                                        firstBuffer, lastBuffer, debug, &packetsSent);
         if (err < 0) {
