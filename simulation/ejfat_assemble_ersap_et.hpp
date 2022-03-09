@@ -252,7 +252,7 @@ namespace ersap {
 
                 while (true) {
 
-                    // Read in one packet including reassembly header
+                   // Read in one packet including reassembly header
                     int bytesRead = recvfrom(udpSocket, packetBuffer, packetBufSize, 0,  nullptr, nullptr);
                     if (bytesRead < 0) {
                         if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
@@ -378,7 +378,7 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         // Since it's out of order, what was written into packetBuffer
                         // will need to be copied and stored.
                         auto ptr = std::make_unique<std::vector<char>>(nBytes);
-                        memcpy(ptr->data(), packetBuffer + HEADER_BYTES, nBytes);
+                        memcpy(ptr->data(), readDataFrom, nBytes);
                         ptr->resize(nBytes);
 
                         if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s, storage has %lu\n",
