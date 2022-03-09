@@ -12,6 +12,8 @@ public:
 
     EjfatPacketizeEngine();
 
+    void process(char *buffer, uint32_t bufLen, uint64_t tick);
+
     void process(char *buffer, uint32_t bufLen,
                  std::string & host, const std::string & interface,
                  int mtu, uint16_t port, uint64_t tick,

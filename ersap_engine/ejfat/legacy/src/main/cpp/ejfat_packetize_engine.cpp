@@ -127,6 +127,19 @@ namespace ejfat {
     }
 
 
+    void EjfatPacketizeEngine::process(char *buffer, uint32_t bufLen, uint64_t tick)
+    {
+        //        std::cout << "EJFAT processing..." << std::endl;
+
+        int err = sendBuffer(buffer, bufLen, host, interface,
+                             mtu, port, tick, protocol, version, dataId, delay, debug, true);
+        if (err < 0) {
+            fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
+            exit (-1);
+        }
+    }
+
+
     void EjfatPacketizeEngine::process(char *buffer, uint32_t bufLen,
                                        std::string & host, const std::string & interface,
                                        int mtu, uint16_t port, uint64_t tick,
