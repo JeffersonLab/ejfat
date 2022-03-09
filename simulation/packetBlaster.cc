@@ -22,6 +22,7 @@
 
 #include <cstdlib>
 #include <time.h>
+#include <cmath>
 #include "ejfat_packetize.hpp"
 
 using namespace ersap::ejfat;
@@ -32,7 +33,7 @@ using namespace ersap::ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-sendto] [-sendmsg] [-sendnocp]",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -43,6 +44,8 @@ static void printHelp(char *programName) {
             "        [-ver <version>]",
             "        [-id <data id>]",
             "        [-pro <protocol>]",
+            "        [-b <buffer size>]",
+            "        [-spin <# of spins to delay between buffers>]",
             "        [-d <delay in millisec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send file repeatedly and get stats\n");
@@ -52,7 +55,7 @@ static void printHelp(char *programName) {
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *version, uint16_t *id, uint16_t* port,
-                      uint64_t* tick, uint32_t* delay,
+                      uint64_t* tick, uint32_t* delay, uint32_t *bufsize, int *spins,
                       bool *debug, bool *sendto, bool *sendmsg, bool *sendnocp,
                       char* host, char *interface) {
 
@@ -74,11 +77,12 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"sendto",   0, NULL, 6},
              {"sendmsg",  0, NULL, 7},
              {"sendnocp",  0, NULL, 8},
+             {"spin",  1, NULL, 9},
              {0,       0, 0,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -105,6 +109,18 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'b':
+                // BUFFER SIZE
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 500) {
+                    *bufsize = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -b, bufsize >= 500\n");
                     exit(-1);
                 }
                 break;
@@ -212,6 +228,18 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *sendnocp = true;
                 break;
 
+            case 9:
+                // PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0) {
+                    *spins = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -spin, spin >= 0\n");
+                    exit(-1);
+                }
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -244,7 +272,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
  */
 int main(int argc, char **argv) {
 
-    uint32_t offset = 0, delay = 0;
+    int spins = 0;
+    uint32_t offset = 0, delay = 0, bufsize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
     int mtu, version = 1, protocol = 1;
@@ -258,7 +287,8 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick,
-              &delay, &debug, &sendto, &sendmsg, &sendnocp, host, interface);
+              &delay, &bufsize, &spins, &debug, &sendto, &sendmsg, &sendnocp,
+              host, interface);
 
     bool send = !(sendto || sendmsg || sendnocp);
 
@@ -307,8 +337,11 @@ int main(int argc, char **argv) {
     // To avoid having file reads contaminate our performance measurements,
     // place some data into a buffer and repeatedly read it.
     // For most efficient use of UDP packets, make our buffer a multiple of maxUdpPayload,
-    // roughly around 4MB.
-    uint32_t bufsize = (4000000 / maxUdpPayload + 1) * maxUdpPayload;
+    // roughly around 1MB.
+    if (bufsize == 0) {
+        bufsize = (1000000 / maxUdpPayload + 1) * maxUdpPayload;
+    }
+    //uint32_t bufsize = (10000 / maxUdpPayload + 1) * maxUdpPayload; // 10 KB buffers
     char buf[bufsize];
     std::srand(1);
     for (int i=0; i < bufsize; i++) {
@@ -318,6 +351,11 @@ int main(int argc, char **argv) {
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
+    int currentSpins = spins;
+    double x=0., y=0., t=0.;
+
+
+    fprintf(stdout, "spins = %u, currentSpins = %u\n",spins, currentSpins);
 
     // Statistics
     int64_t packetsSent=0, packetCount=0, byteCount=0, totalBytes=0, totalPackets=0;
@@ -352,12 +390,24 @@ int main(int argc, char **argv) {
                                               firstBuffer, lastBuffer, debug, &packetsSent);
         }
 
+        if (spins > 0) {
+            while (--currentSpins > 0) {
+                // do something that will chew up time
+                x += 3.14159 / 333. + 1234;
+                y += 3.14159 / 333. + 2345;
+                t += x/y + y/x + (x*y)/(x+y);
+            }
+            currentSpins = spins;
+        }
+
         if (err < 0) {
             // Should be more info in errno
             EDESTADDRREQ;
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
             exit(1);
         }
+
+        // spin delay
 
         byteCount   += bufsize;
         packetCount += packetsSent;
@@ -367,8 +417,8 @@ int main(int argc, char **argv) {
         // stats
         clock_gettime(CLOCK_REALTIME, &t2);
         time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
-
         time = time2 - time1;
+
         if (time > 5000) {
             // reset things if #s rolling over
             if ( (totalBytes < 0) || (totalT < 0) )  {
@@ -388,7 +438,7 @@ int main(int argc, char **argv) {
             rate = ((double) byteCount) / (1000*time);
             totalBytes += byteCount;
             avgRate = ((double) totalBytes) / (1000*totalT);
-            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
+            printf(" Data:    %3.4g MB/s,  %3.4g Avg., t = %lf\n\n", rate, avgRate, t);
 
             byteCount = packetCount = 0;
 
