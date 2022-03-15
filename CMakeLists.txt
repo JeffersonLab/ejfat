@@ -27,7 +27,7 @@
 
 # This file came from evio-6.0 project
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project(ejfat VERSION 0.1)
 
 
@@ -59,37 +59,38 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 set(ARCH ${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR})
 message(STATUS "ARCH = " ${ARCH})
 
+# CMAKE_INSTALL_PREFIX defaults to /usr/local on unix
 
-# Install into $INSTALL_DIR directory
-if (DEFINED INSTALL_DIR)
-    message(STATUS "INSTALL_DIR = " ${INSTALL_DIR})
-    set(INSTALL_DIR_DEFINED 1)
-    set(CMAKE_INSTALL_PREFIX ${INSTALL_DIR}/${ARCH})
-    set(CMAKE_INSTALL_INCLUDEDIR ${INSTALL_DIR}/common/include)
-    message(STATUS "CMAKE_INSTALL_PREFIX reset to " ${CMAKE_INSTALL_PREFIX})
-else()
-    message(STATUS "Set the \"CODA\" env var or specify -DCODA_INSTALL=... on the command line or no installation possible!")
-endif()
-
-
-
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "No build type selected, default to Release")
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
             Debug Release MinSizeRel RelWithDebInfo)
 endif()
 
-if(DEFINED ENV{ERSAP_HOME} AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
     # Provide useful default paths when $ERSAP_HOME is defined
+    message(STATUS "Installing into ERSAP_HOME = " $ENV{ERSAP_HOME})
     set(CMAKE_INSTALL_PREFIX "$ENV{ERSAP_HOME}" CACHE PATH "" FORCE)
+    set(CMAKE_INSTALL_INCLUDEDIR ${ERSAP_HOME}/include)
+    # look in here when calling find_library, etc.
     list(APPEND CMAKE_PREFIX_PATH "$ENV{ERSAP_HOME}")
+elseif (DEFINED INSTALL_DIR)
+    message(STATUS "Installing into " ${INSTALL_DIR})
+    set(INSTALL_DIR_DEFINED 1)
+    set(CMAKE_INSTALL_PREFIX ${INSTALL_DIR}/${ARCH})
+    set(CMAKE_INSTALL_INCLUDEDIR ${INSTALL_DIR}/common/include)
+    message(STATUS "CMAKE_INSTALL_PREFIX reset to " ${CMAKE_INSTALL_PREFIX})
+else()
+    message(STATUS "Either set env var ERSAP_HOME or specify -DINSTALL_DIR=<...> on the command line or no installation possible!")
 endif()
 
-if(NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
+if (NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
     set(CMAKE_INSTALL_PLUGINDIR plugins CACHE PATH "Ersap plugins directory (plugins)")
 endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
+
+
 
 #add_compile_options(-Wall -Wextra)
 add_compile_options(-O3)
@@ -122,9 +123,9 @@ set(TEST_FILES
         )
 
 set(CPP_HEADER_FILES
-        simulation/ejfat_packetizer_ersap.hpp
+        simulation/ejfat_packetize.hpp
         simulation/ejfat_assemble_ersap.hpp
-        simulation/ejfat_assemble_ersap2.hpp
+        simulation/ejfat_assemble_ersap_et.hpp
         )
 
 
@@ -137,7 +138,6 @@ option(BUILD_ZMQ "Build ZMQ-related code" OFF)
 if (BUILD_ZMQ)
     find_package(ZeroMQ)
     if (ZeroMQ_FOUND)
-        add_compile_definitions(BUILD_ZMQ)
         set(EXEC_FILES ${EXEC_FILES} ${ZMQ_EXEC_FILES})
     else()
         message(STATUS "Zeromq cannot be found, compile without it")
@@ -151,9 +151,15 @@ endif()
 option(BUILD_ET "Build ET-related code" OFF)
 
 if (BUILD_ET)
+    # Finding ET libs and includes involve looking at CODA install directory
+    if (DEFINED ENV{CODA})
+        message(STATUS "CODA = " $ENV{CODA})
+    else()
+        message(FATAL_ERROR "Set the \"CODA\" env var so that ET libs and includes can be found!")
+    endif()
+
     find_package(ET)
     if (ET_FOUND)
-        add_compile_definitions(BUILD_ET)
         set(EXEC_FILES ${EXEC_FILES} ${ET_EXEC_FILES})
     else()
         message(STATUS "Et cannot be found, compile without it")
@@ -166,7 +172,7 @@ endif()
 # Ersap build is optional and set it to OFF by default
 option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
 
-if(BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
+if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
     find_package(Ersap REQUIRED)
 
     add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
@@ -277,8 +283,8 @@ endif()
 
 # Only install if installation directory has been defined
 if (DEFINED INSTALL_DIR_DEFINED)
-        install(FILES ${CPP_HEADER_FILES} DESTINATION include)
-        install(FILES ${CPP_HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(FILES ${CPP_HEADER_FILES} DESTINATION include)
+    install(FILES ${CPP_HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
 
