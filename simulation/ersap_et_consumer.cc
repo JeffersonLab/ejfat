@@ -15,6 +15,7 @@
 #include <limits.h>
 #include <time.h>
 #include <string.h>
+#include <pthread.h>
 #include <fstream>
 
 #include "et.h"

@@ -91,9 +91,9 @@ endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
 
-
 #add_compile_options(-Wall -Wextra)
 add_compile_options(-O3)
+
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
@@ -131,22 +131,6 @@ set(CPP_HEADER_FILES
 
 set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
 
-# Zeromq build is optional and set it to OFF by default
-option(BUILD_ZMQ "Build ZMQ-related code" OFF)
-
-# if you tell cmake to have code use USE_ZMQ preprocessor macro
-if (BUILD_ZMQ)
-    find_package(ZeroMQ)
-    if (ZeroMQ_FOUND)
-        set(EXEC_FILES ${EXEC_FILES} ${ZMQ_EXEC_FILES})
-    else()
-        message(STATUS "Zeromq cannot be found, compile without it")
-    endif()
-else()
-    message(STATUS "Compile without zeromq")
-endif()
-
-
 # ET build is optional and set it to OFF by default
 option(BUILD_ET "Build ET-related code" OFF)
 
@@ -177,6 +161,23 @@ if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
 
     add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
     add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
+endif()
+
+
+# Zeromq build is optional and set it to OFF by default
+option(BUILD_ZMQ "Build ZMQ-related code" OFF)
+
+# if you tell cmake to have code use USE_ZMQ preprocessor macro
+if (BUILD_ZMQ)
+    find_package(ZeroMQ)
+    if (ZeroMQ_FOUND)
+        #add_compile_definitions(BUILD_ZMQ)
+        set(EXEC_FILES ${EXEC_FILES} ${ZMQ_EXEC_FILES})
+    else()
+        message(STATUS "Zeromq cannot be found, compile without it")
+    endif()
+else()
+    message(STATUS "Compile without zeromq")
 endif()
 
 
@@ -270,7 +271,7 @@ if (DEFINED MAKE_EXEC)
         # Location of include files
         target_include_directories(${execName} PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${ET_INCLUDE_DIRS})
         # Needs these libs
-        target_link_libraries(${execName} ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
+        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)

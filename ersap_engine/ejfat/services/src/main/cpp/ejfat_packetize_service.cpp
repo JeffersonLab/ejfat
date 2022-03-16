@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-
+#include <arpa/inet.h>
 
 #if __APPLE__
     #define bswap_16(value) ((((value) & 0xff) << 8) | ((value) >> 8))
