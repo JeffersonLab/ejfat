@@ -368,9 +368,9 @@ namespace ejfat {
                     help = true;
                     break;
 
-                default:
-                    printHelp(argv[0]);
-                    exit(2);
+//                default:
+//                    printHelp(argv[0]);
+//                    exit(2);
             }
 
         }
