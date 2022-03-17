@@ -107,6 +107,7 @@ set(EMU_EXEC_FILES
 set(ET_EXEC_FILES
         simulation/udp_rcv_et.cc
         simulation/ersap_et_consumer.cc
+        ersap_engine/ejfat/legacy/src/main/cpp/ejfat_assemble_et_engine.cpp
         )
 
 set(SIM_EXEC_FILES
@@ -269,7 +270,7 @@ if (DEFINED MAKE_EXEC)
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
         # Location of include files
-        target_include_directories(${execName} PUBLIC ${ZeroMQ_INCLUDE_DIRS} ${ET_INCLUDE_DIRS})
+        target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation ${ZeroMQ_INCLUDE_DIRS} ${ET_INCLUDE_DIRS})
         # Needs these libs
         target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
 

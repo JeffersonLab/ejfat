@@ -382,28 +382,30 @@ namespace ejfat {
     }
 
 
-    int main(int argc, char **argv) {
-
-        // Set this to max expected data size
-        uint16_t port = 7777;
-        bool debug = false;
-
-        int ids[32];
-        // Set default id
-        int idCount = 1;
-        ids[0] = 1;
-
-        char etName[255], listeningAddr[16];
-        memset(etName, 0, 255);
-        memset(listeningAddr, 0, 16);
-
-        parseArgs(argc, argv, &port, &debug, etName, listeningAddr, ids, &idCount);
-
-        EjfatAssembleEtEngine engine(port, etName, listeningAddr, ids, idCount, debug);
-        engine.process();
-
-        return 0;
-    }
 
 } // end namespace ejfat
 } // end namespace ersap
+
+
+int main(int argc, char **argv) {
+
+    // Set this to max expected data size
+    uint16_t port = 7777;
+    bool debug = false;
+
+    int ids[32];
+    // Set default id
+    int idCount = 1;
+    ids[0] = 1;
+
+    char etName[255], listeningAddr[16];
+    memset(etName, 0, 255);
+    memset(listeningAddr, 0, 16);
+
+    ersap::ejfat::parseArgs(argc, argv, &port, &debug, etName, listeningAddr, ids, &idCount);
+
+    ersap::ejfat::EjfatAssembleEtEngine engine(port, etName, listeningAddr, ids, idCount, debug);
+    engine.process();
+
+    return 0;
+}
