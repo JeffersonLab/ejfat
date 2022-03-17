@@ -277,6 +277,7 @@ namespace ejfat {
 
         int c, i_tmp;
         bool help = false;
+        bool etDefined = false;
 
         /* 4 multiple character command-line options */
         static struct option long_options[] =
@@ -285,7 +286,7 @@ namespace ejfat {
                 };
 
 
-        while ((c = getopt_long_only(argc, argv, "vhp:a:", long_options, 0)) != EOF) {
+        while ((c = getopt_long_only(argc, argv, "vhp:a:f:", long_options, 0)) != EOF) {
 
             if (c == -1)
                 break;
@@ -298,6 +299,7 @@ namespace ejfat {
                         exit(-1);
                     }
                     strcpy(etName, optarg);
+                    etDefined = true;
                     break;
 
                 case 1:
@@ -368,14 +370,14 @@ namespace ejfat {
                     help = true;
                     break;
 
-//                default:
-//                    printHelp(argv[0]);
-//                    exit(2);
+                default:
+                    printHelp(argv[0]);
+                    exit(2);
             }
 
         }
 
-        if (help) {
+        if (help || !etDefined) {
             printHelp(argv[0]);
             exit(2);
         }
