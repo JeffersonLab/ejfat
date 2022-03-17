@@ -13,6 +13,10 @@ class EjfatAssembleEtEngine
 public:
 
     EjfatAssembleEtEngine();
+    EjfatAssembleEtEngine(uint16_t port, const std::string & etName,
+                          const std::string & listeningAddr,
+                          int* ids, int idCount, bool debug);
+
     ~EjfatAssembleEtEngine();
 
     void process();
