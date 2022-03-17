@@ -852,7 +852,9 @@ namespace ejfat {
         struct sockaddr_in serverAddr;
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_port = htons(port);
+if (debug) fprintf(stderr, "Sending on UDP port %hu\n", port);
         serverAddr.sin_addr.s_addr = inet_addr(host.c_str());
+if (debug) fprintf(stderr, "Connecting to host %s\n", host.c_str());
         memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
         int err = connect(clientSocket, (const sockaddr *)&serverAddr, sizeof(struct sockaddr_in));

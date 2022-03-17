@@ -56,11 +56,14 @@ namespace ejfat {
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_port = htons(port);
+if (debug) fprintf(stderr, "listening on port %hu\n", port);
         if (!listeningAddr.empty()) {
             serverAddr.sin_addr.s_addr = inet_addr(listeningAddr.c_str());
+if (debug) fprintf(stderr, "listening on address %s\n", listeningAddr.c_str());
         }
         else {
             serverAddr.sin_addr.s_addr = INADDR_ANY;
+if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
         }
         memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 

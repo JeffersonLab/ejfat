@@ -166,6 +166,8 @@ namespace ersap {
             et_event *event;
             et_fifo_entry *entry;
 
+if (debug) fprintf(stderr, "getBuffers: debug output = %s\n", btoa(debug));
+
             // Key into buffers and expSequence maps and part of value in outOfOrderPackets
             std::pair<uint64_t, uint16_t> key;
 
