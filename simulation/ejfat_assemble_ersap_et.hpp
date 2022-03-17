@@ -230,7 +230,7 @@ namespace ersap {
 
             int bufIds[idCount];
             int err = et_fifo_getBufIds(fid, bufIds);
-            if (err != ET_OK) {
+            if (err < 0) {
                 if (debug) fprintf(stderr, "data sources were NOT specified when calling et_fifo_openProducer()!\n");
                 return(-1);
             }

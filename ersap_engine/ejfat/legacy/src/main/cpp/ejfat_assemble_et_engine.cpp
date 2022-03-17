@@ -72,17 +72,18 @@ namespace ejfat {
         }
 
         // Open ET system
+        int status;
         et_open_config_init(&openconfig);
-        if (et_open(&id, etName.c_str(), openconfig) != ET_OK) {
-            if (debug) fprintf(stderr, "et_open problems\n");
+        if ((status = et_open(&id, etName.c_str(), openconfig)) != ET_OK) {
+            if (debug) et_perror(status);
             exit(1);
         }
         et_open_config_destroy(openconfig);
 
         // Create FIFO object with which to use ET system
-        int status = et_fifo_openProducer(id, &fid, ids, idCount);
+        status = et_fifo_openProducer(id, &fid, ids, idCount);
         if (status != ET_OK) {
-            if (debug) fprintf(stderr, "et_fifo_open problems\n");
+            if (debug) et_perror(status);
             exit(1);
         }
     }
