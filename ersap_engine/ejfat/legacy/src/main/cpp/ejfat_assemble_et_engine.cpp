@@ -94,7 +94,7 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
     EjfatAssembleEtEngine::EjfatAssembleEtEngine()
     {
         // Look for a local config file (assembler_et.yaml)
-        port  = 7777;
+        port  = 17750;
         debug = false;
 
         // Parse config, get ET name and all source ids here
@@ -252,7 +252,7 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
                 "        -f <ET file>",
                 "        [-h] [-v]",
                 "        [-a <listening IP address (defaults to INADDR_ANY)>]",
-                "        [-p <listening UDP port>]",
+                "        [-p <listening UDP port (17750 default)>]",
                 "        [-ids <comma-separated list of data source ids, no whitespace>");
 
         fprintf(stderr, "        This is an EJFAT UDP packet receiver which separates input from\n");
@@ -396,7 +396,7 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
 int main(int argc, char **argv) {
 
     // Set this to max expected data size
-    uint16_t port = 7777;
+    uint16_t port = 17750;
     bool debug = false;
 
     int ids[32];
