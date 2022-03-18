@@ -896,6 +896,14 @@ namespace ersap {
             // Create UDP socket
             int udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
 
+            // Try to increase recv buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int recvBufBytes = 25000000;
+            setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0; // clear it
+            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
             // Configure settings in address struct
             struct sockaddr_in serverAddr{};
             serverAddr.sin_family = AF_INET;

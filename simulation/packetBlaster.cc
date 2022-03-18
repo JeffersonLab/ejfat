@@ -314,6 +314,14 @@ int main(int argc, char **argv) {
     // Create UDP socket
     int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
 
+    // Try to increase send buf size to 25 MB
+    socklen_t size = sizeof(int);
+    int sendBufBytes = 25000000;
+    setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
+    sendBufBytes = 0; // clear it
+    getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+    fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+
     // Configure settings in address struct
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
