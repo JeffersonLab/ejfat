@@ -35,12 +35,13 @@ using namespace ersap::ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-fast] [-recvmsg]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
-            "        [-b <internal buffer size in bytes]",
+            "        [-b <internal buffer byte size]",
+            "        [-r <UDP receive buffer byte size]",
             "        <output file name>");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver.\n");
@@ -53,6 +54,7 @@ static void printHelp(char *programName) {
  * @param argc        arg count from main().
  * @param argv        arg list from main().
  * @param bufSize     filled with buffer size.
+ * @param recvBufSize filled with UDP receive buffer size.
  * @param port        filled with UDP port to listen on.
  * @param debug       filled with debug flag.
  * @param fileName    filled with output file name.
@@ -60,7 +62,7 @@ static void printHelp(char *programName) {
  * @param fast        filled with true if reading with recvfrom and minimizing data copy.
  * @param recvmsg     filled with true if reading with recvmsg.
  */
-static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port, bool *debug,
+static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uint16_t* port, bool *debug,
                       char *fileName, char *listenAddr, bool *fast, bool *recvmsg) {
 
     int c, i_tmp;
@@ -74,7 +76,7 @@ static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port, bool 
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -99,6 +101,18 @@ static void parseArgs(int argc, char **argv, int* bufSize, uint16_t* port, bool 
                 if (i_tmp < 10000) {
                     *port = 10000;
                     fprintf(stderr, "Set buffer to minimum size of 10000 bytes\n");
+                }
+                break;
+
+            case 'r':
+                // UDP RECEIVE BUFFER SIZE
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 220000) {
+                    *recvBufSize = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -r, UDP recv buf size >= 220kB\n");
+                    exit(-1);
                 }
                 break;
 
@@ -174,6 +188,7 @@ int main(int argc, char **argv) {
     ssize_t nBytes;
     // Set this to max expected data size
     int bufSize = 1020000;
+    int recvBufSize = 0;
     uint16_t port = 7777;
 
     bool debug = false;
@@ -185,7 +200,7 @@ int main(int argc, char **argv) {
     memset(fileName, 0, INPUT_LENGTH_MAX);
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &bufSize, &port, &debug, fileName, listeningAddr, &useFast, &useRecvmsg);
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &port, &debug, fileName, listeningAddr, &useFast, &useRecvmsg);
 
     if (!(useFast || useRecvmsg)) {
       useRecvfrom = true;
@@ -194,11 +209,12 @@ int main(int argc, char **argv) {
     // Create UDP socket
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
-    // Try to increase recv buf size to 25 MB
+    // By default set recv buf size to 25 MB
     socklen_t size = sizeof(int);
-    int recvBufBytes = 25000000;
-    setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
-    recvBufBytes = 0; // clear it
+    recvBufSize = recvBufSize <= 0 ? 25000000 : recvBufSize;
+    setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+    // Read back what we supposedly set
+    int recvBufBytes = 0;
     getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
     fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
 

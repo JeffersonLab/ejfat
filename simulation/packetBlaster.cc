@@ -33,7 +33,7 @@ using namespace ersap::ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-sendto] [-sendmsg] [-sendnocp]",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -45,6 +45,7 @@ static void printHelp(char *programName) {
             "        [-id <data id>]",
             "        [-pro <protocol>]",
             "        [-b <buffer size>]",
+            "        [-s <UDP send buffer size>]",
             "        [-spin <# of spins to delay between buffers>]",
             "        [-d <delay in millisec between packets>]");
 
@@ -55,7 +56,8 @@ static void printHelp(char *programName) {
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *version, uint16_t *id, uint16_t* port,
-                      uint64_t* tick, uint32_t* delay, uint32_t *bufsize, int *spins,
+                      uint64_t* tick, uint32_t* delay,
+                      uint32_t *bufsize, uint32_t *sendBufSize, int *spins,
                       bool *debug, bool *sendto, bool *sendmsg, bool *sendnocp,
                       char* host, char *interface) {
 
@@ -82,7 +84,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:s:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -120,7 +122,19 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *bufsize = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -b, bufsize >= 500\n");
+                    fprintf(stderr, "Invalid argument to -b, buf size >= 500\n");
+                    exit(-1);
+                }
+                break;
+
+            case 's':
+                // UDP SEND BUFFER SIZE
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 220000) {
+                    *sendBufSize = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -s, UDP send buf size >= 220kB\n");
                     exit(-1);
                 }
                 break;
@@ -273,7 +287,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 int main(int argc, char **argv) {
 
     int spins = 0;
-    uint32_t offset = 0, delay = 0, bufsize = 0;
+    uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
     int mtu, version = 1, protocol = 1;
@@ -287,7 +301,7 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &spins, &debug, &sendto, &sendmsg, &sendnocp,
+              &delay, &bufsize, &sendBufSize, &spins, &debug, &sendto, &sendmsg, &sendnocp,
               host, interface);
 
     bool send = !(sendto || sendmsg || sendnocp);
@@ -314,11 +328,12 @@ int main(int argc, char **argv) {
     // Create UDP socket
     int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
 
-    // Try to increase send buf size to 25 MB
+    // Try to increase send buf size - by default to 25 MB
     socklen_t size = sizeof(int);
-    int sendBufBytes = 25000000;
-    setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
-    sendBufBytes = 0; // clear it
+    sendBufSize = sendBufSize <= 0 ? 25000000 : sendBufSize;
+    setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufSize, sizeof(sendBufSize));
+    // Read back the UDP send buffer size in bytes
+    uint32_t sendBufBytes = 0;
     getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
     fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
