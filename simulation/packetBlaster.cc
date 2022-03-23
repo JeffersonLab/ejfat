@@ -332,11 +332,13 @@ int main(int argc, char **argv) {
     // Create UDP socket
     int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
 
+#ifndef __APPLE__
     // Try to increase send buf size - by default to 25 MB
-    socklen_t size = sizeof(int);
     sendBufSize = sendBufSize <= 0 ? 25000000 : sendBufSize;
     setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufSize, sizeof(sendBufSize));
+#endif
     // Read back the UDP send buffer size in bytes
+    socklen_t size = sizeof(int);
     uint32_t sendBufBytes = 0;
     getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
     fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);

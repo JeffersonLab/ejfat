@@ -101,9 +101,12 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uin
             case 'b':
                 // BUFFER SIZE
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp < 10000) {
-                    *port = 10000;
-                    fprintf(stderr, "Set buffer to minimum size of 10000 bytes\n");
+                if (i_tmp >= 10000) {
+                    *bufSize = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -b, internal buf size >= 10kB\n");
+                    exit(-1);
                 }
                 break;
 
@@ -212,11 +215,17 @@ int main(int argc, char **argv) {
     // Create UDP socket
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
+#ifdef __APPLE__
+    // By default set recv buf size to 7.4 MB which is the highest
+    // it wants to go before before reverting back to 787kB.
+    recvBufSize = 7400000;
+#else
     // By default set recv buf size to 25 MB
-    socklen_t size = sizeof(int);
     recvBufSize = recvBufSize <= 0 ? 25000000 : recvBufSize;
+#endif
     setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
     // Read back what we supposedly set
+    socklen_t size = sizeof(int);
     int recvBufBytes = 0;
     getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
     fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
@@ -252,6 +261,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
         return -1;
     }
+
+    fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
+
     uint32_t bytesPerPacket;
 
     /*

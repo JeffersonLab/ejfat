@@ -114,7 +114,15 @@ int main (int argc, char *argv[])
         }
 
         /* increase UDP receive buffer size */
-        int recvBufSize = 25000000;
+        int recvBufSize = 0;
+#ifdef __APPLE__
+        // By default set recv buf size to 7.4 MB which is the highest
+        // it wants to go before before reverting back to 787kB.
+        recvBufSize = 7400000;
+#else
+        // By default set recv buf size to 25 MB
+        recvBufSize = 25000000;
+#endif
         setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
 
         /*Configure settings in address struct*/
