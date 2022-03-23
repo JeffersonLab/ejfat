@@ -266,7 +266,7 @@ int main(int argc, char **argv) {
 
     while (true) {
         if (useFast) {
-            fprintf(stderr, "calling getPacketizerBufferFast\n");
+            if (debug) fprintf(stderr, "calling getPacketizerBufferFast\n");
             nBytes = getPacketizedBufferFast(dataBuf, bufSize, udpSocket,
                                              debug, firstRead, &last, &tick, &offset,
                                              &bytesPerPacket, &packetCount, outOfOrderPackets);

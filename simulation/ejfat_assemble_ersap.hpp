@@ -433,7 +433,7 @@ namespace ersap {
             char *writeHeaderAt, *putDataAt = dataBuf;
             size_t remainingLen = bufLen;
 
-            fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
+            if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
 
             while (true) {
 
@@ -455,8 +455,7 @@ namespace ersap {
                     // Read data right into final buffer (including RE header)
                     nBytes = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
                     if (nBytes < 0) {
-                        if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
-
+                        fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                         return(RECV_MSG);
                     }
 
@@ -484,14 +483,14 @@ namespace ersap {
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
                         freeMap(outOfOrderPackets);
-                        if (debug) fprintf(stderr, "    Already got seq %u once before!\n", sequence);
+                        fprintf(stderr, "    Already got seq %u once before!\n", sequence);
                         return OUT_OF_ORDER;
                     }
 
                     // Set a limit on how much we're going to store (100 packets) while we wait
                     if (outOfOrderPackets.size() >= 100) {
                         freeMap(outOfOrderPackets);
-                        if (debug) fprintf(stderr, "    Reached limit (100) of stored packets!\n");
+                        fprintf(stderr, "    Reached limit (100) of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
 
@@ -533,13 +532,13 @@ namespace ersap {
 
                         // Error check
                         if (veryFirstRead && !packetFirst) {
-                            if (debug) fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
+                            fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
                             freeMap(outOfOrderPackets);
                             return BAD_FIRST_LAST_BIT;
                         }
                     }
                     else if (packetFirst) {
-                        if (debug) fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
+                        fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
                         freeMap(outOfOrderPackets);
                         return BAD_FIRST_LAST_BIT;
                     }
@@ -699,14 +698,14 @@ namespace ersap {
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
                         freeMap(outOfOrderPackets);
-                        if (debug) fprintf(stderr, "    Already got seq %u once before!\n", sequence);
+                        fprintf(stderr, "    Already got seq %u once before!\n", sequence);
                         return OUT_OF_ORDER;
                     }
 
                     // Set a limit on how much we're going to store (100 packets) while we wait
                     if (outOfOrderPackets.size() >= 100) {
                         freeMap(outOfOrderPackets);
-                        if (debug) fprintf(stderr, "    Reached limit (100) of stored packets!\n");
+                        fprintf(stderr, "    Reached limit (100) of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
 
@@ -748,13 +747,13 @@ namespace ersap {
 
                         // Error check
                         if (veryFirstRead && !packetFirst) {
-                            if (debug) fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
+                            fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
                             freeMap(outOfOrderPackets);
                             return BAD_FIRST_LAST_BIT;
                         }
                     }
                     else if (packetFirst) {
-                        if (debug) fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
+                        fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
                         freeMap(outOfOrderPackets);
                         return BAD_FIRST_LAST_BIT;
                     }
