@@ -359,7 +359,7 @@ namespace ersap {
             parseReHeader(pkt, version, first, last, dataId, sequence, tick);
 
             // Copy datq
-            memcpy(dataBuf, pkt + HEADER_BYTES, bytesRead);
+            memcpy(dataBuf, pkt + HEADER_BYTES, bytesRead - HEADER_BYTES);
 
             return bytesRead - HEADER_BYTES;
         }
