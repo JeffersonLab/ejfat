@@ -465,7 +465,8 @@ int main(int argc, char **argv) {
             rate = ((double) byteCount) / (1000*time);
             totalBytes += byteCount;
             avgRate = ((double) totalBytes) / (1000*totalT);
-            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
+            // Must print out t to keep it from being optimized away
+            printf(" Data:    %3.4g MB/s,  %3.4g Avg., t/t = %d\n\n", rate, avgRate, (int)(t/t));
 
             byteCount = packetCount = 0;
 
