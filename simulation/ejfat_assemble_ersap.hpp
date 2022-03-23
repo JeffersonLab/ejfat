@@ -19,6 +19,7 @@
 
 
 #include <cstdio>
+#include <string>
 #include <cstring>
 #include <cstdlib>
 #include <unistd.h>
@@ -488,9 +489,9 @@ namespace ersap {
                     }
 
                     // Set a limit on how much we're going to store (1000 packets) while we wait
-                    if (outOfOrderPackets.size() >= 1000) {
+                    if (outOfOrderPackets.size() >= 1000 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
                         freeMap(outOfOrderPackets);
-                        fprintf(stderr, "    Reached limit (100) of stored packets!\n");
+                        fprintf(stderr, "    Reached size limit of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
 
@@ -703,9 +704,9 @@ namespace ersap {
                     }
 
                     // Set a limit on how much we're going to store (1000 packets) while we wait
-                    if (outOfOrderPackets.size() >= 1000) {
+                    if (outOfOrderPackets.size() >= 1000 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
                         freeMap(outOfOrderPackets);
-                        fprintf(stderr, "    Reached limit (1000) of stored packets!\n");
+                        fprintf(stderr, "    Reached size limit of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
 
