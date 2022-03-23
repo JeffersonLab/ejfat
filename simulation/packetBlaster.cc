@@ -369,7 +369,12 @@ int main(int argc, char **argv) {
         bufsize = (1000000 / maxUdpPayload + 1) * maxUdpPayload;
     }
     //uint32_t bufsize = (10000 / maxUdpPayload + 1) * maxUdpPayload; // 10 KB buffers
-    char buf[bufsize];
+    char *buf = (char *) malloc(bufsize);
+    if (buf == NULL) {
+        fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufsize);
+        return -1;
+    }
+
     std::srand(1);
     for (int i=0; i < bufsize; i++) {
         buf[i] = std::rand();
