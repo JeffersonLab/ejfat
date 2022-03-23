@@ -237,15 +237,21 @@ int main(int argc, char **argv) {
     // Bind socket with address struct
     int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
     if (err != 0) {
-        // TODO: handle error properly
-        if (debug) fprintf(stderr, "bind socket error\n");
+        fprintf(stderr, "bind socket error\n");
+        return -1;
     }
 
     bool last, firstRead = true, firstLoop = true;
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
     uint32_t offset = 0;
-    char dataBuf[bufSize];
+    // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
+
+    char *dataBuf = (char *) malloc(bufSize);
+    if (dataBuf == NULL) {
+        fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
+        return -1;
+    }
     uint32_t bytesPerPacket;
 
     /*
