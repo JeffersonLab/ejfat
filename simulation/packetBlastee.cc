@@ -45,6 +45,9 @@ static void printHelp(char *programName) {
             "        <output file name>");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver.\n");
+    fprintf(stderr, "        The -fast option uses recvfrom & minimizes data copying by reading into final buf\n");
+    fprintf(stderr, "        The -recvmsg option uses recvmsg to read directly into final buf\n");
+    fprintf(stderr, "        Specifying neither flag uses recvfrom to read data, then copies into final buf\n");
 }
 
 

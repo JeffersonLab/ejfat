@@ -134,11 +134,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 's':
                 // UDP SEND BUFFER SIZE
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 220000) {
+                if (i_tmp >= 100000) {
                     *sendBufSize = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -s, UDP send buf size >= 220kB\n");
+                    fprintf(stderr, "Invalid argument to -s, UDP send buf size >= 100kB\n");
                     exit(-1);
                 }
                 break;
