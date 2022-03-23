@@ -487,8 +487,8 @@ namespace ersap {
                         return OUT_OF_ORDER;
                     }
 
-                    // Set a limit on how much we're going to store (100 packets) while we wait
-                    if (outOfOrderPackets.size() >= 100) {
+                    // Set a limit on how much we're going to store (1000 packets) while we wait
+                    if (outOfOrderPackets.size() >= 1000) {
                         freeMap(outOfOrderPackets);
                         fprintf(stderr, "    Reached limit (100) of stored packets!\n");
                         return OUT_OF_ORDER;
@@ -702,10 +702,10 @@ namespace ersap {
                         return OUT_OF_ORDER;
                     }
 
-                    // Set a limit on how much we're going to store (100 packets) while we wait
-                    if (outOfOrderPackets.size() >= 100) {
+                    // Set a limit on how much we're going to store (1000 packets) while we wait
+                    if (outOfOrderPackets.size() >= 1000) {
                         freeMap(outOfOrderPackets);
-                        fprintf(stderr, "    Reached limit (100) of stored packets!\n");
+                        fprintf(stderr, "    Reached limit (1000) of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
 
