@@ -113,6 +113,10 @@ int main (int argc, char *argv[])
             exit(1);
         }
 
+        /* increase UDP receive buffer size */
+        int recvBufSize = 25000000;
+        setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+
         /*Configure settings in address struct*/
         /* clear it out */
         memset(&lstn_addr6, 0, sizeof(lstn_addr6));
@@ -130,6 +134,10 @@ int main (int argc, char *argv[])
 
         /*Create UDP socket for reception from sender */
         lstn_sckt = socket(PF_INET, SOCK_DGRAM, 0);
+
+        /* increase UDP receive buffer size */
+        int recvBufSize = 25000000;
+        setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
 
         /*Configure settings in address struct*/
         lstn_addr.sin_family = AF_INET;
@@ -158,6 +166,10 @@ int main (int argc, char *argv[])
             exit(1);
         }
 
+        /* Increase recv buf size */
+        int recvBufBytes = 25000000;
+        setsockopt(dst_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+
         // Configure settings in address struct
         /*Configure settings in address struct*/
         /* clear it out */
@@ -173,6 +185,10 @@ int main (int argc, char *argv[])
 
         // Create UDP socket for transmission to sender
         dst_sckt = socket(PF_INET, SOCK_DGRAM, 0);
+
+        /* Increase recv buf size */
+        int recvBufBytes = 25000000;
+        setsockopt(dst_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
 
         // Configure settings in address struct
         dst_addr.sin_family = AF_INET;
