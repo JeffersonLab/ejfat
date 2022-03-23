@@ -394,7 +394,7 @@ namespace ejfat {
      *
      * This routine calls "send" on a connected socket.
      * All data (header and actual data from dataBuffer arg) are copied into a separate
-     * buffer and sent. Unlike the {@link #sendPacketizedBufferFastd} routine, the
+     * buffer and sent. Unlike the {@link #sendPacketizedBufferFast} routine, the
      * original data is unchanged.
      *
      * @param dataBuffer     data to be sent.
