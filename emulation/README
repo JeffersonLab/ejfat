@@ -6,24 +6,39 @@
 Data Source:
 -------------
 
-tx=$(mktemp); cat <file> | pktzr_md -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
+tx=$(mktemp); cat <file> | pktzr_md -s <mtu_size> -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
 
-the <num_data_ids> parm will determine how many replicates of the source data will be sent starting with the value of the parm <data_id>
+the <num_data_ids> parm will determine how many replicates of the source data will be sent with incremental data_ids starting with the value of the parm -d <data_id>
 
 
 e.g.,
 
 tx=$(mktemp); cat <file> | pktzr_md -i 129.57.29.231  2> $tx
 
+where 'cat <file>' represents anything that wil give pktzr_md something to read from stdin.
+
 the session log is in $tx
 
-NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
+NOTE: defaults to IPV4; to use IPV6 include a -6 flag in the invocation
+
+Usage: 
+        -6 Use IPV6 
+        -i <destination address> (string)  
+        -p <destination port> (number)  
+        -t <tick>  
+        -d <data_id>  
+        -n <num_data_ids starting from initial>  
+        -v verbose mode (default is quiet)  
+        -s <max packet size> (default 9000)  
+        -h help 
+
+Required: -i
 
 -------------
 LB emulation:
 -------------
 
-tx=$(mktemp); lb_emu -i "<LB host ip>" -p <LB host reception port> -t "<destination ip>" -r <destination port> 2> $tx
+tx=$(mktemp); lb_emu -i "<Listen ip>" -p <Listen port> -t "<destination ip>" -r <destination port> 2> $tx
 
 the session log is in $tx
 
@@ -33,59 +48,56 @@ tx=$(mktemp); lb_emu -i "129.57.29.231" -p 19522 -t "129.57.29.232" -r 7777 2> $
 
 NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
 
+Usage: 
+        -6 Use IPV6 
+        -i <destination address> (string)  
+        -p <destination port> (number)  
+        -t <send address>  
+        -r <send port> (number)  
+        -v verbose mode (default is quiet)  
+        -h help 
 
-An alternate LB emulation can be accomplished using the netcat command as follows:
-
-nc -U –4 -u -l <LB host ip> <lb-port>  | nc -p <arb_port> –U –4 -u <destination-ip> <destination-port>
-
-e.g.,
-
-nc -U –4 -u -l <LB host ip> <lb-port>  | nc –U –4 -u <destination-ip> <destination-port>
-
-
-Note that this does not remove the LB meta-data from the stream; attempting to do that with 
-
-nc -U –4 -u -l 129.57.87.13 19522 | tail -c +13 | nc –U –4 -u 129.57.87.14 7777
-
-fails. See netcat solution for Data Source above.
-
+Required: -i -p -t -r
 
 
 -------------
 Data Sink:
 -------------
-(bash)
 
-tx=$(mktemp); lb_rcv -i "<Data Sink ip>" -p <Data sink reception port>  >  <file> 2> $tx
+tx=$(mktemp); lb_rcv -i "<Listen ip>" -p <Listen port>  >  <file> 2> $tx
 
 e.g.,
 
-t=$(mktemp); lb_rcv -i "129.57.29.232" -p 7777 > some_file_name 2> $tx
+tx=$(mktemp); lb_rcv -i "129.57.29.232" -p 7777 > some_file_name 2> $tx
 
 NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
+
+Send to network server:
+
+tx=$(mktemp); lb_rcv  -i "<Listen ip>" -p <Listen port>  2> $tx
 
 
 Note that stderr is being redirected to temp file $tx (in /tmp) and contains the session log
 
 NOTE:  does not work reliably when spanning subsets!
 
+Usage: 
+        -6 Use IPV6 
+        -i <destination address> (string)  
+        -p <destination port> (number)  
+        -v verbose mode (default is quiet)  \n\
+        -h help 
 
-An alternate Data Source can be accomplished using the netcat command as follows:
-
-nc -u -w 1 -l <sink-ip> <sink-port> >  <file-with-first-12-bytes-stripped> 
-
-e.g.,
-
-nc -u -w 1 -l 129.57.87.14 7777 >  <file-with-first-12-bytes-stripped> 
+Required: -i -p
 
 
 Capabilities / Limitations (Bugs) / Next Steps:
 - supports both IPV4 and IPV6
 - pktzr_md repicates input data across as many (sequential) data_ids as specified 
+- There is a bug in pktzr_md for max mtu; actual max is 8972
 - lb_emu currently routes traffic to a single destination
-- lb_rcv suports up to 100 concurrent data_ids each with as many as 10 out-of-order packets pending output.
-- 'netcat' (often soft-linked to 'nc') is not available on all systems, e.g., ifarm
-- send_file_lb and lb_send are deprecated and will be removed.
+- lb_rcv only supports contiguous events (ticks) at this time.
+- lb_rcv suports up to 100 concurrent data_ids each with as many as 100 out-of-order packets pending output.
 
 
 
