@@ -6,7 +6,7 @@
 Data Source:
 -------------
 
-tx=$(mktemp); cat <file> | pktzr_md -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
+tx=$(mktemp); cat <file> | pktzr_md -s <mtu_size> -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
 
 the <num_data_ids> parm will determine how many replicates of the source data will be sent with incremental data_ids starting with the value of the parm -d <data_id>
 
@@ -23,16 +23,16 @@ NOTE: defaults to IPV4; to use IPV6 include a -6 flag in the invocation
 
 Usage: 
         -6 Use IPV6 
-        -i destination address (string)  
-        -p destination port (number)  
-        -t tick  
-        -d data_id  
-        -n num_data_ids starting from initial  
-        -v verbose mode (default is quiet)  \n\
+        -i <destination address> (string)  
+        -p <destination port> (number)  
+        -t <tick>  
+        -d <data_id>  
+        -n <num_data_ids starting from initial>  
+        -v verbose mode (default is quiet)  
+        -s <max packet size> (default 9000)  
         -h help 
 
 Required: -i
-
 
 -------------
 LB emulation:
@@ -50,11 +50,11 @@ NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
 
 Usage: 
         -6 Use IPV6 
-        -i listen address (string)  
-        -p listen port (number)  
-        -t send address (string)  
-        -r send port (number)  
-        -v verbose mode (default is quiet)  \n\
+        -i <destination address> (string)  
+        -p <destination port> (number)  
+        -t <send address>  
+        -r <send port> (number)  
+        -v verbose mode (default is quiet)  
         -h help 
 
 Required: -i -p -t -r
@@ -83,10 +83,10 @@ NOTE:  does not work reliably when spanning subsets!
 
 Usage: 
         -6 Use IPV6 
-        -i listen address (string)  
-        -p listen port (number)  
-        -t send address (string)  
-        -r send port (number)  
+        -i <destination address> (string)  
+        -p <destination port> (number)  
+        -t <send address>  
+        -r <send port> (number)  
         -u send UDP (default TCP)  
         -v verbose mode (default is quiet)  \n\
         -h help 
