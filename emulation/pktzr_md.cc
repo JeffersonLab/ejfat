@@ -177,8 +177,8 @@ int main (int argc, char *argv[])
     *pTick    = HTONLL(lb_tick);
 	// RE metadata
     uint8_t*  pBufRe = &buffer[lblen];
-    pBufRe[0] = (re_vrsn & 0xf) + (re_rsrvd & 0x3c0) << 4;
-    pBufRe[1] = (re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
+    pBufRe[0] = 0x10; //(re_vrsn & 0xf) + (re_rsrvd & 0x3f0) >> 4;
+    pBufRe[1] = 0x2; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
     uint16_t* pDid   = (uint16_t*) &pBufRe[2];
     uint32_t* pSeq   = (uint32_t*) &pBufRe[4];
     *pDid     = htons(re_data_id);
@@ -190,7 +190,7 @@ int main (int argc, char *argv[])
         if(passedV) cout  << "\nNum read from stdin: " << nr << endl;
         if(nr != num_to_read) {
             re_lst  = 1;
-            pBufRe[1] = (re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
+            pBufRe[1] = 0x1; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
         }
 
         // forward data to LB
@@ -206,13 +206,12 @@ int main (int argc, char *argv[])
             fprintf ( stdout, "\nLB Meta-data on the wire:\n");
             for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x", b, pBufLb[b]);
             fprintf ( stdout, " entropy = %d", (*pEntrp));
-            fprintf ( stdout, " lb_tick = %" PRIu64 " ", (*pTick));
-            fprintf ( stdout, " for lb_tick = %" PRIu64 "\n", lb_tick);
+            fprintf ( stdout, " for lb_tick = %" PRIu64 " ", *pTick);
 
             fprintf ( stdout, "\nRE Meta-data:\n");
             for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
             fprintf ( stdout, " for re_frst = %d / re_lst = %d", re_frst, re_lst); 
-            fprintf ( stdout, " / re_data_id = %d / re_seq = %d\n", (re_data_id), (re_seq));	
+            fprintf ( stdout, " / re_data_id = %d / re_seq = %d\n", re_data_id, re_seq);	
 
             fprintf ( stdout, "\nRE Meta-data on the wire:\n");
             for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
@@ -238,7 +237,7 @@ int main (int argc, char *argv[])
         }
         if(passedV) fprintf ( stdout, "\nSending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
         re_frst = 0;
-        pBufRe[1] = (re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
+        pBufRe[1] = 0x0; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
         *pSeq = htonl(++re_seq);
     } while(!re_lst);
     return 0;
