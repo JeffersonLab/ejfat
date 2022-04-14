@@ -29,7 +29,7 @@ using namespace std;
 #include <ctype.h>
 #endif
 
-const size_t max_pckt_sz  = 9000;
+const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
 const size_t max_data_ids = 100;   // support up to 10 data_ids
 const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
 const size_t relen        = 8;     // 8 for flags, data_id
@@ -193,8 +193,8 @@ int main (int argc, char *argv[])
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
         uint8_t vrsn     = pBufRe[0] & 0xf;
-        uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
-        uint8_t lst      =  pBufRe[1] & 0x01;
+        uint8_t frst     = pBufRe[1] == 0x2; //(pBufRe[1] & 0x02) >> 1;
+        uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
 
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
