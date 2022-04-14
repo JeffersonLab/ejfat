@@ -53,7 +53,6 @@ void   Usage(void)
         -6 Use IPV6 \n\
         -i listen address (string)  \n\
         -p listen port (number)  \n\
-        -u send UDP (default TCP)  \n\
         -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
@@ -74,12 +73,12 @@ int main (int argc, char *argv[])
     extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false,
-	passedU=false, passedV=false;
+	passedV=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;                  // listening port
 
-    while ((optc = getopt(argc, argv, "i:p:6uv")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:6v")) != -1)
     {
         switch (optc)
         {
@@ -100,10 +99,6 @@ int main (int argc, char *argv[])
             passedP = true;
             fprintf(stdout, "-p ");
             break;
-        case 'u':
-            passedU = true;
-            fprintf(stdout, "-u ");
-            break;
         case 'v':
             passedV = true;
             fprintf(stdout, "-v ");
@@ -122,7 +117,7 @@ int main (int argc, char *argv[])
     ofstream rs[max_data_ids];
     for(uint16_t s = 0; s < max_data_ids; s++) {
         char x[64];
-        sprintf(x,"/tmp/rs_%d",s);
+        sprintf(x,"/tmp/rs_%d_%d",lstn_prt,s);
         rs[s].open(x,std::ios::binary | std::ios::out);
     }
 
@@ -197,7 +192,7 @@ int main (int argc, char *argv[])
         // decode to host encoding
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
-        uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
+        uint8_t vrsn     = pBufRe[0] & 0xf;
         uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
         uint8_t lst      =  pBufRe[1] & 0x01;
 
