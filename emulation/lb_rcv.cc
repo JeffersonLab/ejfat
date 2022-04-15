@@ -230,7 +230,7 @@ int main (int argc, char *argv[])
             }
             // forward data to sink skipping past lb meta data
             if(passedV) fprintf (stdout, "writing seq %d  size = %d\n", seq, evnt_sz);
-            rs[data_id].write((char*)&out_buff[relen], evnt_sz);
+            rs[data_id].write((char*)out_buff, evnt_sz);
             rs[data_id].flush();
             // start all data_id streams at seq = 0
             for(uint16_t i = 0; i < max_data_ids; i++) {
