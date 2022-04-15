@@ -224,7 +224,7 @@ int main (int argc, char *argv[])
             uint16_t evnt_sz = 0;
             for(uint8_t i = 0; i <= max_seq[data_id]; i++) {
                  //setup egress buffer for ERSAP
-                memmove(&out_buff[sizeof(uint16_t) + evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
+                memmove(&out_buff[evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
                 evnt_sz += pckt_sz[data_id][i];
                 if(passedV) fprintf ( stdout, "reassembling seq# %d size = %d\n", i, pckt_sz[data_id][i]);
             }
