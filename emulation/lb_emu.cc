@@ -21,8 +21,8 @@
 #include <ctype.h>
 #endif
 
-const size_t max_pckt_sz = 9000;
-const size_t lblen       = 12;
+const size_t max_pckt_sz = 9000-20-8;  // = MTU - IP header - UDP header
+const size_t lblen       = 16;
 const size_t relen       = 8+8;
 const size_t mdlen       = lblen + relen;
 
@@ -51,8 +51,8 @@ int main (int argc, char *argv[])
     bool passedI=false, passedP=false, passedT=false, passedR=false, 
         passed6=false, passedV=false;
 
-    char     lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
-    uint16_t lstn_prt = 0x4c42, dst_prt;                          // listening, target ports
+    char     re_lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
+    uint16_t re_lstn_prt = 0x4c42, dst_prt;                          // listening, target ports
 
     while ((optc = getopt(argc, argv, "i:p:t:r:6v")) != -1)
     {
@@ -66,12 +66,12 @@ int main (int argc, char *argv[])
             fprintf(stdout, "-6 ");
             break;
         case 'i':
-            strcpy(lstn_ip, (const char *) optarg) ;
+            strcpy(re_lstn_ip, (const char *) optarg) ;
             passedI = true;
             fprintf(stdout, "-i ");
             break;
         case 'p':
-            lstn_prt = (uint16_t) atoi((const char *) optarg) ;
+            re_lstn_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
             fprintf(stdout, "-p ");
             break;
@@ -100,18 +100,18 @@ int main (int argc, char *argv[])
     if(!(passedI && passedP && passedT && passedR)) { Usage(); exit(1); }
 
 //===================== data reception setup ===================================
-    int lstn_sckt, nBytes;
+    int re_lstn_sckt, nBytes;
     socklen_t addr_size;
     struct sockaddr_storage src_addr;
 
-    if (passed6) {
-        struct sockaddr_in6 lstn_addr6;
+if (passed6) {
+    struct sockaddr_in6 re_lstn_addr6;
 
-        /*Create UDP socket for reception from sender */
-        if ((lstn_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating src socket");
-            exit(1);
-        }
+    /*Create UDP socket for reception from sender */
+    if ((re_lstn_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+        perror("creating src socket");
+        exit(1);
+    }
 
         /* increase UDP receive buffer size */
         int recvBufSize = 0;
@@ -123,40 +123,40 @@ int main (int argc, char *argv[])
         // By default set recv buf size to 25 MB
         recvBufSize = 25000000;
 #endif
-        setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+        setsockopt(re_lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
 
-        /*Configure settings in address struct*/
-        /* clear it out */
-        memset(&lstn_addr6, 0, sizeof(lstn_addr6));
-        /* it is an INET address */
-        lstn_addr6.sin6_family = AF_INET6; 
-        /* the port we are going to send to, in network byte order */
-        lstn_addr6.sin6_port = htons(lstn_prt);           // "LB" = 0x4c42 by spec (network order)
-        /* the server IP address, in network byte order */
-        inet_pton(AF_INET6, lstn_ip, &lstn_addr6.sin6_addr);  // LB address
-        ///bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
-        bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
-    } else {
-        struct sockaddr_in lstn_addr;
-        socklen_t addr_size;
+    /*Configure settings in address struct*/
+    /* clear it out */
+    memset(&re_lstn_addr6, 0, sizeof(re_lstn_addr6));
+    /* it is an INET address */
+    re_lstn_addr6.sin6_family = AF_INET6; 
+    /* the port we are going to send to, in network byte order */
+    re_lstn_addr6.sin6_port = htons(re_lstn_prt);           // "LB" = 0x4c42 by spec (network order)
+    /* the server IP address, in network byte order */
+    inet_pton(AF_INET6, re_lstn_ip, &re_lstn_addr6.sin6_addr);  // LB address
+    ///bind(re_lstn_sckt, (struct sockaddr *) &re_lstn_addr6, sizeof(re_lstn_addr6));
+    bind(re_lstn_sckt, (struct sockaddr *) &re_lstn_addr6, sizeof(re_lstn_addr6));
+} else {
+    struct sockaddr_in re_lstn_addr;
+    socklen_t addr_size;
 
-        /*Create UDP socket for reception from sender */
-        lstn_sckt = socket(PF_INET, SOCK_DGRAM, 0);
+    /*Create UDP socket for reception from sender */
+    re_lstn_sckt = socket(PF_INET, SOCK_DGRAM, 0);
 
         /* increase UDP receive buffer size */
         int recvBufSize = 25000000;
-        setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+        setsockopt(re_lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
 
-        /*Configure settings in address struct*/
-        lstn_addr.sin_family = AF_INET;
-        lstn_addr.sin_port = htons(lstn_prt); // "LB"
-        lstn_addr.sin_addr.s_addr = inet_addr(lstn_ip); //indra-s2
-        memset(lstn_addr.sin_zero, '\0', sizeof lstn_addr.sin_zero);
+    /*Configure settings in address struct*/
+    re_lstn_addr.sin_family = AF_INET;
+    re_lstn_addr.sin_port = htons(re_lstn_prt); // "LB"
+    re_lstn_addr.sin_addr.s_addr = inet_addr(re_lstn_ip); //indra-s2
+    memset(re_lstn_addr.sin_zero, '\0', sizeof re_lstn_addr.sin_zero);
 
-        /*Bind socket with address struct*/
-        bind(lstn_sckt, (struct sockaddr *) &lstn_addr, sizeof(lstn_addr));
+    /*Bind socket with address struct*/
+    bind(re_lstn_sckt, (struct sockaddr *) &re_lstn_addr, sizeof(re_lstn_addr));
 
-    }
+}
  
     /*Initialize size variable to be used later on*/
     addr_size = sizeof src_addr;
@@ -166,77 +166,79 @@ int main (int argc, char *argv[])
     struct sockaddr_in6 dst_addr6;
     struct sockaddr_in dst_addr;
 
-    if (passed6) {
+if (passed6) {
 
-        /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
-        if ((dst_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating dst socket");
-            exit(1);
-        }
-
-        /* Increase recv buf size */
-        int recvBufBytes = 25000000;
-        setsockopt(dst_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
-
-        // Configure settings in address struct
-        /*Configure settings in address struct*/
-        /* clear it out */
-        memset(&dst_addr6, 0, sizeof(dst_addr6));
-        /* it is an INET address */
-        dst_addr6.sin6_family = AF_INET6; 
-        /* the port we are going to send to, in network byte order */
-        dst_addr6.sin6_port = htons(dst_prt);           // "LB" = 0x4c42 by spec (network order)
-        /* the server IP address, in network byte order */
-        inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
-
-    } else {
-
-        // Create UDP socket for transmission to sender
-        dst_sckt = socket(PF_INET, SOCK_DGRAM, 0);
-
-        /* Increase recv buf size */
-        int recvBufBytes = 25000000;
-        setsockopt(dst_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
-
-        // Configure settings in address struct
-        dst_addr.sin_family = AF_INET;
-        dst_addr.sin_port = htons(dst_prt); // data consumer port to send to
-        dst_addr.sin_addr.s_addr = inet_addr(dst_ip); // indra-s3 as data consumer
-        memset(dst_addr.sin_zero, '\0', sizeof dst_addr.sin_zero);
-
-        // Initialize size variable to be used later on
-        socklen_t addr_size = sizeof dst_addr;
+    /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+    if ((dst_sckt = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+        perror("creating dst socket");
+        exit(1);
     }
+
+        /* Increase recv buf size */
+        int recvBufBytes = 25000000;
+        setsockopt(dst_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+
+    // Configure settings in address struct
+    /*Configure settings in address struct*/
+    /* clear it out */
+    memset(&dst_addr6, 0, sizeof(dst_addr6));
+    /* it is an INET address */
+    dst_addr6.sin6_family = AF_INET6; 
+    /* the port we are going to send to, in network byte order */
+    dst_addr6.sin6_port = htons(dst_prt);           // "LB" = 0x4c42 by spec (network order)
+    /* the server IP address, in network byte order */
+    inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
+
+} else {
+
+    // Create UDP socket for transmission to sender
+    dst_sckt = socket(PF_INET, SOCK_DGRAM, 0);
+
+        /* Increase recv buf size */
+        int recvBufBytes = 25000000;
+        setsockopt(dst_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+
+    // Configure settings in address struct
+    dst_addr.sin_family = AF_INET;
+    dst_addr.sin_port = htons(dst_prt); // data consumer port to send to
+    dst_addr.sin_addr.s_addr = inet_addr(dst_ip); // indra-s3 as data consumer
+    memset(dst_addr.sin_zero, '\0', sizeof dst_addr.sin_zero);
+
+    // Initialize size variable to be used later on
+    socklen_t addr_size = sizeof dst_addr;
+}
 //=======================================================================
 
     uint8_t buffer[max_pckt_sz];
 
     uint8_t*  pBufLb =  buffer;
     uint8_t*  pBufRe = &buffer[lblen];
-    uint64_t* pTick   = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
-    uint64_t* pReTick = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
-    uint32_t* pSeq    = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-    uint16_t* pDid    = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint16_t* pLbEntrp = (uint16_t*) &buffer[lblen-sizeof(uint16_t)-sizeof(uint64_t)];
+    uint64_t* pLbTick  = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
+    uint16_t* pReDid   = (uint16_t*) &buffer[mdlen-sizeof(uint16_t)-sizeof(uint32_t)-sizeof(uint64_t)];
+    uint32_t* pReSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint64_t)];
+    uint64_t* pReTick  = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
 
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
 
         // locate ingress data after lb+re meta data regions
-        if ((nBytes = recvfrom(lstn_sckt, buffer, max_pckt_sz, 0, 
+        if ((nBytes = recvfrom(re_lstn_sckt, buffer, max_pckt_sz, 0, 
                         (struct sockaddr *)&src_addr, &addr_size)) < 0) {
             perror("recvfrom src socket");
             exit(1);
         }
 
         // decode to host encoding
-        uint64_t tick    = NTOHLL(*pTick);
-        uint64_t retick  = NTOHLL(*pReTick);
-        uint32_t seq     = ntohl(*pSeq);
-        uint16_t data_id = ntohs(*pDid);
-        uint8_t vrsn     = (pBufRe[0] & 0xf0) >> 4;
-        uint8_t frst     = (pBufRe[1] & 0x02) >> 1;
-        uint8_t lst      =  pBufRe[1] & 0x01;
+        uint16_t lb_entrp   = ntohs(*pLbEntrp);
+        uint64_t lb_tick    = NTOHLL(*pLbTick);
+        uint8_t re_vrsn     = (pBufRe[0] & 0xf0) >> 4;
+        uint8_t re_frst     = (pBufRe[1] & 0x02) >> 1;
+        uint8_t re_lst      =  pBufRe[1] & 0x01;
+        uint32_t re_seq     = ntohl(*pReSeq);
+        uint16_t re_data_id = ntohs(*pReDid);
+        uint64_t re_tick    = NTOHLL(*pReTick);
 
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
@@ -246,28 +248,29 @@ int main (int argc, char *argv[])
         if(passedV) {
             fprintf( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
             fprintf( stdout, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
-            fprintf( stdout, "tick = %" PRIu64 " ", tick);
-            fprintf( stdout, "frst = %d / lst = %d ", frst, lst); 
-            fprintf( stdout, " / data_id = %d / seq = %d\n", data_id, seq);	
-            fprintf( stdout, "tick = %" PRIx64 " ", retick);
+            fprintf( stdout, "lb_tick = %" PRIu64 " ", lb_tick);
+            fprintf( stdout, "lb_entrp = %d ", lb_entrp);
+            fprintf( stdout, "re_frst = %d / re_lst = %d ", re_frst, re_lst); 
+            fprintf( stdout, " / re_data_id = %d / re_seq = %d\n", re_data_id, re_seq);	
+            fprintf( stdout, "re_tick = %" PRIu64 " ", re_tick);
         }
         
         // forward data to sink skipping past lb meta data
         /* now send a datagram */
-	    ssize_t rtCd = 0;
-        if (passed6) {
-            if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
-                            (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-                perror("sendto failed");
-                exit(4);
-            }
-        } else {
-            if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
-                            (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-                perror("sendto failed");
-                exit(4);
-            }
+	ssize_t rtCd = 0;
+if (passed6) {
+        if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+                    (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
+            perror("sendto failed");
+            exit(4);
         }
+} else {
+        if ((rtCd = sendto(dst_sckt, &buffer[lblen], nBytes-lblen, 0, 
+                    (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
+            perror("sendto failed");
+            exit(4);
+        }
+}
         if(passedV) fprintf( stdout, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
 
 /*** why is this not working ?

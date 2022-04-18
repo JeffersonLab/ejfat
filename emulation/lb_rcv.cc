@@ -1,7 +1,7 @@
 //       Reassembly Engine - Volkswagon  Quality
 //
 // reads binary from well known ip/port
-// writes reassembled binary data to TCP port
+// writes reassembled binary data to stdout
 
 #include <unistd.h>
 #include <stdio.h>
@@ -29,10 +29,10 @@ using namespace std;
 #include <ctype.h>
 #endif
 
-const size_t max_pckt_sz  = 9000;
-const size_t max_data_ids = 100;   // support up to 10 data_ids
+const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
+const size_t max_data_ids = 1;          // support up to 10 data_ids
 const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
-const size_t relen        = 8+8;  // 8 for flags, data_id, 8 for tick
+const size_t relen        = 8+8;     // 8 for flags, data_id
 const size_t mdlen        = relen;
 
 // set up some cachd buffers for out-of-sequence work
@@ -53,13 +53,10 @@ void   Usage(void)
         -6 Use IPV6 \n\
         -i listen address (string)  \n\
         -p listen port (number)  \n\
-        -t send address (string)  \n\
-        -r send port (number)  \n\
-        -u send UDP (default TCP)  \n\
         -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
-        cout<<"Required: -i -p -t -r\n";
+        cout<<"Required: -i -p\n";
 }
 
 uint16_t cnt_trues(bool b[], uint16_t n) // returns count of true values in array
@@ -75,13 +72,13 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI=false, passedP=false, passedT=false, passedR=false, passed6=false,
-	passedU=false, passedV=false;
+    bool passedI=false, passedP=false, passed6=false,
+	passedV=false;
 
-    char     lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
-    uint16_t lstn_prt, dst_prt;                          // listening, target ports
+    char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
+    uint16_t lstn_prt;                  // listening port
 
-    while ((optc = getopt(argc, argv, "i:p:t:r:6uv")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:6v")) != -1)
     {
         switch (optc)
         {
@@ -102,20 +99,6 @@ int main (int argc, char *argv[])
             passedP = true;
             fprintf(stdout, "-p ");
             break;
-         case 't':
-            strcpy(dst_ip, (const char *) optarg) ;
-            passedT = true;
-            fprintf(stdout, "-t ");
-            break;
-        case 'r':
-            dst_prt = (uint16_t) atoi((const char *) optarg) ;
-            passedR = true;
-            fprintf(stdout, "-r ");
-            break;
-        case 'u':
-            passedU = true;
-            fprintf(stdout, "-u ");
-            break;
         case 'v':
             passedV = true;
             fprintf(stdout, "-v ");
@@ -128,17 +111,14 @@ int main (int argc, char *argv[])
         fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
-    if(!(passedI &&  passedP)) { Usage(); exit(1); }
-    if(  passedT && !passedR)  { Usage(); exit(1); }
+    if(!(passedI && passedP)) { Usage(); exit(1); }
 
     // pre-open all data_id streams for tick
     ofstream rs[max_data_ids];
-    if(!passedT) {
-        for(uint16_t s = 0; s < max_data_ids; s++) {
-            char x[64];
-            sprintf(x,"/tmp/rs_%d",s);
-            rs[s].open(x,std::ios::binary | std::ios::out);
-        }
+    for(uint16_t s = 0; s < max_data_ids; s++) {
+        char x[64];
+        sprintf(x,"/tmp/rs_%d_%d",lstn_prt,s);
+        rs[s].open(x,std::ios::binary | std::ios::out);
     }
 
 //===================== data reception setup ===================================
@@ -183,55 +163,9 @@ int main (int argc, char *argv[])
         bind(lstn_sckt, (struct sockaddr *) &lstn_addr, sizeof(lstn_addr));
     }
 
-//===================== data destination setup ===================================
-    int dst_sckt;
-    struct sockaddr_in6 dst_addr6;
-    struct sockaddr_in dst_addr;
-
-    if (passed6 && passedT) {
-        /* create a socket in the INET6 protocol */
-        if ((dst_sckt = socket(AF_INET6, passedU?SOCK_DGRAM:SOCK_STREAM, 0)) < 0) {
-            perror("creating dst socket");
-            exit(1);
-        }
-
-        // Configure settings in address struct
-        /*Configure settings in address struct*/
-        /* clear it out */
-        memset(&dst_addr6, 0, sizeof(dst_addr6));
-        /* it is an INET address */
-        dst_addr6.sin6_family = AF_INET6; 
-        /* the port we are going to send to, in network byte order */
-        dst_addr6.sin6_port = htons(dst_prt);           // "LB" = 0x4c42 by spec (network order)
-        /* the server IP address, in network byte order */
-        inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
-
-    } else if (passedT){
-        // Create  socket in the INET protocol
-        if ((dst_sckt = socket(PF_INET, passedU?SOCK_DGRAM:SOCK_STREAM, 0)) < 0) {
-	        perror("creating dst socket");
-	        exit(1);
-	    }
-
-        // Configure settings in address struct
-        dst_addr.sin_family = AF_INET;
-        dst_addr.sin_port = htons(dst_prt); // data consumer port to send to
-        dst_addr.sin_addr.s_addr = inet_addr(dst_ip); // indra-s3 as data consumer
-        memset(dst_addr.sin_zero, '\0', sizeof dst_addr.sin_zero);
-
-        // Initialize size variable to be used later on
-        socklen_t addr_size = sizeof dst_addr;
-    }
-    if(!passedU && passedT) if (connect(dst_sckt, 
-                            passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
-                            passed6?sizeof dst_addr6:sizeof dst_addr) < 0) {
-        perror("connecting to dst socket");
-        exit(1);
-    }
-
 //=======================================================================
 
-    // RE neta data is at front of in_buff
+    // RE meta data is at front of in_buff
     uint8_t* pBufRe = in_buff;
 
     // start all data_id streams at seq = 0
@@ -244,11 +178,11 @@ int main (int argc, char *argv[])
             pckt_sz[i][j] = 0;
         }
     }
-    uint16_t  num_data_ids = 0;  // number of data_ids encountered in this session
+    uint16_t num_data_ids = 0;  // number of data_ids encountered in this session
 
+    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint16_t)-sizeof(uint32_t)-sizeof(uint64_t)];
+    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint32_t)-sizeof(uint64_t)];
     uint64_t* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)];
-    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
 
     do {
         // Try to receive any incoming UDP datagram. Address and port of
@@ -257,12 +191,12 @@ int main (int argc, char *argv[])
         nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
 
         // decode to host encoding
-        uint64_t retick  = NTOHLL(*pReTick);
-        uint32_t seq     = ntohl(*pSeq);
+        uint8_t vrsn     = pBufRe[0] & 0xf;
+        uint8_t frst     = pBufRe[1] == 0x2; //(pBufRe[1] & 0x02) >> 1;
+        uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
         uint16_t data_id = ntohs(*pDid);
-        uint8_t  vrsn    = (pBufRe[0] & 0xf0) >> 4;
-        uint8_t  frst    = (pBufRe[1] & 0x02) >> 1;
-        uint8_t  lst     =  pBufRe[1] & 0x01;
+        uint32_t seq     = ntohl(*pSeq);
+        uint64_t re_tick    = NTOHLL(*pReTick);
 
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
@@ -273,7 +207,7 @@ int main (int argc, char *argv[])
             fprintf ( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
             fprintf ( stdout, "frst = %d / lst = %d ", frst, lst); 
             fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);	
-            fprintf ( stdout, "tick = %" PRIu64 "\n", retick);
+            fprintf( stdout, "re_tick = %" PRIu64 " ", re_tick);
         }
 
         if(data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
@@ -283,7 +217,7 @@ int main (int argc, char *argv[])
         if(seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded\n"; exit(1); }	
         memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
         pckt_sz[data_id][seq] = nBytes-relen;
-        pckt_cache_inuse[data_id][seq] = true;
+            pckt_cache_inuse[data_id][seq] = true;
 
         if(passedV) fprintf (stdout, "cnt_trues %d max_seq[%i] = %d\n", 
                         cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
@@ -293,28 +227,14 @@ int main (int argc, char *argv[])
             uint16_t evnt_sz = 0;
             for(uint8_t i = 0; i <= max_seq[data_id]; i++) {
                  //setup egress buffer for ERSAP
-                memmove(&out_buff[sizeof(uint16_t) + evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
+                memmove(&out_buff[evnt_sz], pckt_cache[data_id][i], pckt_sz[data_id][i]);
                 evnt_sz += pckt_sz[data_id][i];
                 if(passedV) fprintf ( stdout, "reassembling seq# %d size = %d\n", i, pckt_sz[data_id][i]);
             }
-            // put event size in reserved short sized slot at head of out_buf
-            if(passedV) fprintf ( stdout, "evnt6_sz = %d or on network =  %x\n", evnt_sz, htons(evnt_sz));
-            *((uint16_t*) out_buff) = (evnt_sz); 
             // forward data to sink skipping past lb meta data
-            ssize_t rtCd = 0;
-            if(passedU) {
-                if ((rtCd = sendto(dst_sckt, out_buff, evnt_sz + sizeof(uint16_t), 0, 
-                            passed6?(struct sockaddr *)&dst_addr6:(struct sockaddr *)&dst_addr, 
-                            passed6?sizeof dst_addr6:sizeof dst_addr)) < 0) {
-                    perror("sendto failed");
-                    exit(4);
-                }
-            } else {
-                if ((rtCd = send(dst_sckt, out_buff, evnt_sz + sizeof(uint16_t), 0)) < 0) {
-                    perror("send failed");
-                    exit(4);
-                }
-            }
+            if(passedV) fprintf (stdout, "writing seq %d  size = %d\n", seq, evnt_sz);
+            rs[data_id].write((char*)out_buff, evnt_sz);
+            rs[data_id].flush();
             // start all data_id streams at seq = 0
             for(uint16_t i = 0; i < max_data_ids; i++) {
                 data_ids_inuse[i] = false;

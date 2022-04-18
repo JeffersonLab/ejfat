@@ -26,9 +26,8 @@ void   Usage(void)
         -6 Use IPV6 \n\
         -i destination address (string)  \n\
         -p destination port (number)  \n\
-        -t tick  \n\
-        -d data_id  \n\
-        -n num_data_ids starting from initial  \n\
+        -t lb_tick  \n\
+        -d re_data_id  \n\
         -v verbose mode (default is quiet)  \n\
         -s max packet size (default 9000)  \n\
         -h help \n\n";
@@ -38,9 +37,9 @@ void   Usage(void)
 
 int main (int argc, char *argv[])
 {
-          size_t max_pckt_sz = 9000;
-    const size_t lblen       = 12;
-    const size_t relen       = 8+8;
+    const size_t max_pckt_sz = 9000-20-8;  // = MTU - IP header - UDP header
+    const size_t lblen       = 16;
+    const size_t relen       = 16;
     const size_t mdlen       = lblen + relen;
 
     int optc;
@@ -52,14 +51,18 @@ int main (int argc, char *argv[])
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
 
-    uint64_t tick         = 1;      // LB tick
-    uint16_t data_id      = 1;      // RE data_id
-    uint16_t num_data_ids = 1;      // number of data_ids starting from initial
-    const uint8_t vrsn    = 1;
-    const uint16_t rsrvd  = 2;      // = 2 just for testing
-    uint8_t frst          = 1;
-    uint8_t lst           = 0;
-    uint32_t seq          = 0;
+    const uint8_t lb_vrsn    = 1;
+    const uint8_t lb_prtcl   = 1;
+    const uint16_t lb_rsrvd  = 0;
+    uint64_t lb_tick         = 1;      // LB tick
+    const uint8_t re_vrsn    = 1;
+    const uint16_t re_rsrvd  = 0;
+    uint8_t re_frst          = 1;
+    uint8_t re_lst           = 0;
+    uint16_t re_data_id      = 1;      // RE data_id
+    uint32_t re_seq          = 0;
+
+    size_t pckt_sz = max_pckt_sz;
 
     while ((optc = getopt(argc, argv, "i:p:t:d:n:6vs:")) != -1)
     {
@@ -83,20 +86,17 @@ int main (int argc, char *argv[])
             fprintf(stdout, "-p ");
             break;
         case 't':
-            tick = (uint64_t) atoi((const char *) optarg) ;
+            lb_tick = (uint64_t) atoi((const char *) optarg) ;
             fprintf(stdout, "-t ");
             break;
         case 'd':
-            data_id = (uint16_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-d ");
-            break;
-        case 'n':
-            num_data_ids = (uint16_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-n ");
+            re_data_id = (uint16_t) atoi((const char *) optarg) ;
+            fprintf(stdout, "-d %d ", re_data_id);
             break;
         case 's':
-            max_pckt_sz = (size_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-s ");
+            pckt_sz = (size_t) atoi((const char *) optarg) -20-8;  // = MTU - IP header - UDP header
+            pckt_sz = min(pckt_sz,max_pckt_sz);
+            fprintf(stdout, "-s %d ", pckt_sz);
             break;
         case 'v':
             passedV = true;
@@ -113,7 +113,7 @@ int main (int argc, char *argv[])
     if(!(passedI && passedP)) { Usage(); exit(1); }
 
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
-    size_t num_to_read = max_pckt_sz-mdlen; // max bytes to read reserving space for metadata
+    size_t num_to_read = pckt_sz-mdlen; // max bytes to read reserving space for metadata
 
 //===================== data destination setup ===================================
     int dst_sckt;
@@ -161,75 +161,88 @@ int main (int argc, char *argv[])
 //=======================================================================
     inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
 
-    uint8_t buffer[max_pckt_sz];
+    uint8_t buffer[pckt_sz];
 
-    uint8_t*  pBufLb =  buffer;
-    uint8_t*  pBufRe = &buffer[lblen];
-    uint64_t* pTick   = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
-    uint64_t* pReTick = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
-    uint32_t* pSeq    = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-    uint16_t* pDid    = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
     // meta-data in network order
-
+	// LB metadata
+    uint8_t*  pBufLb =  buffer;
     pBufLb[0] = 'L'; // 0x4c
     pBufLb[1] = 'B'; //0x42
-    pBufLb[2] = 1;   //version
-    pBufLb[3] = 1;   //protocol
-    *pTick    = HTONLL(tick);
-    *pReTick  = HTONLL(tick);
-
-    pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
-    *pDid     = htons(data_id);
-    *pSeq     = htonl(seq);
+    pBufLb[2] = lb_vrsn;   //version
+    pBufLb[3] = lb_prtcl;  //protocol
+    pBufLb[4] = 0;   //reserved
+    pBufLb[5] = 0;   //reserved
+    uint16_t* pEntrp  = (uint16_t*) &pBufLb[6];
+    uint64_t* pTick   = (uint64_t*) &pBufLb[8];
+    *pTick    = HTONLL(lb_tick);
+	// RE metadata
+    uint8_t*  pBufRe = &buffer[lblen];
+    pBufRe[0] = 0x10; //(re_vrsn & 0xf) + (re_rsrvd & 0x3f0) >> 4;
+    pBufRe[1] = 0x2; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
+    uint16_t* pDid   = (uint16_t*) &pBufRe[2];
+    uint32_t* pSeq   = (uint32_t*) &pBufRe[4];
+    uint64_t* pReTick = (uint64_t*) &pBufLb[8];
+    *pDid     = htons(re_data_id);
+    *pSeq     = htonl(re_seq);
+    *pReTick  = *pTick;
 
     do {
         f1.read((char*)&buffer[mdlen], num_to_read);
         streamsize nr = f1.gcount();
-        if(passedV) cout  << "Num read from stdin: " << nr << endl;
+        if(passedV) cout  << "\nNum read from stdin: " << nr << endl;
         if(nr != num_to_read) {
-            lst  = 1;
-            pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
+            re_lst  = 1;
+            pBufRe[1] = 0x1; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
         }
 
         // forward data to LB
-        for(uint16_t didcnt = 0; didcnt < num_data_ids; didcnt++) {
 
-            *pDid = htons(data_id + didcnt);
+        *pEntrp = 0; // until p4 entropy field field fix  // htons(ntohl(*pSeq)); // for now
 
-            if(passedV) {
-                fprintf ( stdout, "LB Meta-data on the wire:");
-                for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufLb[b]);
-                fprintf ( stdout, "\nfor tick = %" PRIu64 " ", *pTick);
-                fprintf ( stdout, "tick = %" PRIx64 " ", *pTick);
-                fprintf ( stdout, "for tick = %" PRIu64 "\n", tick);
-                fprintf ( stdout, "RE Meta-data on the wire:");
-                for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
-                fprintf ( stdout, "\nfor frst = %d / lst = %d ", frst, lst); 
-                fprintf ( stdout, " / data_id = %d / seq = %d ", data_id + didcnt, seq);	
-                fprintf ( stdout, "tick = %" PRIu64 "\n", tick);
-            }
+        if(passedV) {
+            fprintf ( stdout, "\nLB Meta-data:\n");
+            for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x", b, pBufLb[b]);
+            fprintf ( stdout, " entropy = %d", ntohs(*pEntrp));
+            fprintf ( stdout, " lb_tick = %" PRIu64 "\n", lb_tick);
 
-            ssize_t rtCd = 0;
-            /* now send a datagram */
-            size_t num_to_send = nr+mdlen; // max bytes to send including metadata
-            if (passed6) {
-                if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
-                            (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-                    perror("sendto failed");
-                    exit(4);
-                }
-            } else {
-                if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
-                            (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-                    perror("sendto failed");
-                    exit(4);
-                }
-            }
-            if(passedV) fprintf ( stdout, "Sending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+            fprintf ( stdout, "\nLB Meta-data on the wire:\n");
+            for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x", b, pBufLb[b]);
+            fprintf ( stdout, " entropy = %d", (*pEntrp));
+            fprintf ( stdout, " for lb_tick = %" PRIu64 " ", *pTick);
+
+            fprintf ( stdout, "\nRE Meta-data:\n");
+            for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
+            fprintf ( stdout, " for re_frst = %d / re_lst = %d", re_frst, re_lst); 
+            fprintf ( stdout, " / re_data_id = %d / re_seq = %d\n", re_data_id, re_seq);	
+            fprintf ( stdout, " re_tick = %" PRIu64 "\n", lb_tick);
+
+            fprintf ( stdout, "\nRE Meta-data on the wire:\n");
+            for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
+            fprintf ( stdout, " for re_frst = %d / re_lst = %d", re_frst, re_lst); 
+            fprintf ( stdout, " / re_data_id = %d / re_seq = %d\n", *pDid, *pSeq);	
+            fprintf ( stdout, " for re_tick = %" PRIu64 " ", *pReTick);
         }
-        frst = 0;
-        pBufRe[1] = (rsrvd << 2) + (frst << 1) + lst;
-        *pSeq = htonl(++seq);
-    } while(!lst);
+
+        ssize_t rtCd = 0;
+        /* now send a datagram */
+        size_t num_to_send = nr+mdlen; // max bytes to send including metadata
+        if (passed6) {
+            if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
+                    (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
+                perror("sendto failed");
+                exit(4);
+            }
+        } else {
+            if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
+                    (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
+                perror("sendto failed");
+                exit(4);
+            }
+        }
+        if(passedV) fprintf ( stdout, "\nSending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+        re_frst = 0;
+        pBufRe[1] = 0x0; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
+        *pSeq = htonl(++re_seq);
+    } while(!re_lst);
     return 0;
 }
