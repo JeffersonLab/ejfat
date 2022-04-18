@@ -51,15 +51,15 @@ int main (int argc, char *argv[])
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
 
-    uint64_t lb_tick         = 1;      // LB tick
-    uint16_t re_data_id      = 1;      // RE data_id
     const uint8_t lb_vrsn    = 1;
     const uint8_t lb_prtcl   = 1;
     const uint16_t lb_rsrvd  = 0;
+    uint64_t lb_tick         = 1;      // LB tick
     const uint8_t re_vrsn    = 1;
     const uint16_t re_rsrvd  = 0;
     uint8_t re_frst          = 1;
     uint8_t re_lst           = 0;
+    uint16_t re_data_id      = 1;      // RE data_id
     uint32_t re_seq          = 0;
 
     size_t pckt_sz = max_pckt_sz;
@@ -91,12 +91,12 @@ int main (int argc, char *argv[])
             break;
         case 'd':
             re_data_id = (uint16_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-d ");
+            fprintf(stdout, "-d %d ", re_data_id);
             break;
         case 's':
-            pckt_sz = (size_t) atoi((const char *) optarg) ;
+            pckt_sz = (size_t) atoi((const char *) optarg) -20-8;  // = MTU - IP header - UDP header
             pckt_sz = min(pckt_sz,max_pckt_sz);
-            fprintf(stdout, "-s ");
+            fprintf(stdout, "-s %d ", pckt_sz);
             break;
         case 'v':
             passedV = true;
