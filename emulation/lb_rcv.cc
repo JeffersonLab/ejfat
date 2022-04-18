@@ -30,9 +30,9 @@ using namespace std;
 #endif
 
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
-const size_t max_data_ids = 100;   // support up to 10 data_ids
-const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
-const size_t relen        = 8;     // 8 for flags, data_id
+const size_t max_data_ids = 1;          // support up to 10 data_ids
+const size_t max_ooo_pkts = 1000;       // support up to 100 out of order packets
+const size_t relen        = 8;          // 8 for flags, data_id
 const size_t mdlen        = relen;
 
 // set up some cachd buffers for out-of-sequence work
