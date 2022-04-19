@@ -79,16 +79,16 @@ int main (int argc, char *argv[])
         case 'i':
             strcpy(dst_ip, (const char *) optarg) ;
             passedI = true;
-            fprintf(stdout, "-i ");
+            fprintf(stdout, "-i %s ", dst_ip);
             break;
         case 'p':
             dst_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
-            fprintf(stdout, "-p ");
+            fprintf(stdout, "-p %d", dst_prt);
             break;
         case 't':
             lb_tick = (uint64_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-t ");
+            fprintf(stdout, "-t %lu", lb_tick);
             break;
         case 'd':
             re_data_id = (uint16_t) atoi((const char *) optarg) ;
@@ -97,7 +97,7 @@ int main (int argc, char *argv[])
         case 's':
             pckt_sz = (size_t) atoi((const char *) optarg) -20-8;  // = MTU - IP header - UDP header
             pckt_sz = min(pckt_sz,max_pckt_sz);
-            fprintf(stdout, "-s %d ", pckt_sz);
+            fprintf(stdout, "-s %lu ", pckt_sz);
             break;
         case 'e':
             passedE = true;
@@ -112,7 +112,7 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         }
-        fprintf(stdout, "%s ", optarg);
+//        fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
@@ -186,7 +186,7 @@ int main (int argc, char *argv[])
     pBufRe[1] = 0x2; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
     uint16_t* pDid    = (uint16_t*) &pBufRe[2];
     uint32_t* pSeq    = (uint32_t*) &pBufRe[4];
-    uint64_t* pReTick = (uint64_t*) &pBufLb[8];
+    uint64_t* pReTick = (uint64_t*) &pBufRe[8];
     *pDid     = htons(re_data_id);
     *pSeq     = htonl(re_seq);
     *pReTick  = *pTick;
