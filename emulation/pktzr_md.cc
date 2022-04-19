@@ -28,6 +28,7 @@ void   Usage(void)
         -p destination port (number)  \n\
         -t lb_tick  \n\
         -d re_data_id  \n\
+        -e Use LB entropy  \n\
         -v verbose mode (default is quiet)  \n\
         -s max packet size (default 9000)  \n\
         -h help \n\n";
@@ -46,7 +47,7 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI=false, passedP=false, passed6=false, passedV=false;
+    bool passedI=false, passedP=false, passed6=false, passedV=false, passedE=false;
 
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
@@ -64,7 +65,7 @@ int main (int argc, char *argv[])
 
     size_t pckt_sz = max_pckt_sz;
 
-    while ((optc = getopt(argc, argv, "i:p:t:d:n:6vs:")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:d:n:e6vs:")) != -1)
     {
         switch (optc)
         {
@@ -78,16 +79,16 @@ int main (int argc, char *argv[])
         case 'i':
             strcpy(dst_ip, (const char *) optarg) ;
             passedI = true;
-            fprintf(stdout, "-i ");
+            fprintf(stdout, "-i %s ", dst_ip);
             break;
         case 'p':
             dst_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
-            fprintf(stdout, "-p ");
+            fprintf(stdout, "-p %d", dst_prt);
             break;
         case 't':
             lb_tick = (uint64_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-t ");
+            fprintf(stdout, "-t %lu", lb_tick);
             break;
         case 'd':
             re_data_id = (uint16_t) atoi((const char *) optarg) ;
@@ -96,7 +97,11 @@ int main (int argc, char *argv[])
         case 's':
             pckt_sz = (size_t) atoi((const char *) optarg) -20-8;  // = MTU - IP header - UDP header
             pckt_sz = min(pckt_sz,max_pckt_sz);
-            fprintf(stdout, "-s %d ", pckt_sz);
+            fprintf(stdout, "-s %lu ", pckt_sz);
+            break;
+        case 'e':
+            passedE = true;
+            fprintf(stdout, "-e ");
             break;
         case 'v':
             passedV = true;
@@ -107,7 +112,6 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         }
-        fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
@@ -195,7 +199,7 @@ int main (int argc, char *argv[])
 
         // forward data to LB
 
-        *pEntrp = 0; // until p4 entropy field field fix  // htons(ntohl(*pSeq)); // for now
+        if(passedE) *pEntrp = htons(re_data_id); else *pEntrp = 0;
 
         if(passedV) {
             fprintf ( stdout, "\nLB Meta-data:\n");
