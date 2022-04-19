@@ -30,7 +30,7 @@ using namespace std;
 #endif
 
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
-const size_t max_data_ids = 1;          // support up to 10 data_ids
+const size_t max_data_ids = 100;          // support up to 10 data_ids
 const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
 const size_t relen        = 8+8;     // 8 for flags, data_id
 const size_t mdlen        = relen;
@@ -92,12 +92,12 @@ int main (int argc, char *argv[])
         case 'i':
             strcpy(lstn_ip, (const char *) optarg) ;
             passedI = true;
-            fprintf(stdout, "-i ");
+            fprintf(stdout, "-i %s ", lstn_ip);
             break;
         case 'p':
             lstn_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
-            fprintf(stdout, "-p ");
+            fprintf(stdout, "-p %d", lstn_prt);
             break;
         case 'v':
             passedV = true;
@@ -108,7 +108,7 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         }
-        fprintf(stdout, "%s ", optarg);
+//        fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
