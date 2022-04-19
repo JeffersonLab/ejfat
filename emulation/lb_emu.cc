@@ -101,7 +101,7 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         }
-        fprintf(stdout, "%s ", optarg);
+//        fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP && passedT && passedR)) { Usage(); exit(1); }
@@ -169,6 +169,7 @@ int main (int argc, char *argv[])
 
 //===================== data destination setup ===================================
     uint16_t nm_rcv_prts = 1 << nm_entrp_bts;  //int(std::power(2,nm_entrp_bts));
+    fprintf(stdout, "\nnm_rcv_prts %d\n", nm_rcv_prts);
     int dst_sckt[nm_rcv_prts];
     struct sockaddr_in6 dst_addr6[nm_rcv_prts];
     struct sockaddr_in dst_addr[nm_rcv_prts];
