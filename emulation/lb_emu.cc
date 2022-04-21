@@ -13,6 +13,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <netdb.h>
+#include <time.h>
 
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
@@ -285,6 +286,15 @@ int main (int argc, char *argv[])
         }
          fprintf( stdout, "Sending %d bytes to %s : %s\n", int(nBytes-lblen), gtnm_ip, gtnm_srvc);
 ***/
+            // `time_t` is an arithmetic time type
+            time_t now;
+         
+            // Obtain current time
+            // `time()` returns the current time of the system as a `time_t` value
+            time(&now);
+         
+            // Convert to local time format and print to stdout
+            fprintf ( stdout, "Today is %s", ctime(&now));
     }
 
     return 0;
