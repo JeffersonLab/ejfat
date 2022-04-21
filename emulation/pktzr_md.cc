@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <inttypes.h>
+#include <time.h>
 
 using namespace std;
 
@@ -244,5 +245,14 @@ int main (int argc, char *argv[])
         pBufRe[1] = 0x0; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
         *pSeq = htonl(++re_seq);
     } while(!re_lst);
+            // `time_t` is an arithmetic time type
+            time_t now;
+         
+            // Obtain current time
+            // `time()` returns the current time of the system as a `time_t` value
+            time(&now);
+         
+            // Convert to local time format and print to stdout
+            fprintf ( stdout, "Today is %s", ctime(&now));
     return 0;
 }

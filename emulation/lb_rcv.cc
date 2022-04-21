@@ -19,6 +19,7 @@
 #include <iostream>
 #include <inttypes.h>
 #include <netdb.h>
+#include <time.h>
 
 using namespace std;
 
@@ -219,7 +220,8 @@ int main (int argc, char *argv[])
                         cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
 
         if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
-                                                    == max_seq[data_id] + 1)  { //build blob and transfer
+                                                    == max_seq[data_id] + 1)  { 
+		    //build blob and transfer
             uint16_t evnt_sz = 0;
             for(uint8_t i = 0; i <= max_seq[data_id]; i++) {
                  //setup egress buffer for ERSAP
@@ -241,7 +243,17 @@ int main (int argc, char *argv[])
                     pckt_sz[i][j] = 0;
                 }
             }
-            num_data_ids = 0;  // number of data_ids encountered in this session
+            num_data_ids = 0;  // reset number of data_ids encountered in this session
+ 
+            // `time_t` is an arithmetic time type
+            time_t now;
+         
+            // Obtain current time
+            // `time()` returns the current time of the system as a `time_t` value
+            time(&now);
+         
+            // Convert to local time format and print to stdout
+            fprintf ( stdout, "Today is %s", ctime(&now));
         }
         if(passedV) cout << endl;
     } while(1);
