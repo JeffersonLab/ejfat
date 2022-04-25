@@ -48,8 +48,8 @@
 #define ADD_LB_HEADER 1
 
 #ifdef ADD_LB_HEADER
-    #define LB_HEADER_BYTES 12
-    #define HEADER_BYTES    28
+    #define LB_HEADER_BYTES 16
+    #define HEADER_BYTES    32
 #else
     #define LB_HEADER_BYTES 0
     #define HEADER_BYTES    16
@@ -163,38 +163,51 @@ namespace ejfat {
         /**
          * Set the Load Balancer header data.
          * The first four bytes go as ordered.
+         * The entropy goes as a single, network byte ordered, 16-bit int.
          * The tick goes as a single, network byte ordered, 64-bit int.
+         *
+         * <pre>
+         *  protocol 'L:8,B:8,Version:8,Protocol:8,Reserved:16,Entropy:16,Tick:64'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |       L       |       B       |    Version    |    Protocol   |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  3               4                   5                   6
+         *  2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |              Rsvd             |            Entropy            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  6                                               12
+         *  4 5       ...           ...         ...         0 1 2 3 4 5 6 7
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                              Tick                             +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
          *
          * @param buffer   buffer in which to write the header.
          * @param tick     unsigned 64 bit tick number used to tell the load balancer
          *                 which backend host to direct the packet to.
          * @param version  version of this software.
          * @param protocol protocol this software uses.
+         * @param entropy  entropy field used to determine destination port.
          */
-        static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol) {
-
-            // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |       L       |       B       |    Version    |    Protocol   |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                                                               |
-            // +                              Tick                             +
-            // |                                                               |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
+        static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol, int entropy) {
             *buffer     = 'L';
             *(buffer+1) = 'B';
             *(buffer+2) = version;
             *(buffer+3) = protocol;
             // Put the data in network byte order (big endian)
-            *((uint64_t *)(buffer + 4)) = htonll(tick);
+            *(buffer+6) = htons(entropy);
+            *((uint64_t *)(buffer + 8)) = htonll(tick);
         }
 
     #else
 
-        static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol) {}
+        static void setLbMetadata(char* buffer, uint64_t tick, int version, int protocol, int entropy) {}
 
     #endif
 
@@ -205,6 +218,22 @@ namespace ejfat {
          * The first 16 bits go as ordered. The dataId is put in network byte order.
          * The offset and tick are also put into network byte order.</p>
          * Implemented <b>without</b> using C++ bit fields.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |Version|        Rsvd       |F|L|            Data-ID            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                  UDP Packet Offset                            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                              Tick                             +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
          *
          * @param buffer  buffer in which to write the header.
          * @param first   is this the first packet?
@@ -220,20 +249,6 @@ namespace ejfat {
         static void setReMetadata(char* buffer, bool first, bool last,
                                   uint64_t tick, uint32_t offset,
                                   int version, uint16_t dataId) {
-
-            // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |Version|        Rsvd       |F|L|            Data-ID            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                  UDP Packet Offset                            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                                                               |
-            // +                              Tick                             +
-            // |                                                               |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
             buffer[0] = version << 4;
             buffer[1] = (first << 1) + last;
 
@@ -263,6 +278,7 @@ namespace ejfat {
       * @param clientSocket   UDP sending socket.
       * @param tick           value used by load balancer in directing packets to final host.
       * @param protocol       protocol in laad balance header.
+      * @param entropy        entropy in laad balance header.
       * @param version        version in reassembly header.
       * @param dataId         data id in reassembly header.
       * @param offset         value-result parameter that passes in the sequence number of first packet
@@ -276,7 +292,7 @@ namespace ejfat {
       * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
     static int sendPacketizedBufferFast(char* dataBuffer, size_t dataLen, int maxUdpPayload,
-                                        int clientSocket, uint64_t tick, int protocol,
+                                        int clientSocket, uint64_t tick, int protocol, int entropy,
                                         int version, uint16_t dataId,
                                         uint32_t *offset, uint32_t delay,
                                         bool firstBuffer, bool lastBuffer, bool debug,
@@ -318,7 +334,7 @@ namespace ejfat {
                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
             // Write LB meta data into buffer
-            setLbMetadata(writeHeaderTo, tick, version, protocol);
+            setLbMetadata(writeHeaderTo, tick, version, protocol, entropy);
 
             // Write RE meta data into buffer
             setReMetadata(writeHeaderTo + LB_HEADER_BYTES,
@@ -403,6 +419,7 @@ namespace ejfat {
      * @param clientSocket   UDP sending socket.
      * @param tick           value used by load balancer in directing packets to final host.
      * @param protocol       protocol in laad balance header.
+     * @param entropy        entropy in laad balance header.
      * @param version        version in reassembly header.
      * @param dataId         data id in reassembly header.
      * @param offset         value-result parameter that passes in the sequence number of first packet
@@ -416,7 +433,7 @@ namespace ejfat {
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
      */
     static int sendPacketizedBufferSend(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
-                                        int clientSocket, uint64_t tick, int protocol,
+                                        int clientSocket, uint64_t tick, int protocol, int entropy,
                                         int version, uint16_t dataId,
                                         uint32_t *offset, uint32_t delay,
                                         bool firstBuffer, bool lastBuffer, bool debug,
@@ -460,7 +477,7 @@ namespace ejfat {
                                bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
             // Write LB meta data into buffer
-            setLbMetadata(buffer, tick, version, protocol);
+            setLbMetadata(buffer, tick, version, protocol, entropy);
 
             // Write RE meta data into buffer
             setReMetadata(buffer + LB_HEADER_BYTES,
@@ -534,6 +551,7 @@ namespace ejfat {
      * @param destination    destination host and port of packets.
      * @param tick           value used by load balancer in directing packets to final host.
      * @param protocol       protocol in laad balance header.
+     * @param entropy        entropy in laad balance header.
      * @param version        version in reassembly header.
      * @param dataId         data id in reassembly header.
      * @param offset         value-result parameter that passes in the sequence number of first packet
@@ -548,8 +566,8 @@ namespace ejfat {
      */
         static int sendPacketizedBufferSendto(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                               int clientSocket, struct sockaddr_in* destination,
-                                              uint64_t tick, int protocol, int version, uint16_t dataId,
-                                              uint32_t *offset, uint32_t delay,
+                                              uint64_t tick, int protocol, int entropy, int version,
+                                              uint16_t dataId, uint32_t *offset, uint32_t delay,
                                               bool firstBuffer, bool lastBuffer, bool debug,
                                               int64_t *packetsSent) {
 
@@ -591,7 +609,7 @@ namespace ejfat {
                                    bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
                 // Write LB meta data into buffer
-                setLbMetadata(buffer, tick, version, protocol);
+                setLbMetadata(buffer, tick, version, protocol, entropy);
 
                 // Write RE meta data into buffer
                 setReMetadata(buffer + LB_HEADER_BYTES,
@@ -659,6 +677,7 @@ namespace ejfat {
      * @param destination    FPGA address.
      * @param tick           value used by load balancer in directing packets to final host.
      * @param protocol       protocol in laad balance header.
+     * @param entropy        entropy in laad balance header.
      * @param version        version in reassembly header.
      * @param dataId         data id in reassembly header.
      * @param offset         value-result parameter that passes in the sequence number of first packet
@@ -673,8 +692,8 @@ namespace ejfat {
      */
     static int sendPacketizedBufferSendmsg(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                            int clientSocket, struct sockaddr_in* destination,
-                                           uint64_t tick, int protocol, int version, uint16_t dataId,
-                                           uint32_t *offset, uint32_t delay,
+                                           uint64_t tick, int protocol, int entropy, int version,
+                                           uint16_t dataId, uint32_t *offset, uint32_t delay,
                                            bool firstBuffer, bool lastBuffer, bool debug,
                                            int64_t *packetsSent) {
 
@@ -734,7 +753,7 @@ namespace ejfat {
                                bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
             // Write LB meta data into buffer
-            setLbMetadata(headerBuffer, tick, version, protocol);
+            setLbMetadata(headerBuffer, tick, version, protocol, entropy);
 
             // Write RE meta data into buffer
             setReMetadata(headerBuffer + LB_HEADER_BYTES,
@@ -804,6 +823,8 @@ namespace ejfat {
       *                   which includes IP and UDP headers.
       * @param port       UDP port to send to.
       * @param tick       tick value for Load Balancer header used in directing packets to final host.
+      * @param protocol   protocol in reassembly header.
+      * @param entropy    entropy in reassembly header.
       * @param version    version in reassembly header.
       * @param dataId     data id in reassembly header.
       * @param delay      delay in millisec between each packet being sent.
@@ -815,7 +836,7 @@ namespace ejfat {
       * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
-                          int mtu, uint16_t port, uint64_t tick, int protocol,
+                          int mtu, uint16_t port, uint64_t tick, int protocol, int entropy,
                           int version, uint16_t dataId, uint32_t delay,
                           bool debug, bool fast) {
 
@@ -880,12 +901,12 @@ if (debug) fprintf(stderr, "Connecting to host %s\n", host.c_str());
 
         if (fast) {
             err = sendPacketizedBufferFast(buffer, bufLen, maxUdpPayload, clientSocket,
-                                             tick, protocol, version, dataId, &offset, delay,
+                                             tick, protocol, entropy, version, dataId, &offset, delay,
                                              true, true, debug, &packetsSent);
         }
         else {
             err = sendPacketizedBufferSend(buffer, bufLen, maxUdpPayload, clientSocket,
-                                           tick, protocol, version, dataId, &offset, delay,
+                                           tick, protocol, entropy, version, dataId, &offset, delay,
                                            true, true, debug, &packetsSent);
         }
          close(clientSocket);

@@ -156,39 +156,72 @@ namespace ersap {
 
         /**
          * Parse the load balance header at the start of the given buffer.
+         * This routine will, most likely, never be used as this header is
+         * stripped off and parsed in the load balancer and the user never
+         * sees it.
+         *
+         * <pre>
+         *  protocol 'L:8,B:8,Version:8,Protocol:8,Reserved:16,Entropy:16,Tick:64'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |       L       |       B       |    Version    |    Protocol   |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  3               4                   5                   6
+         *  2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |              Rsvd             |            Entropy            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  6                                               12
+         *  4 5       ...           ...         ...         0 1 2 3 4 5 6 7
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                              Tick                             +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
          *
          * @param buffer   buffer to parse.
          * @param ll       return 1st byte as char.
          * @param bb       return 2nd byte as char.
          * @param version  return 3rd byte as integer version.
          * @param protocol return 4th byte as integer protocol.
+         * @param entropy  return 2 bytes as 16 bit integer entropy.
          * @param tick     return last 8 bytes as 64 bit integer tick.
          */
         static void parseLbHeader(char* buffer, char* ll, char* bb,
                                   uint32_t* version, uint32_t* protocol,
-                                  uint64_t* tick)
+                                  uint32_t* entropy, uint64_t* tick)
         {
-            // protocol 'L:8, B:8, Version:8, Protocol:8, Tick:64'
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |       L       |       B       |    Version    |    Protocol   |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                                                               |
-            // +                              Tick                             +
-            // |                                                               |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
             *ll = buffer[0];
             *bb = buffer[1];
             *version  = (uint32_t)buffer[2];
             *protocol = (uint32_t)buffer[3];
-            *tick     = ntohll(*((uint64_t *)(&buffer[4])));
+            *entropy  = ntohs(*((uint16_t *)(&buffer[6]))) & 0xffff;
+            *tick     = ntohll(*((uint64_t *)(&buffer[8])));
         }
 
 
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer args.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |Version|        Rsvd       |F|L|            Data-ID            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                  UDP Packet Offset                            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                              Tick                             +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
          *
          * @param buffer   buffer to parse.
          * @param version  returned version.
@@ -203,19 +236,6 @@ namespace ersap {
                                   uint16_t* dataId, uint32_t* sequence,
                                   uint64_t *tick)
         {
-            // protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
-            // 0                   1                   2                   3
-            // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |Version|        Rsvd       |F|L|            Data-ID            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                  UDP Packet Offset                            |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-            // |                                                               |
-            // +                              Tick                             +
-            // |                                                               |
-            // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
             // Now pull out the component values
             *version = (buffer[0] & 0xf0) >> 4;
             *first   = (buffer[1] & 0x02) >> 1;

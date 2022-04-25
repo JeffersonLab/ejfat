@@ -33,7 +33,7 @@ using namespace ersap::ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-sendto] [-sendmsg] [-sendnocp]",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -44,6 +44,7 @@ static void printHelp(char *programName) {
             "        [-ver <version>]",
             "        [-id <data id>]",
             "        [-pro <protocol>]",
+            "        [-e <entropy>]",
             "        [-b <buffer size>]",
             "        [-s <UDP send buffer size>]",
             "        [-spin <# of spins to delay between buffers>]",
@@ -59,7 +60,7 @@ static void printHelp(char *programName) {
 
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
-                      int *version, uint16_t *id, uint16_t* port,
+                      int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
                       uint32_t *bufsize, uint32_t *sendBufSize, int *spins,
                       bool *debug, bool *sendto, bool *sendmsg, bool *sendnocp,
@@ -88,7 +89,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:s:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:s:e:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -141,6 +142,16 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     fprintf(stderr, "Invalid argument to -s, UDP send buf size >= 100kB\n");
                     exit(-1);
                 }
+                break;
+
+            case 'e':
+                // ENTROPY
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp < 0) {
+                    fprintf(stderr, "Invalid argument to -e. Entropy must be >= 0\n");
+                    exit(-1);
+                }
+                *entropy = i_tmp;
                 break;
 
             case 'd':
@@ -294,7 +305,7 @@ int main(int argc, char **argv) {
     uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
-    int mtu, version = 1, protocol = 1;
+    int mtu, version = 1, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
     bool debug = false, sendto = false, sendmsg = false, sendnocp = false;
 
@@ -304,7 +315,7 @@ int main(int argc, char **argv) {
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
 
-    parseArgs(argc, argv, &mtu, &protocol, &version, &dataId, &port, &tick,
+    parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufsize, &sendBufSize, &spins, &debug, &sendto, &sendmsg, &sendnocp,
               host, interface);
 
@@ -405,22 +416,22 @@ int main(int argc, char **argv) {
         if (sendnocp) {
             err = sendPacketizedBufferFast(buf, bufsize,
                                            maxUdpPayload, clientSocket,
-                                           tick, protocol, version, dataId, &offset, delay,
+                                           tick, protocol, entropy, version, dataId, &offset, delay,
                                            firstBuffer, lastBuffer, debug, &packetsSent);
         }
         else if (send) {
             err = sendPacketizedBufferSend(buf, bufsize, maxUdpPayload, clientSocket,
-                                           tick, protocol, version, dataId, &offset, delay,
+                                           tick, protocol, entropy, version, dataId, &offset, delay,
                                            firstBuffer, lastBuffer, debug, &packetsSent);
         }
         else if (sendto) {
             err = sendPacketizedBufferSendto(buf, bufsize, maxUdpPayload, clientSocket, &serverAddr,
-                                             tick, protocol, version, dataId, &offset, delay,
+                                             tick, protocol, entropy, version, dataId, &offset, delay,
                                              firstBuffer, lastBuffer, debug, &packetsSent);
         }
         else {
             err = sendPacketizedBufferSendmsg(buf, bufsize, maxUdpPayload, clientSocket, &serverAddr,
-                                              tick, protocol, version, dataId, &offset, delay,
+                                              tick, protocol, entropy, version, dataId, &offset, delay,
                                               firstBuffer, lastBuffer, debug, &packetsSent);
         }
 
