@@ -26,6 +26,7 @@ namespace ejfat {
         version = 1;
         dataId = 1;
         protocol = 1;
+        entropy = 0;
         delay = 0;
         host = "127.0.0.1";
         interface = "eth0";
@@ -106,6 +107,12 @@ namespace ejfat {
                     protocol = 1;
                 }
             }
+            else if (key == "entropy") {
+                entropy = (int)strtol(val.c_str(), (char **)nullptr, 10);
+                if (errno == EINVAL || errno == ERANGE) {
+                    entropy = 0;
+                }
+            }
             else if (key == "dataId") {
                 dataId = (uint16_t)strtol(val.c_str(), (char **)nullptr, 10);
                 if ((dataId == 0) && (errno == EINVAL || errno == ERANGE)) {
@@ -132,7 +139,7 @@ namespace ejfat {
         //        std::cout << "EJFAT processing..." << std::endl;
 
         int err = sendBuffer(buffer, bufLen, host, interface,
-                             mtu, port, tick, protocol, version, dataId, delay, debug, true);
+                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);
@@ -143,13 +150,13 @@ namespace ejfat {
     void EjfatPacketizeEngine::process(char *buffer, uint32_t bufLen,
                                        std::string & host, const std::string & interface,
                                        int mtu, uint16_t port, uint64_t tick,
-                                       int protocol, int version, uint16_t dataId,
+                                       int protocol, int entropy, int version, uint16_t dataId,
                                        uint32_t delay, bool debug)
     {
 //        std::cout << "EJFAT processing..." << std::endl;
 
         int err = sendBuffer(buffer, bufLen, host, interface,
-                             mtu, port, tick, protocol, version, dataId, delay, debug, true);
+                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);

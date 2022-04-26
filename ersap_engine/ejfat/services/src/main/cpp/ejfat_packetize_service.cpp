@@ -63,6 +63,7 @@ ersap::EngineData EjfatPacketizeService::configure(ersap::EngineData& input)
     ver = 1;
     dataId = 1;
     protocol = 1;
+    entropy = 0;
     delay = 0;
     debug = false;
 
@@ -94,6 +95,9 @@ ersap::EngineData EjfatPacketizeService::configure(ersap::EngineData& input)
     if (ersap::stdlib::has_key(config, "protocol")) {
         protocol = ersap::stdlib::get_int(config, "protocol");
     }
+    if (ersap::stdlib::has_key(config, "entropy")) {
+        entropy = ersap::stdlib::get_int(config, "entropy");
+    }
 
     // Example for when the service has state that is configured by
     // the orchestrator. The "state" object should be a std::shared_ptr
@@ -116,7 +120,7 @@ ersap::EngineData EjfatPacketizeService::execute(ersap::EngineData& input)
 
     // This always loads the shared_pointer into a new shared_ptr
     std::atomic_load(&engine_)->process(buffer, bufLen, host, interface,
-                                        mtu, port, tick, protocol, ver,
+                                        mtu, port, tick, protocol, entropy, ver,
                                         dataId, delay, debug);
     return input;
 }

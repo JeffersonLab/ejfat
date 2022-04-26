@@ -57,6 +57,7 @@ private:
     int mtu;
     int ver;
     int protocol;
+    int entropy;
 
     uint32_t delay; // millisec
 
