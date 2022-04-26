@@ -31,6 +31,7 @@ namespace ejfat {
         host = "127.0.0.1";
         interface = "eth0";
         debug = false;
+        useIPv6 = false;
     }
 
 
@@ -124,6 +125,11 @@ namespace ejfat {
                     debug = true;
                 }
             }
+            else if (key == "useIPv6") {
+                if (val == "true" || val == "on") {
+                    useIPv6 = true;
+                }
+            }
             else if (key == "host") {
                 host = val;
             }
@@ -139,7 +145,7 @@ namespace ejfat {
         //        std::cout << "EJFAT processing..." << std::endl;
 
         int err = sendBuffer(buffer, bufLen, host, interface,
-                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true);
+                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true, useIPv6);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);
@@ -151,12 +157,12 @@ namespace ejfat {
                                        std::string & host, const std::string & interface,
                                        int mtu, uint16_t port, uint64_t tick,
                                        int protocol, int entropy, int version, uint16_t dataId,
-                                       uint32_t delay, bool debug)
+                                       uint32_t delay, bool debug, bool useIPv6)
     {
 //        std::cout << "EJFAT processing..." << std::endl;
 
         int err = sendBuffer(buffer, bufLen, host, interface,
-                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true);
+                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true, useIPv6);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);

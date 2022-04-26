@@ -66,6 +66,7 @@ ersap::EngineData EjfatPacketizeService::configure(ersap::EngineData& input)
     entropy = 0;
     delay = 0;
     debug = false;
+    useIPv6 = false;
 
     // Values from config file
     if (ersap::stdlib::has_key(config, "host")) {
@@ -76,6 +77,9 @@ ersap::EngineData EjfatPacketizeService::configure(ersap::EngineData& input)
     }
     if (ersap::stdlib::has_key(config, "debug")) {
         debug = ersap::stdlib::get_bool(config, "debug");
+    }
+    if (ersap::stdlib::has_key(config, "useIPv6")) {
+        useIPv6 = ersap::stdlib::get_bool(config, "useIPv6");
     }
     if (ersap::stdlib::has_key(config, "mtu")) {
         mtu = ersap::stdlib::get_int(config, "mtu");
@@ -121,7 +125,7 @@ ersap::EngineData EjfatPacketizeService::execute(ersap::EngineData& input)
     // This always loads the shared_pointer into a new shared_ptr
     std::atomic_load(&engine_)->process(buffer, bufLen, host, interface,
                                         mtu, port, tick, protocol, entropy, ver,
-                                        dataId, delay, debug);
+                                        dataId, delay, debug, useIPv6);
     return input;
 }
 

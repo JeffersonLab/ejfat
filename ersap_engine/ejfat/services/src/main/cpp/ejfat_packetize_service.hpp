@@ -65,6 +65,7 @@ private:
     uint16_t dataId;
 
     bool debug;
+    bool useIPv6;
 };
 
 } // end namespace jana
