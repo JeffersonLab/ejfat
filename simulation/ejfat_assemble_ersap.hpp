@@ -904,7 +904,7 @@ namespace ersap {
          */
         static int getBuffer(char** userBuf, size_t *userBufLen,
                              uint16_t port, const char *listeningAddr,
-                             bool noCopy, bool debug) {
+                             bool noCopy, bool debug, bool useIPv6) {
 
 
             if (userBuf == nullptr || userBufLen == nullptr) {
@@ -912,37 +912,85 @@ namespace ersap {
             }
 
             port = port < 1024 ? 7777 : port;
+            int err, udpSocket;
 
-            // Create UDP socket
-            int udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
+            if (useIPv6) {
 
-            // Try to increase recv buf size to 25 MB
-            socklen_t size = sizeof(int);
-            int recvBufBytes = 25000000;
-            setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
-            recvBufBytes = 0; // clear it
-            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
-            fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+                struct sockaddr_in6 serverAddr6{};
 
-            // Configure settings in address struct
-            struct sockaddr_in serverAddr{};
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(port);
-            if (listeningAddr != nullptr && strlen(listeningAddr) > 0) {
-                serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
+                // Create IPv6 UDP socket
+                if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                    perror("creating IPv6 client socket");
+                    return -1;
+                }
+
+                // Try to increase recv buf size to 25 MB
+                socklen_t size = sizeof(int);
+                int recvBufBytes = 25000000;
+                setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+                recvBufBytes = 0; // clear it
+                getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+                if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+                // Configure settings in address struct
+                // Clear it out
+                memset(&serverAddr6, 0, sizeof(serverAddr6));
+                // it is an INET address
+                serverAddr6.sin6_family = AF_INET6;
+                // the port we are going to receiver from, in network byte order
+                serverAddr6.sin6_port = htons(port);
+                if (listeningAddr != nullptr && strlen(listeningAddr) > 0) {
+                    inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
+                }
+                else {
+                    serverAddr6.sin6_addr = in6addr_any;
+                }
+
+                // Bind socket with address struct
+                err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
+                if (err != 0) {
+                    // TODO: handle error properly
+                    if (debug) fprintf(stderr, "bind socket error\n");
+                }
+
+            } else {
+
+                struct sockaddr_in serverAddr{};
+
+                // Create UDP socket
+                if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                    perror("creating IPv4 client socket");
+                    return -1;
+                }
+
+                // Try to increase recv buf size to 25 MB
+                socklen_t size = sizeof(int);
+                int recvBufBytes = 25000000;
+                setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+                recvBufBytes = 0; // clear it
+                getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+                if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+                // Configure settings in address struct
+                memset(&serverAddr, 0, sizeof(serverAddr));
+                serverAddr.sin_family = AF_INET;
+                serverAddr.sin_port = htons(port);
+                if (listeningAddr != nullptr && strlen(listeningAddr) > 0) {
+                    serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
+                }
+                else {
+                    serverAddr.sin_addr.s_addr = INADDR_ANY;
+                }
+                memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+                // Bind socket with address struct
+                err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+                if (err != 0) {
+                    // TODO: handle error properly
+                    if (debug) fprintf(stderr, "bind socket error\n");
+                }
+
             }
-            else {
-                serverAddr.sin_addr.s_addr = INADDR_ANY;
-            }
-            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-            // Bind socket with address struct
-            int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-            if (err != 0) {
-                // TODO: handle error properly
-                if (debug) fprintf(stderr, "bind socket error\n");
-            }
-
 
             ssize_t nBytes, totalBytes = 0;
             bool last, firstRead = true, useRecvfrom = true;
