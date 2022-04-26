@@ -832,13 +832,14 @@ namespace ejfat {
       * @param fast       if true, call {@link #sendPacketizedBufferFast}, else call
       *                   {@link #sendPacketizedBufferSend}. Be warned that the "Fast"
       *                   routine changes the data in buffer.
+      * @param useIPv6    if true use IP version 6, else use version 4 socket.
       *
       * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
                           int mtu, uint16_t port, uint64_t tick, int protocol, int entropy,
                           int version, uint16_t dataId, uint32_t delay,
-                          bool debug, bool fast) {
+                          bool debug, bool fast, bool useIPv6) {
 
         if (host.empty()) {
             // Default to sending to local host
@@ -865,33 +866,85 @@ namespace ejfat {
         int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
         uint32_t offset = 0;
         int64_t packetsSent = 0;
+        int err, clientSocket;
 
-        // Create UDP socket
-        int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
+        if (useIPv6) {
 
-        // Try to increase send buf size to 25 MB
-        socklen_t size = sizeof(int);
-        int sendBufBytes = 25000000;
-        setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
-        sendBufBytes = 0; // clear it
-        getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
-        fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+            struct sockaddr_in6 serverAddr6;
 
-        // Configure settings in address struct
-        struct sockaddr_in serverAddr;
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
-if (debug) fprintf(stderr, "Sending on UDP port %hu\n", port);
-        serverAddr.sin_addr.s_addr = inet_addr(host.c_str());
-if (debug) fprintf(stderr, "Connecting to host %s\n", host.c_str());
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+            if ((clientSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 client socket");
+                return -1;
+            }
 
-        int err = connect(clientSocket, (const sockaddr *)&serverAddr, sizeof(struct sockaddr_in));
-        if (err < 0) {
-            if (debug) perror("Error connecting UDP socket:");
-            close(clientSocket);
-            return err;
+            // Try to increase send buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int sendBufBytes = 25000000;
+            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
+            sendBufBytes = 0; // clear it
+            getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+
+            // Configure settings in address struct
+            // Clear it out
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            // it is an INET address
+            serverAddr6.sin6_family = AF_INET6;
+            // the port we are going to send to, in network byte order
+            serverAddr6.sin6_port = htons(port);
+            // the server IP address, in network byte order
+            inet_pton(AF_INET6, host.c_str(), &serverAddr6.sin6_addr);
+
+            err = connect(clientSocket, (const sockaddr *)&serverAddr6, sizeof(struct sockaddr_in6));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP socket:");
+                close(clientSocket);
+                return err;
+            }
+
+        } else {
+
+            struct sockaddr_in serverAddr;
+
+            // Create UDP socket
+            if ((clientSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 client socket");
+                return -1;
+            }
+
+            // Try to increase send buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int sendBufBytes = 25000000;
+            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
+            sendBufBytes = 0; // clear it
+            getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+
+            // Configure settings in address struct
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            if (debug) fprintf(stderr, "Sending on UDP port %hu\n", port);
+            serverAddr.sin_port = htons(port);
+            if (debug) fprintf(stderr, "Connecting to host %s\n", host.c_str());
+            serverAddr.sin_addr.s_addr = inet_addr(host.c_str());
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+            err = connect(clientSocket, (const sockaddr *)&serverAddr, sizeof(struct sockaddr_in));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP socket:");
+                close(clientSocket);
+                return err;
+            }
         }
+
+        // set the don't fragment bit
+#ifdef __linux__
+        {
+            int val = IP_PMTUDISC_DO;
+            setsockopt(clientSocket, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+        }
+#endif
 
         // Set the MTU, which is necessary for jumbo (> 1500, 9000 max) packets. Don't exceed this limit.
         // If trying to set Jumbo packet, set no-fragment flag on linux.
