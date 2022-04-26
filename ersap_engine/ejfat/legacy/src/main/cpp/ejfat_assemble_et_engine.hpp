@@ -15,7 +15,7 @@ public:
     EjfatAssembleEtEngine();
     EjfatAssembleEtEngine(uint16_t port, const std::string & etName,
                           const std::string & listeningAddr,
-                          int* ids, int idCount, bool debug);
+                          int* ids, int idCount, bool debug, bool useIPv6);
 
     ~EjfatAssembleEtEngine();
 
@@ -33,6 +33,7 @@ private:
     uint16_t port;
 
     bool debug;
+    bool useIPv6;
 
     // ET system file name
     std::string etName;

@@ -32,6 +32,7 @@ namespace ejfat {
 
         debug = false;
         zmq = false;
+        useIPv6 = false;
 
         ctx = nullptr;
         sock = nullptr;
@@ -131,6 +132,11 @@ namespace ejfat {
                     debug = true;
                 }
             }
+            else if (key == "useIPv6") {
+                if (val == "true" || val == "on") {
+                    useIPv6 = true;
+                }
+            }
             else if (key == "zmq") {
                 if (val == "true" || val == "on") {
                     zmq = true;
@@ -156,7 +162,7 @@ namespace ejfat {
         std::cout << "EJFAT assembling ..." << std::endl;
         //static int getBuffer(char** userBuf, int32_t *userBufLen, unsigned short port, char *listeningAddr, bool noCopy) {
 
-        int err = getBuffer(userBuf, userBufLen, port, listeningAddr, noCopy, debug);
+        int err = getBuffer(userBuf, userBufLen, port, listeningAddr, noCopy, debug, useIPv6);
         if (err < 0) {
             fprintf(stderr, "Error assembling packets, err = %d\n", err);
             exit (-1);

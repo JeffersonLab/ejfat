@@ -36,8 +36,9 @@ namespace ejfat {
 
     EjfatAssembleEtEngine::EjfatAssembleEtEngine(uint16_t port_, const std::string & etName_,
                                                  const std::string & listeningAddr,
-                                                 int* ids_, int idCount_, bool debug_) :
-                            port(port_), etName(etName_), idCount(idCount_), debug(debug_)
+                                                 int* ids_, int idCount_, bool debug_, bool useIPv6_) :
+                                                 port(port_), etName(etName_),
+                                                 idCount(idCount_), debug(debug_), useIPv6(useIPv6_)
     {
         // Save inputs
         if (idCount_ > 1024) {
@@ -48,39 +49,81 @@ namespace ejfat {
             ids[i] = ids_[i];
         }
 
-        // Create UDP socket
-        sock = socket(AF_INET, SOCK_DGRAM, 0);
+        if (useIPv6) {
+            struct sockaddr_in6 serverAddr6{};
 
-        // Try to increase recv buf size to 25 MB
-        socklen_t size = sizeof(int);
-        int recvBufBytes = 25000000;
-        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
-        recvBufBytes = 0; // clear it
-        getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
-        fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+            // Create IPv6 UDP socket
+            if ((sock = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 client socket");
+                exit(1);
+            }
 
-        // Configure settings in address struct
-        struct sockaddr_in serverAddr;
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
+            // Try to increase recv buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int recvBufBytes = 25000000;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0; // clear it
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+            // Configure settings in address struct
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            serverAddr6.sin6_family = AF_INET6;
+            serverAddr6.sin6_port = htons(port);
+            if (!listeningAddr.empty()) {
+                inet_pton(AF_INET6, listeningAddr.c_str(), &serverAddr6.sin6_addr);
+            }
+            else {
+                serverAddr6.sin6_addr = in6addr_any;
+            }
+
+            // Bind socket with address struct
+            int err = bind(sock, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
+            if (err != 0) {
+                if (debug) fprintf(stderr, "bind socket error\n");
+                exit(1);
+            }
+
+        } else {
+            struct sockaddr_in serverAddr{};
+
+            // Create UDP socket
+            if ((sock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 client socket");
+                exit(1);
+            }
+
+            // Try to increase recv buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int recvBufBytes = 25000000;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0; // clear it
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+            // Configure settings in address struct
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(port);
 if (debug) fprintf(stderr, "listening on port %hu\n", port);
-        if (!listeningAddr.empty()) {
-            serverAddr.sin_addr.s_addr = inet_addr(listeningAddr.c_str());
+            if (!listeningAddr.empty()) {
+                serverAddr.sin_addr.s_addr = inet_addr(listeningAddr.c_str());
 if (debug) fprintf(stderr, "listening on address %s\n", listeningAddr.c_str());
-        }
-        else {
-            serverAddr.sin_addr.s_addr = INADDR_ANY;
+            }
+            else {
+                serverAddr.sin_addr.s_addr = INADDR_ANY;
 if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
-        }
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            }
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
-        // Bind socket with address struct
-        int err = bind(sock, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-        if (err != 0) {
-            // TODO: handle error properly
-            if (debug) fprintf(stderr, "bind socket error\n");
+            // Bind socket with address struct
+            int err = bind(sock, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+            if (err != 0) {
+                if (debug) fprintf(stderr, "bind socket error\n");
+                exit(1);
+            }
         }
+
 
         // Open ET system
         int status;
@@ -104,26 +147,71 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
         // Look for a local config file (assembler_et.yaml)
         port  = 17750;
         debug = false;
+        useIPv6 = false;
 
         // Parse config, get ET name and all source ids here
         parseConfigFile();
 
-        // Create UDP socket
-        sock = socket(AF_INET, SOCK_DGRAM, 0);
+        if (useIPv6) {
+            struct sockaddr_in6 serverAddr6{};
 
-        // Configure settings in address struct
-        struct sockaddr_in serverAddr;
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
-        serverAddr.sin_addr.s_addr = INADDR_ANY;
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            // Create IPv6 UDP socket
+            if ((sock = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 client socket");
+                exit(1);
+            }
 
-        // Bind socket with address struct
-        int err = bind(sock, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-        if (err != 0) {
-            // TODO: handle error properly
-            if (debug) fprintf(stderr, "bind socket error\n");
+            // Try to increase recv buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int recvBufBytes = 25000000;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0; // clear it
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+            // Configure settings in address struct
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            serverAddr6.sin6_family = AF_INET6;
+            serverAddr6.sin6_port = htons(port);
+            serverAddr6.sin6_addr = in6addr_any;
+
+            // Bind socket with address struct
+            int err = bind(sock, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
+            if (err != 0) {
+                if (debug) fprintf(stderr, "bind socket error\n");
+                exit(1);
+            }
+
+        } else {
+            struct sockaddr_in serverAddr{};
+
+            // Create UDP socket
+            if ((sock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 client socket");
+                exit(1);
+            }
+
+            // Try to increase recv buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int recvBufBytes = 25000000;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0; // clear it
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+            // Configure settings in address struct
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(port);
+            serverAddr.sin_addr.s_addr = INADDR_ANY;
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+            // Bind socket with address struct
+            int err = bind(sock, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+            if (err != 0) {
+                if (debug) fprintf(stderr, "bind socket error\n");
+                exit(1);
+            }
         }
 
         // Open ET system
@@ -219,6 +307,11 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
                     debug = true;
                 }
             }
+            else if (key == "useIPv6") {
+                if (val == "true" || val == "on") {
+                    useIPv6 = true;
+                }
+            }
         }
 
     }
@@ -258,7 +351,7 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
                 "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
                 programName,
                 "        -f <ET file>",
-                "        [-h] [-v]",
+                "        [-h] [-v] [-ip6 (use IP v6)]",
                 "        [-a <listening IP address (defaults to INADDR_ANY)>]",
                 "        [-p <listening UDP port (17750 default)>]",
                 "        [-ids <comma-separated list of data source ids, no whitespace>");
@@ -279,12 +372,13 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
      * @param bufSize     filled with buffer size.
      * @param port        filled with UDP port to listen on.
      * @param debug       filled with debug flag.
+     * @param useIPv6     filled with use IP version 6 flag.
      * @param fileName    filled with output file name.
      * @param listenAddr  filled with IP address to listen on.
      * @param fast        filled with true if reading with recvfrom and minimizing data copy.
      * @param recvmsg     filled with true if reading with recvmsg.
      */
-    static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug,
+    static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug, bool *useIPv6,
                           char *etName, char *listenAddr, int *ids, int *idCount) {
 
         int c, i_tmp;
@@ -294,6 +388,7 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
         /* 4 multiple character command-line options */
         static struct option long_options[] =
                 {{"ids",   1, NULL, 1},
+                 {"ip6",   0, NULL, 2},
                  {0,       0, 0,    0}
                 };
 
@@ -378,6 +473,11 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
                     *debug = true;
                     break;
 
+                case 2:
+                    // IP version 6 flag
+                    *useIPv6 = true;
+                    break;
+
                 case 'h':
                     help = true;
                     break;
@@ -406,6 +506,7 @@ int main(int argc, char **argv) {
     // Set this to max expected data size
     uint16_t port = 17750;
     bool debug = false;
+    bool useIPv6 = false;
 
     int ids[32];
     // Set default id
@@ -416,9 +517,9 @@ int main(int argc, char **argv) {
     memset(etName, 0, 255);
     memset(listeningAddr, 0, 16);
 
-    ersap::ejfat::parseArgs(argc, argv, &port, &debug, etName, listeningAddr, ids, &idCount);
+    ersap::ejfat::parseArgs(argc, argv, &port, &debug, &useIPv6, etName, listeningAddr, ids, &idCount);
 
-    ersap::ejfat::EjfatAssembleEtEngine engine(port, etName, listeningAddr, ids, idCount, debug);
+    ersap::ejfat::EjfatAssembleEtEngine engine(port, etName, listeningAddr, ids, idCount, debug, useIPv6);
     engine.process();
 
     return 0;

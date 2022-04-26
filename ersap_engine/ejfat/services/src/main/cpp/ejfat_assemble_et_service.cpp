@@ -83,10 +83,15 @@ namespace ejfat {
 
         // Defaults
         debug = false;
+        useIPv6 = false;
         port  = 7777;
 
         if (ersap::stdlib::has_key(config, "debug")) {
             debug = ersap::stdlib::get_bool(config, "debug");
+        }
+
+        if (ersap::stdlib::has_key(config, "useIPv6")) {
+            useIPv6 = ersap::stdlib::get_bool(config, "useIPv6");
         }
 
         // throws exception if doesn't exist
@@ -112,31 +117,66 @@ namespace ejfat {
         }
         idCount = vec.size();
 
+        if (useIPv6) {
+            struct sockaddr_in6 serverAddr6{};
 
-        // Create UDP socket
-        sock = socket(AF_INET, SOCK_DGRAM, 0);
+            // Create IPv6 UDP socket
+            if ((sock = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 client socket");
+                exit(1);
+            }
 
-        // Try to increase recv buf size to 25 MB
-        socklen_t size = sizeof(int);
-        int recvBufBytes = 25000000;
-        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
-        recvBufBytes = 0; // clear it
-        getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
-        fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+            // Try to increase recv buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int recvBufBytes = 25000000;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0; // clear it
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
 
-        // Configure settings in address struct
-        struct sockaddr_in serverAddr;
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
-        serverAddr.sin_addr.s_addr = INADDR_ANY;
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            // Configure settings in address struct
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            serverAddr6.sin6_family = AF_INET6;
+            serverAddr6.sin6_port = htons(port);
+            serverAddr6.sin6_addr = in6addr_any;
 
-        // Bind socket with address struct
-        int err = bind(sock, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-        if (err != 0) {
-            std::cerr << "bind socket error" << std::endl;
-            exit(-1);
+            // Bind socket with address struct
+            int err = bind(sock, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
+            if (err != 0) {
+                std::cerr << "bind socket error" << std::endl;
+                exit(-1);
+            }
+
+        } else {
+            struct sockaddr_in serverAddr{};
+
+            // Create UDP socket
+            if ((sock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 client socket");
+                exit(1);
+            }
+
+            // Try to increase recv buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int recvBufBytes = 25000000;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0; // clear it
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+            // Configure settings in address struct
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(port);
+            serverAddr.sin_addr.s_addr = INADDR_ANY;
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+            // Bind socket with address struct
+            int err = bind(sock, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+            if (err != 0) {
+                std::cerr << "bind socket error" << std::endl;
+                exit(-1);
+            }
         }
 
         // Open ET system

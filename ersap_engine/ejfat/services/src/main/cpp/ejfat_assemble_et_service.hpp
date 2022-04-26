@@ -57,6 +57,7 @@ private:
     std::shared_ptr<EjfatAssembleEtEngine> engine_{};
 
     bool debug;
+    bool useIPv6;
 
     int port;
     int sock;

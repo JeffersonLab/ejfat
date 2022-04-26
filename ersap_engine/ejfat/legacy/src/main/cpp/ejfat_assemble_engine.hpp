@@ -28,6 +28,7 @@ private:
     uint16_t port;
     bool debug;
     bool zmq;  // if true, send data over zmq
+    bool useIPv6;
 
     // Zmq context, socket, dest addr & port
     void *ctx;
