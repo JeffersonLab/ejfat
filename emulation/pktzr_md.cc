@@ -53,7 +53,7 @@ int main (int argc, char *argv[])
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
 
-    const uint8_t lb_vrsn    = 1;
+    const uint8_t lb_vrsn    = 2;
     const uint8_t lb_prtcl   = 1;
     const uint16_t lb_rsrvd  = 0;
     uint64_t lb_tick         = 1;      // LB tick
