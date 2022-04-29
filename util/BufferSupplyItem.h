@@ -33,7 +33,7 @@ namespace ejfat {
      */
     class BufferSupplyItem {
 
-    private:
+    public:
 
         /** Assign each record a unique id for debugging purposes. */
         static uint64_t  idValue;
@@ -41,6 +41,7 @@ namespace ejfat {
         static uint32_t  factoryBufferSize;
         static ByteOrder factoryByteOrder;
 
+    private:
 
 
         /** Size of ByteBuffer in bytes. */
@@ -131,23 +132,26 @@ namespace ejfat {
         bool getUserBoolean() const;
         void setUserBoolean(bool usrBool);
 
+        uint32_t  getBufferSize() const;
+        void setBuffer(std::shared_ptr<ByteBuffer> buf);
+        std::shared_ptr<ByteBuffer> getBuffer();
+        std::shared_ptr<ByteBuffer> getBufferAsIs() const;
+        std::shared_ptr<ByteBuffer> ensureCapacity(uint32_t capacity);
+
+        void setUsers(int users);
+        int  getUsers() const;
+        void addUsers(int additionalUsers);
+
+        // User should not call these, only called BufferSupply ...........
+
+        bool decrementCounter();
+
         int64_t getProducerSequence() const;
         void setProducerSequence(int64_t sequence);
 
         int64_t getConsumerSequence() const;
         void setConsumerSequence(int64_t sequence);
 
-        uint32_t  getBufferSize() const;
-        void setBuffer(std::shared_ptr<ByteBuffer> buf);
-        std::shared_ptr<ByteBuffer> getBuffer();
-        std::shared_ptr<ByteBuffer> getBufferAsIs() const;
-        void ensureCapacity(uint32_t capacity);
-
-        void setUsers(int users);
-        int  getUsers() const;
-
-        bool decrementCounter();
-        void addUsers(int additionalUsers);
     };
 
 }

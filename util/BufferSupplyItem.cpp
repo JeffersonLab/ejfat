@@ -67,9 +67,10 @@ namespace ejfat {
      * Default constructor which uses values set by {@link #setEventFactorySetting()}.
      */
     BufferSupplyItem::BufferSupplyItem() {
-        order = BufferSupplyItem::factoryByteOrder;
+        order          = BufferSupplyItem::factoryByteOrder;
+        bufferSize     = BufferSupplyItem::factoryBufferSize;
         orderedRelease = BufferSupplyItem::factoryOrderedRelease;
-        buffer = std::make_shared<ByteBuffer>(BufferSupplyItem::bufferSize);
+        buffer = std::make_shared<ByteBuffer>(bufferSize);
         myId = idValue++;
     }
 
@@ -214,6 +215,7 @@ namespace ejfat {
 
     /**
      * Get the sequence of this item for producer.
+     * <b>User will NOT need to call this.</b>
      * @return sequence of this item for producer.
      */
     int64_t BufferSupplyItem::getProducerSequence() const {return producerSequence;}
@@ -221,6 +223,7 @@ namespace ejfat {
 
     /**
      * Set the sequence of this item for producer.
+     * <b>User will NOT need to and should NOT call this.</b>
      * @param sequence sequence of this item for producer.
      */
     void BufferSupplyItem::setProducerSequence(int64_t sequence) {this->producerSequence = sequence;}
@@ -228,6 +231,7 @@ namespace ejfat {
 
     /**
      * Get the sequence of this item for consumer.
+     * <b>User will NOT need to call this.</b>
      * @return sequence of this item for consumer.
      */
     int64_t BufferSupplyItem::getConsumerSequence() const {return consumerSequence;}
@@ -235,6 +239,7 @@ namespace ejfat {
 
     /**
      * Set the sequence of this item for consumer.
+     * <b>User will NOT need to and should NOT call this.</b>
      * @param sequence sequence of this item for consumer.
      */
     void BufferSupplyItem::setConsumerSequence(int64_t sequence) {this->consumerSequence = sequence;}
@@ -260,11 +265,11 @@ namespace ejfat {
 
     /**
      * Get the contained ByteBuffer.
-     * Position is set to 0.
+     * Position is set to 0, limit to capacity.
      * @return contained ByteBuffer.
      */
     std::shared_ptr<ByteBuffer> BufferSupplyItem::getBuffer() {
-        buffer->position(0);
+        buffer->clear();
         return buffer;
     }
 
@@ -280,14 +285,17 @@ namespace ejfat {
 
     /**
      * Make sure the buffer is the size needed.
+     * If expanded, all data is <b>LOST</b>, so call this before writing data.
      * @param capacity minimum necessary size of buffer in bytes.
+     * @return internal buffer, new object if capacity expanded, else current buffer as is.
      */
-    void BufferSupplyItem::ensureCapacity(uint32_t capacity) {
+    std::shared_ptr<ByteBuffer> BufferSupplyItem::ensureCapacity(uint32_t capacity) {
         if (bufferSize < capacity) {
             buffer = std::make_shared<ByteBuffer>(capacity);
             buffer->order(order);
             bufferSize = capacity;
         }
+        return buffer;
     }
 
 
@@ -330,8 +338,9 @@ namespace ejfat {
 
 
     /**
-     * Called by buffer user by way of {@link ByteBufferSupply#release(BufferSupplyItem)}
-     * if no longer using it so it may be reused later.
+     * Called internally by {@link ByteBufferSupply#release(BufferSupplyItem)}
+     * if no longer using item so it may be reused later.
+     * <b>User should NEVER call this.</b>
      * @return {@code true} if no one using buffer now, else {@code false}.
      */
     bool BufferSupplyItem::decrementCounter() {

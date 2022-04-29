@@ -113,6 +113,7 @@ set(ET_EXEC_FILES
 set(DIS_EXEC_FILES
         simulation/scatter.cc
         simulation/gather.cc
+        simulation/testBufSupply.cc
         )
 
 set(UTIL_FILES

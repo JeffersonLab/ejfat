@@ -85,7 +85,7 @@ namespace ejfat {
 
     private:
 
-        /** Mutex for thread safety when setting error code or releasing resources. */
+        /** Mutex for thread safety when releasing resources that were out-of-order. */
         std::mutex supplyMutex;
 
         /** Max number of data bytes each ByteBuffer can hold. */
