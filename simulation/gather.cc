@@ -1,0 +1,463 @@
+//
+// Copyright 2022, Jefferson Science Associates, LLC.
+// Subject to the terms in the LICENSE file found in the top-level directory.
+//
+// EPSCI Group
+// Thomas Jefferson National Accelerator Facility
+// 12000, Jefferson Ave, Newport News, VA 23606
+// (757)-269-7100
+
+
+/**
+ * @file Receive locally generated data sent by udp_send.c program.
+ * This program handles sequentially numbered packets that may arrive out-of-order.
+ * This assumes there is an emulator or FPGA between this and the sending program.
+ */
+
+#include <pthread.h>
+#include <time.h>
+#include <queue>
+#include "BufferSupply.h"
+#include "BufferSupplyItem.h"
+
+#include "ejfat_assemble_ersap.hpp"
+
+using namespace ejfat;
+
+
+//-----------------------------------------------------------------------
+// Be sure to print to stderr as this program pipes data to stdout!!!
+//-----------------------------------------------------------------------
+
+
+#define INPUT_LENGTH_MAX 256
+
+
+/**
+ * Print out help.
+ * @param programName name to use for this program.
+ */
+static void printHelp(char *programName) {
+    fprintf(stderr,
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            programName,
+            "        [-h] [-v] [-repeat] [-ip6]",
+            "        [-a <listening IP address (defaults to INADDR_ANY)>]",
+            "        [-p <starting UDP port>]",
+            "        [-b <internal buffer byte size>]",
+            "        [-r <UDP receive buffer byte size>]",
+            "        [-i <id count>]",
+            "        [-f <filename>]");
+
+    fprintf(stderr, "        EJFAT UDP packet receiver that reads a file that the packetizer sends over multiple ports\n");
+    fprintf(stderr, "        with a separate thread for each id to reassemble. Data can be repeatedly read.\n");
+    fprintf(stderr, "        If read only once, it will write to file.\n");
+}
+
+
+/**
+ * Parse all command line options.
+ *
+ * @param argc          arg count from main().
+ * @param argv          arg list from main().
+ * @param bufSize       filled with buffer size.
+ * @param recvBufSize   filled with UDP receive buffer size.
+ * @param startingPort  filled with the first UDP port to listen on.
+ * @param idCount       filled with number of data sources.
+ * @param debug         filled with debug flag.
+ * @param repeat        filled with repeat flag.
+ * @param useIPv6       filled with use IP version 6 flag.
+ * @param fileName      filled with output file name.
+ * @param listenAddr    filled with IP address to listen on.
+ */
+static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize,
+                      uint16_t* startingPort, int *idCount,
+                      bool *debug, bool *repeat, bool *useIPv6,
+                      char *fileName, char *listenAddr) {
+
+    int c, i_tmp;
+    bool help = false, gotFileName = false;
+
+    /* 4 multiple character command-line options */
+    static struct option long_options[] =
+            {{"repeat",  0, NULL, 1},
+             {"ip6",  0, NULL, 2},
+             {0,       0, 0,    0}
+            };
+
+
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:i:f:", long_options, 0)) != EOF) {
+
+        if (c == -1)
+            break;
+
+        switch (c) {
+
+            case 'p':
+                // PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 1023 && i_tmp < 65535) {
+                    *startingPort = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'i':
+                // ID count
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *idCount = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -i, idCount > 0\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'b':
+                // BUFFER SIZE
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 10000) {
+                    *bufSize = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -b, internal buf size >= 10kB\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'r':
+                // UDP RECEIVE BUFFER SIZE
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 220000) {
+                    *recvBufSize = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -r, UDP recv buf size >= 220kB\n");
+                    exit(-1);
+                }
+                break;
+
+            case 'a':
+                // LISTENING IP ADDRESS
+                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
+                    fprintf(stderr, "listening IP address is bad\n");
+                    exit(-1);
+                }
+                strcpy(listenAddr, optarg);
+                break;
+
+            case 'f':
+                // File to send
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -f, file name is too long\n");
+                    exit(-1);
+                }
+                gotFileName = true;
+                strcpy(fileName, optarg);
+                break;
+
+            case 1:
+                // REPEAT
+                *repeat = true;
+                break;
+
+            case 2:
+                // REPEAT
+                *useIPv6 = true;
+                break;
+
+            case 'v':
+                // VERBOSE
+                *debug = true;
+                break;
+
+            case 'h':
+                help = true;
+                break;
+
+            default:
+                printHelp(argv[0]);
+                exit(2);
+        }
+
+    }
+
+    if (gotFileName && *repeat == true) {
+        fprintf(stderr, "\nIf specifying file, cannot read repeatedly\n\n");
+        printHelp(argv[0]);
+        exit(2);
+    }
+
+    if (help) {
+        printHelp(argv[0]);
+        exit(2);
+    }
+}
+
+
+// Quantities to be shared by each sending thread
+static uint32_t offset = 0,sendBufSize = 0;
+static bool debug = false;
+static char filename[INPUT_LENGTH_MAX];
+
+
+
+// Arg to pass to threads
+struct threadArg {
+    int id;
+    int bufferSize;
+    int socket;
+    bool repeat;
+    char *buffer;
+};
+
+
+// Thread to send to gather application
+static void *thread(void *arg) {
+
+    struct threadArg *tArg = (struct threadArg *) arg;
+    int id = tArg->id;
+    int bufSize = tArg->bufferSize;
+    int udpSocket = tArg->socket;
+    char *dataBuf = tArg->buffer;
+
+    bool last, firstRead = true, firstLoop = true;
+    // Start with offset 0 in very first packet to be read
+    uint64_t tick = 0L;
+    uint32_t offset = 0;
+    // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
+
+
+    fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
+
+    uint32_t bytesPerPacket;
+
+    /*
+     * Map to hold out-of-order packets.
+     * map key = sequence/offset from incoming packet
+     * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes),
+     * (is last packet), (is first packet).
+     */
+    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
+
+    // Statistics
+    uint32_t packetCount=0;
+    int64_t packetsRead=0, byteCount=0, totalBytes=0, totalPackets=0;
+    double rate = 0.0, avgRate = 0.0;
+    int64_t totalT = 0, time, time1, time2;
+    struct timespec t1, t2;
+
+    // Get the current time
+    clock_gettime(CLOCK_REALTIME, &t1);
+    time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
+
+    while (true) {
+        ssize_t nBytes = getPacketizedBufferFast(dataBuf, bufSize, udpSocket,
+                                         debug, firstRead, &last, &tick, &offset,
+                                         &bytesPerPacket, &packetCount, outOfOrderPackets);
+
+        if (nBytes < 0) {
+            if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
+            break;
+        }
+
+        byteCount   += nBytes;
+        packetsRead += packetCount;
+        offset = 0;
+
+        // stats
+        clock_gettime(CLOCK_REALTIME, &t2);
+        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
+        time = time2 - time1;
+
+        if (time > 5000) {
+            // Ignore the very first counts as blastee starts before blaster and
+            // that messes up the stats.
+
+            // reset things if #s rolling over
+            if (firstLoop || (totalBytes < 0) || (totalT < 0))  {
+                totalT = totalBytes = totalPackets = byteCount = packetsRead = 0;
+                time1 = time2;
+                firstLoop = false;
+                continue;
+            }
+
+            /* Packet rates */
+            rate = 1000.0 * ((double) packetsRead) / time;
+            totalPackets += packetsRead;
+            totalT += time;
+            avgRate = 1000.0 * ((double) totalPackets) / totalT;
+            printf(" Packets:  %3.4g Hz,    %3.4g Avg.\n", rate, avgRate);
+
+            /* Actual Data rates (no header info) */
+            rate = ((double) byteCount) / (1000*time);
+            totalBytes += byteCount;
+            avgRate = ((double) totalBytes) / (1000*totalT);
+            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
+
+            byteCount = packetsRead = 0;
+
+            clock_gettime(CLOCK_REALTIME, &t1);
+            time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
+        }
+
+    }
+
+    return (NULL);
+}
+
+
+int main(int argc, char **argv) {
+
+    int idCount;
+    // Set this to max expected data size
+    int bufSize = 1020000;
+    int recvBufBytes = 0, recvBufSize = 0;
+    uint16_t startingPort = 7777;
+
+    bool repeat = false;
+    bool useIPv6 = false;
+
+    char fileName[INPUT_LENGTH_MAX], listeningAddr[16];
+    memset(fileName, 0, INPUT_LENGTH_MAX);
+    memset(listeningAddr, 0, 16);
+
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &startingPort, &idCount, &debug, &repeat, &useIPv6, fileName, listeningAddr);
+
+    for (int i = 0; i < idCount; i++) {
+
+        int udpSocket;
+
+        std::shared_ptr<ejfat::BufferSupply> supply = std::make_shared<ejfat::BufferSupply>(16, 1000000);
+
+        // Fall back on defaults if not set by user
+        if (recvBufSize == 0) {
+#ifdef __APPLE__
+            // By default set recv buf size to 7.4 MB which is the highest
+            // it wants to go before before reverting back to 787kB.
+            recvBufBytes = 7400000;
+#else
+            // By default set recv buf size to 25 MB
+            recvBufBytes = 25000000;
+#endif
+        }
+        else {
+            recvBufBytes = recvBufSize;
+        }
+
+        if (useIPv6) {
+            struct sockaddr_in6 serverAddr6{};
+
+            // Create IPv6 UDP socket
+            if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 client socket");
+                return -1;
+            }
+
+            // Set & read back UDP receive buffer size
+            socklen_t size = sizeof(int);
+            setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0;
+            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+            // Configure settings in address struct
+            // Clear it out
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            // it is an INET address
+            serverAddr6.sin6_family = AF_INET6;
+            // the port we are going to receiver from, in network byte order
+            serverAddr6.sin6_port = htons(startingPort + i);
+            if (strlen(listeningAddr) > 0) {
+                inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
+            }
+            else {
+                serverAddr6.sin6_addr = in6addr_any;
+            }
+
+            // Bind socket with address struct
+            int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
+            if (err != 0) {
+                if (debug) fprintf(stderr, "bind socket error\n");
+                return -1;
+            }
+        }
+        else {
+            // Create UDP socket
+            if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 client socket");
+                return -1;
+            }
+
+            // Set & read back UDP receive buffer size
+            socklen_t size = sizeof(int);
+            setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, sizeof(recvBufBytes));
+            recvBufBytes = 0;
+            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
+            fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
+
+            // Configure settings in address struct
+            struct sockaddr_in serverAddr{};
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(startingPort + i);
+            if (strlen(listeningAddr) > 0) {
+                serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
+            }
+            else {
+                serverAddr.sin_addr.s_addr = INADDR_ANY;
+            }
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+            // Bind socket with address struct
+            int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+            if (err != 0) {
+                fprintf(stderr, "bind socket error\n");
+                return -1;
+            }
+        }
+
+        // Thread to send part of buffer to gather application
+        struct threadArg *arg = (threadArg *) malloc(sizeof(struct threadArg));
+        if (arg == NULL) {
+            fprintf(stderr, "\n ******* ran out of memory\n\n");
+            exit(1);
+        }
+
+        arg->socket = udpSocket;
+        arg->id = i;
+        arg->bufferSize = bufSize;
+        arg->repeat = repeat;
+
+        // Place for incoming data will be a FIFO -- std::queue. If it's performance that's needed,
+        // boost::circular_buffer<> is better, and disruptor's RingBuffer<> is most likely
+        // better than that.
+
+        std::shared_ptr<std::queue<char *>> q = std::make_shared<std::queue<char *>>();
+
+        char *dataBuf = (char *) malloc(bufSize);
+        if (dataBuf == NULL) {
+            fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
+            exit(1);
+        }
+
+        arg->buffer = dataBuf;
+
+        pthread_t thd;
+        int status = pthread_create(&thd, NULL, thread, (void *) arg);
+        if (status != 0) {
+            fprintf(stderr, "\n ******* error creating thread\n\n");
+            return -1;
+        }
+    }
+
+    // Don't let this thread end? 2.75 hours
+    sleep(10000);
+
+    return 0;
+}
+
