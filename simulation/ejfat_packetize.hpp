@@ -84,7 +84,6 @@
 
 
 
-namespace ersap {
 namespace ejfat {
 
     static int getMTU(const char* interfaceName, bool debug) {
@@ -966,7 +965,6 @@ namespace ejfat {
          return err;
      }
 
-}
 }
 
 #endif // EJFAT_PACKETIZE_ERSAP_H

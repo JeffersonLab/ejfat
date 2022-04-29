@@ -42,7 +42,6 @@
 #include "ejfat_assemble_ersap.hpp"
 
 
-namespace ersap {
     namespace ejfat {
 
         //-----------------------------------------------------------------------
@@ -492,7 +491,6 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
 
 
     }
-}
 
 
 

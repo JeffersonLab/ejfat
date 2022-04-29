@@ -162,7 +162,7 @@ namespace ejfat {
         std::cout << "EJFAT assembling ..." << std::endl;
         //static int getBuffer(char** userBuf, int32_t *userBufLen, unsigned short port, char *listeningAddr, bool noCopy) {
 
-        int err = getBuffer(userBuf, userBufLen, port, listeningAddr, noCopy, debug, useIPv6);
+        int err = ::ejfat::getBuffer(userBuf, userBufLen, port, listeningAddr, noCopy, debug, useIPv6);
         if (err < 0) {
             fprintf(stderr, "Error assembling packets, err = %d\n", err);
             exit (-1);

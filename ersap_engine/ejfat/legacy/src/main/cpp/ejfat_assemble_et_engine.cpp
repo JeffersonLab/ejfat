@@ -321,7 +321,7 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
     {
         if (debug) std::cout << "EJFAT assembling ..." << std::endl;
 
-        int err = getBuffers(sock, fid, debug);
+        int err = ::ejfat::getBuffers(sock, fid, debug);
         if (err < 0) {
             fprintf(stderr, "Error assembling packets, err = %d\n", err);
             exit (-1);
@@ -333,7 +333,7 @@ if (debug) fprintf(stderr, "listening on address INADDR_ANY\n");
     {
         if (debug) std::cout << "EJFAT assembling ..." << std::endl;
 
-        int err = getBuffers(_sock, _fid, _debug);
+        int err = ::ejfat::getBuffers(_sock, _fid, _debug);
         if (err < 0) {
             fprintf(stderr, "Error assembling packets, err = %d\n", err);
             exit (-1);

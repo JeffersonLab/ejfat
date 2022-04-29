@@ -65,7 +65,6 @@ static inline uint64_t bswap_64(uint64_t x) {
 #endif
 
 
-namespace ersap {
     namespace ejfat {
 
         enum errorCodes {
@@ -1099,7 +1098,6 @@ namespace ersap {
         }
 
     }
-}
 
 
 #endif // EJFAT_ASSEMBLE_ERSAP_H
