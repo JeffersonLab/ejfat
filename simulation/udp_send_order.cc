@@ -234,7 +234,7 @@ int main(int argc, char **argv) {
     uint32_t cycleCount=1;  // # of times to cycle through sending same data but with advancing tick
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
-    int mtu, version = 1, protocol = 1, entropy = 0;
+    int mtu, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
     bool debug = false;
 

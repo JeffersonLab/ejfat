@@ -60,7 +60,7 @@ ersap::EngineData EjfatPacketizeService::configure(ersap::EngineData& input)
     interface = "eth0";
     mtu = 1024;
     port = 19522;
-    ver = 1;
+    ver = 2;
     dataId = 1;
     protocol = 1;
     entropy = 0;

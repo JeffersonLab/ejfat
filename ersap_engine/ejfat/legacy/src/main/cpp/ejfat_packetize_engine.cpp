@@ -23,7 +23,7 @@ namespace ejfat {
         // Default values
         port = 19522;
         mtu  = 1024;
-        version = 1;
+        version = 2;
         dataId = 1;
         protocol = 1;
         entropy = 0;
