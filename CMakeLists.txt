@@ -110,6 +110,18 @@ set(ET_EXEC_FILES
         ersap_engine/ejfat/legacy/src/main/cpp/ejfat_assemble_et_engine.cpp
         )
 
+set(DIS_EXEC_FILES
+        simulation/scatter.cc
+        simulation/gather.cc
+        )
+
+set(UTIL_FILES
+        util/ByteOrder.cpp
+        util/ByteBuffer.cpp
+        util/BufferSupplyItem.cpp
+        util/BufferSupply.cpp
+        )
+
 set(SIM_EXEC_FILES
         simulation/udp_rcv_order.cc
         simulation/udp_send_order.cc
@@ -127,10 +139,53 @@ set(CPP_HEADER_FILES
         simulation/ejfat_packetize.hpp
         simulation/ejfat_assemble_ersap.hpp
         simulation/ejfat_assemble_ersap_et.hpp
+        util/ByteOrder.h
+        util/ByteBuffer.h
+        util/BufferSupplyItem.h
+        util/BufferSupply.h
         )
 
 
+# Files using Disruptor code also need util files, so keep them separate from other executables,
+# ie don't include DIS_EXEC_FILES here
 set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
+
+set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
+
+
+
+# Disruptor build is optional and set it to OFF by default
+option(BUILD_DIS "Build Disruptor-related code" OFF)
+
+if (BUILD_DIS)
+    # Finding ET libs and includes involve looking at CODA install directory
+    if (DEFINED ENV{CODA})
+        message(STATUS "CODA = " $ENV{CODA})
+    else()
+        message(FATAL_ERROR "Set the \"CODA\" env var so that Disruptor libs and includes can be found!")
+    endif()
+
+    find_package(DISRUPTOR)
+    if (DISRUPTOR_FOUND)
+        message(STATUS "Disruptor include dir = "  ${DISRUPTOR_INCLUDE_DIRS})
+
+        # Need boost libs for disruptor
+        find_package(Boost REQUIRED system thread chrono)
+
+        if (Boost_FOUND)
+            message(STATUS "Boost Found: libs = " ${Boost_LIBRARIES} ", include dirs = " ${Boost_INCLUDE_DIRS})
+            link_directories(${Boost_LIBRARY_DIRS})
+        else()
+            message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
+        endif()
+
+    else()
+        message(STATUS "Disruptor cannot be found, compile without it")
+    endif()
+else()
+    message(STATUS "Compile without Disruptor")
+endif()
+
 
 # ET build is optional and set it to OFF by default
 option(BUILD_ET "Build ET-related code" OFF)
@@ -265,14 +320,19 @@ if (DEFINED MAKE_EXEC)
         # Get file name with no directory or extension as executable name
         get_filename_component(execName ${fileName} NAME_WE)
         # Create executable from file
-        #message(STATUS "Create executable " ${execName})
+        message(STATUS "Create normal executable " ${execName})
         add_executable(${execName} ${fileName})
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
         # Location of include files
-        target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation ${ZeroMQ_INCLUDE_DIRS} ${ET_INCLUDE_DIRS})
+        target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                                                      ${CMAKE_SOURCE_DIR}/util
+                                                      ${ZeroMQ_INCLUDE_DIRS}
+                                                      ${Boost_INCLUDE_DIRS}
+                                                      ${DISRUPTOR_INCLUDE_DIRS}
+                                                      ${ET_INCLUDE_DIRS})
         # Needs these libs
-        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
+        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)
@@ -280,6 +340,37 @@ if (DEFINED MAKE_EXEC)
             install(TARGETS ${execName} RUNTIME DESTINATION bin)
         endif()
     endforeach(fileName)
+
+    if (DISRUPTOR_FOUND)
+        message(STATUS "TRY DISRUPTOR CODE:")
+
+        # This files need util files added to executable
+        foreach(fileName ${DIS_EXEC_FILES})
+            # Get file name with no directory or extension as executable name
+            get_filename_component(execName ${fileName} NAME_WE)
+            # Create executable from file
+            message(STATUS "Create disruptor-related executable " ${execName})
+            add_executable(${execName} ${fileName} ${UTIL_FILES})
+            # Put debug extension on if applicable
+            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+            # Location of include files
+            target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                    ${CMAKE_SOURCE_DIR}/util
+                    ${ZeroMQ_INCLUDE_DIRS}
+                    ${Boost_INCLUDE_DIRS}
+                    ${DISRUPTOR_INCLUDE_DIRS}
+                    ${ET_INCLUDE_DIRS})
+            # Needs these libs
+            target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
+
+            # Only install if installation directory has been defined
+            if (DEFINED INSTALL_DIR_DEFINED)
+                # Install into bin dir
+                install(TARGETS ${execName} RUNTIME DESTINATION bin)
+            endif()
+        endforeach(fileName)
+    endif()
+
 endif()
 
 
