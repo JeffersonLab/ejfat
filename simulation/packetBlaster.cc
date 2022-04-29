@@ -25,7 +25,7 @@
 #include <cmath>
 #include "ejfat_packetize.hpp"
 
-using namespace ersap::ejfat;
+using namespace ejfat;
 
 #define INPUT_LENGTH_MAX 256
 

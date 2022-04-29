@@ -18,7 +18,7 @@
 
 #include "ejfat_assemble_ersap.hpp"
 
-using namespace ersap::ejfat;
+using namespace ejfat;
 
 
 //-----------------------------------------------------------------------
