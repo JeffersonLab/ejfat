@@ -271,7 +271,7 @@ static void *thread(void *arg) {
 
         // Get buffer from supply
         auto item = supply->get();
-        std::shared_ptr<ByteBuffer> buf = item->getBuffer();
+        std::shared_ptr<ByteBuffer> buf = item->getClearedBuffer();
 
         // Fill with data
         ssize_t nBytes = getPacketizedBufferFast((char *)buf->array(), bufSize, udpSocket,
@@ -495,7 +495,7 @@ int main(int argc, char **argv) {
         auto item = supplies[i]->consumerGet();
 
         // Get data
-        auto byteBuf = item->getBufferAsIs();
+        auto byteBuf = item->getBuffer();
         std::cout << "       client got " << (item->getUserInt())  << " bytes" << ", should be same as lim " << byteBuf->limit() << std::endl;
 totalBytesGathered += item->getUserInt();
 
