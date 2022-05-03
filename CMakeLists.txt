@@ -327,10 +327,9 @@ if (DEFINED MAKE_EXEC)
         target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
                                                       ${CMAKE_SOURCE_DIR}/util
                                                       ${ZeroMQ_INCLUDE_DIRS}
-                                                      ${DISRUPTOR_INCLUDE_DIRS}
                                                       ${ET_INCLUDE_DIRS})
         # Needs these libs
-        target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
+        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)
@@ -359,7 +358,7 @@ if (DEFINED MAKE_EXEC)
                     ${DISRUPTOR_INCLUDE_DIRS}
                     ${ET_INCLUDE_DIRS})
             # Needs these libs
-            target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
+            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)
