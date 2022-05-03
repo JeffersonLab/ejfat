@@ -15,7 +15,6 @@
 #include <memory>
 #include <atomic>
 #include <functional>
-#include <atomic>
 
 
 #include "Disruptor.h"
