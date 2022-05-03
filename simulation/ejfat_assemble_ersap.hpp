@@ -195,8 +195,8 @@ static inline uint64_t bswap_64(uint64_t x) {
         {
             *ll = buffer[0];
             *bb = buffer[1];
-            *version  = (uint32_t)buffer[2];
-            *protocol = (uint32_t)buffer[3];
+            *version  = ((uint32_t)buffer[2] & 0xff);
+            *protocol = ((uint32_t)buffer[3] & 0xff);
             *entropy  = ntohs(*((uint16_t *)(&buffer[6]))) & 0xffff;
             *tick     = ntohll(*((uint64_t *)(&buffer[8])));
         }
@@ -256,6 +256,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * Routine to read a single UDP packet into 2 buffers with one system call.
          * The first buffer filled will contain the reassemby header used in the EJFAT project.
          * The second buffer will contain all the rest of the data sent.
+         * The reassembly header will be parsed and its data retrieved.
          * </p>
          *
          * It's the responsibility of the caller to have at least enough space in the
@@ -330,9 +331,8 @@ static inline uint64_t bswap_64(uint64_t x) {
 
         /**
          * <p>
-         * Routine to read a single UDP packet into 2 buffers with one system call.
-         * The first buffer filled will contain the reassemby header used in the EJFAT project.
-         * The second buffer will contain all the rest of the data sent.
+         * Routine to read a single UDP packet into a single buffer.
+         * The reassembly header will be parsed and its data retrieved.
          * </p>
          *
          * It's the responsibility of the caller to have at least enough space in the
@@ -379,9 +379,10 @@ static inline uint64_t bswap_64(uint64_t x) {
             parseReHeader(pkt, version, first, last, dataId, sequence, tick);
 
             // Copy datq
-            memcpy(dataBuf, pkt + HEADER_BYTES, bytesRead - HEADER_BYTES);
+            int dataBytes = bytesRead - HEADER_BYTES;
+            memcpy(dataBuf, pkt + HEADER_BYTES, dataBytes);
 
-            return bytesRead - HEADER_BYTES;
+            return dataBytes;
         }
 
 
@@ -442,7 +443,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             uint32_t sequence, expectedSequence = *expSequence;
 
             bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
-            int  version, nBytes;
+            int  version, nBytes, bytesRead;
             uint16_t dataId;
             uint32_t pktCount = 0;
             size_t  maxPacketBytes = 0;
@@ -458,7 +459,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             while (true) {
 
                 if (veryFirstRead) {
-                    // Read in one packet
+                    // Read in one packet, return value does NOT include RE header
                     nBytes = readPacketRecvFrom(putDataAt, remainingLen, udpSocket,
                                                 &packetTick, &sequence, &dataId, &version,
                                                 &packetFirst, &packetLast, debug);
@@ -473,11 +474,12 @@ static inline uint64_t bswap_64(uint64_t x) {
                     memcpy(headerStorage, writeHeaderAt, HEADER_BYTES);
 
                     // Read data right into final buffer (including RE header)
-                    nBytes = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
-                    if (nBytes < 0) {
+                    bytesRead = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
+                    if (bytesRead < 0) {
                         fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                         return(RECV_MSG);
                     }
+                    nBytes = bytesRead - HEADER_BYTES;
 
                     // Parse header
                     parseReHeader(writeHeaderAt, &version, &packetFirst, &packetLast, &dataId, &sequence, &packetTick);
@@ -490,10 +492,10 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                 if (sequence == 0) {
                     firstReadForBuf = true;
-                    *bytesPerPacket = nBytes - HEADER_BYTES;
+                    *bytesPerPacket = nBytes;
                 }
 
-                if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
+                if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
                                    nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
 
                 // Check to see if packet is ou-of-sequence
@@ -705,7 +707,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                 if (sequence == 0) {
                     firstReadForBuf = true;
-                    *bytesPerPacket = nBytes - HEADER_BYTES;
+                    *bytesPerPacket = nBytes;
                 }
 
                 if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
