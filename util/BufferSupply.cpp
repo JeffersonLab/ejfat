@@ -17,28 +17,13 @@ namespace ejfat {
 
 
     /**
-     * Constructor.
-     * Buffers are big endian and not direct.
-     * @param ringSize    number of BufferSupplyItem objects in ring buffer.
-     * @param bufferSize  initial size (bytes) of ByteBuffer in each BufferSupplyItem object.
-     * @throws IllegalArgumentException if args &lt; 1 or ringSize not power of 2.
+     * Default Constructor. Ring has 16 bufs, each 4096 bytes.
+     * Each buf is labeled as having data with same as local endian.
      */
-    BufferSupply::BufferSupply(int ringSize, int bufferSize) :
-
-            BufferSupply(ringSize, bufferSize, ByteOrder::ENDIAN_BIG, false) {
+    BufferSupply::BufferSupply() :
+            BufferSupply(16, 4096, ByteOrder::ENDIAN_LITTLE, false) {
     }
 
-    /**
-     * Constructor. Ordered release is false.
-     *
-     * @param ringSize    number of BufferSupplyItem objects in ring buffer.
-     * @param bufferSize  initial size (bytes) of ByteBuffer in each BufferSupplyItem object.
-     * @param order       byte order of ByteBuffer in each BufferSupplyItem object.
-     * @throws IllegalArgumentException if args &lt; 1 or ringSize not power of 2.
-     */
-    BufferSupply::BufferSupply(int ringSize, int bufferSize, const ByteOrder & order) :
-            BufferSupply(ringSize, bufferSize, order, false) {
-    }
 
 
     /**

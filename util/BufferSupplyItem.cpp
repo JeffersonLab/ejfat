@@ -105,7 +105,7 @@ namespace ejfat {
         // Avoid self copy ...
         if (this != &item) {
 
-            buffer->copy(item.getBufferAsIs());
+            buffer->copy(item.getBuffer());
 
             bufferSize       = item.bufferSize;
             order            = item.order;
@@ -264,11 +264,11 @@ namespace ejfat {
 
 
     /**
-     * Get the contained ByteBuffer.
-     * Position is set to 0, limit to capacity.
+     * Get the contained ByteBuffer. To be used by a data producer.
+     * The contents are "cleared" such that position is set to 0, limit to capacity.
      * @return contained ByteBuffer.
      */
-    std::shared_ptr<ByteBuffer> BufferSupplyItem::getBuffer() {
+    std::shared_ptr<ByteBuffer> BufferSupplyItem::getClearedBuffer() {
         buffer->clear();
         return buffer;
     }
@@ -276,9 +276,10 @@ namespace ejfat {
 
     /**
      * Get the contained ByteBuffer without any modifications.
+     * To be used by a data consumer.
      * @return contained ByteBuffer without any modifications.
      */
-    std::shared_ptr<ByteBuffer> BufferSupplyItem::getBufferAsIs() const {
+    std::shared_ptr<ByteBuffer> BufferSupplyItem::getBuffer() const {
         return buffer;
     }
 

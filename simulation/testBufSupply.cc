@@ -151,7 +151,7 @@ static void *thread(void *arg) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
         // Fill with data
-        auto bb = item->getBuffer();
+        auto bb = item->getClearedBuffer();
         bb->putInt(i);
 
         // Send it to single consumer

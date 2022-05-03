@@ -45,7 +45,9 @@ namespace ejfat {
      * producer provides data for a single consumer which is waiting for that data.
      * The producer does a get(), fills the buffer with data, and finally does a publish()
      * to let the consumer know the data is ready. Simultaneously, a consumer does a
-     * consumerGet() to access the data once it is ready. The consumer then calls
+     * consumerGet() to access the data buffer once it is ready. To preserve all the data
+     * as the producer wrote it, use the {@link BufferSupplyItem.getBufferAsIs() when getting
+     * the data buffer. The consumer then calls
      * release() when finished which allows the producer to reuse the
      * now unused buffer.<p>
      *
@@ -135,14 +137,13 @@ namespace ejfat {
         BufferSupply();
         // No need to copy these things
         BufferSupply(const BufferSupply & supply) = delete;
-        BufferSupply(int ringSize, int bufferSize);
-        BufferSupply(int ringSize, int bufferSize, const ByteOrder & order);
-        BufferSupply(int ringSize, int bufferSize, const ByteOrder & order, bool orderedRelease);
+        // By default, items are not released in order and data is local endian
+        BufferSupply(int ringSize, int bufferSize,
+                     const ByteOrder & order = ByteOrder::ENDIAN_LOCAL,
+                     bool orderedRelease = false);
 
 
-        ~BufferSupply() {
-            ringBuffer.reset();
-        }
+        ~BufferSupply() {ringBuffer.reset();}
 
         void errorAlert() const;
 

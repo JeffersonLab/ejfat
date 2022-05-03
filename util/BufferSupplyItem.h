@@ -134,15 +134,15 @@ namespace ejfat {
 
         uint32_t  getBufferSize() const;
         void setBuffer(std::shared_ptr<ByteBuffer> buf);
-        std::shared_ptr<ByteBuffer> getBuffer();
-        std::shared_ptr<ByteBuffer> getBufferAsIs() const;
+        std::shared_ptr<ByteBuffer> getClearedBuffer();
+        std::shared_ptr<ByteBuffer> getBuffer() const;
         std::shared_ptr<ByteBuffer> ensureCapacity(uint32_t capacity);
 
         void setUsers(int users);
         int  getUsers() const;
         void addUsers(int additionalUsers);
 
-        // User should not call these, only called BufferSupply ...........
+        // User should not call these, only called by BufferSupply ...........
 
         bool decrementCounter();
 
