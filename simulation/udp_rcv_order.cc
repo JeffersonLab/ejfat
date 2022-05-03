@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
         fp = stdout;
     }
 
-    // validate file open for reading
+    // validate file open for writing
     if (!fp) {
         fprintf(stderr, "file open failed: %s\n", strerror(errno));
         return 1;
