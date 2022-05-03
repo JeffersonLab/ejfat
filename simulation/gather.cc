@@ -17,6 +17,16 @@
 #include <pthread.h>
 #include <time.h>
 #include <queue>
+
+#include <cstdio>
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <cerrno>
+
+#include <iostream>
+#include "ByteBuffer.h"
 #include "BufferSupply.h"
 #include "BufferSupplyItem.h"
 
@@ -39,15 +49,16 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-repeat] [-ip6]",
+            "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <starting UDP port>]",
             "        [-b <internal buffer byte size>]",
+            "        [-c <buffer count / ring>]",
             "        [-r <UDP receive buffer byte size>]",
             "        [-i <id count>]",
-            "        [-f <filename>]");
+            "        [-f <output filename>]");
 
     fprintf(stderr, "        EJFAT UDP packet receiver that reads a file that the packetizer sends over multiple ports\n");
     fprintf(stderr, "        with a separate thread for each id to reassemble. Data can be repeatedly read.\n");
@@ -64,15 +75,15 @@ static void printHelp(char *programName) {
  * @param recvBufSize   filled with UDP receive buffer size.
  * @param startingPort  filled with the first UDP port to listen on.
  * @param idCount       filled with number of data sources.
+ * @param count         filled with number of bufs / ring.
  * @param debug         filled with debug flag.
- * @param repeat        filled with repeat flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param fileName      filled with output file name.
  * @param listenAddr    filled with IP address to listen on.
  */
 static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize,
-                      uint16_t* startingPort, int *idCount,
-                      bool *debug, bool *repeat, bool *useIPv6,
+                      uint16_t* startingPort, int *idCount, int *count,
+                      bool *debug, bool *useIPv6,
                       char *fileName, char *listenAddr) {
 
     int c, i_tmp;
@@ -80,13 +91,12 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {{"repeat",  0, NULL, 1},
-             {"ip6",  0, NULL, 2},
+            {{"ip6",  0, NULL, 2},
              {0,       0, 0,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:i:f:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:i:f:c:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -160,9 +170,16 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize,
                 strcpy(fileName, optarg);
                 break;
 
-            case 1:
-                // REPEAT
-                *repeat = true;
+            case 'c':
+                // Buffers / ring                                                                                                                                                          count
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *count = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -c, count > 0\n");
+                    exit(-1);
+                }
                 break;
 
             case 2:
@@ -186,11 +203,6 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize,
 
     }
 
-    if (gotFileName && *repeat == true) {
-        fprintf(stderr, "\nIf specifying file, cannot read repeatedly\n\n");
-        printHelp(argv[0]);
-        exit(2);
-    }
 
     if (help) {
         printHelp(argv[0]);
@@ -211,8 +223,7 @@ struct threadArg {
     int id;
     int bufferSize;
     int socket;
-    bool repeat;
-    char *buffer;
+    std::shared_ptr<ejfat::BufferSupply> supply;
 };
 
 
@@ -223,7 +234,7 @@ static void *thread(void *arg) {
     int id = tArg->id;
     int bufSize = tArg->bufferSize;
     int udpSocket = tArg->socket;
-    char *dataBuf = tArg->buffer;
+    std::shared_ptr<ejfat::BufferSupply> supply = tArg->supply;
 
     bool last, firstRead = true, firstLoop = true;
     // Start with offset 0 in very first packet to be read
@@ -255,65 +266,78 @@ static void *thread(void *arg) {
     clock_gettime(CLOCK_REALTIME, &t1);
     time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
 
-    while (true) {
-        ssize_t nBytes = getPacketizedBufferFast(dataBuf, bufSize, udpSocket,
-                                         debug, firstRead, &last, &tick, &offset,
-                                         &bytesPerPacket, &packetCount, outOfOrderPackets);
+
+//    while (true) {
+
+        // Get buffer from supply
+        auto item = supply->get();
+        std::shared_ptr<ByteBuffer> buf = item->getBuffer();
+
+        // Fill with data
+        ssize_t nBytes = getPacketizedBufferFast((char *)buf->array(), bufSize, udpSocket,
+                                                 debug, firstRead, &last, &tick, &offset,
+                                                 &bytesPerPacket, &packetCount, outOfOrderPackets);
 
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
-            break;
+            return (NULL);
         }
 
-        byteCount   += nBytes;
-        packetsRead += packetCount;
-        offset = 0;
+        // Send it to consumer
+        buf->limit(nBytes);
+        item->setUserInt(nBytes);
+        supply->publish(item);
 
-        // stats
-        clock_gettime(CLOCK_REALTIME, &t2);
-        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
-        time = time2 - time1;
-
-        if (time > 5000) {
-            // Ignore the very first counts as blastee starts before blaster and
-            // that messes up the stats.
-
-            // reset things if #s rolling over
-            if (firstLoop || (totalBytes < 0) || (totalT < 0))  {
-                totalT = totalBytes = totalPackets = byteCount = packetsRead = 0;
-                time1 = time2;
-                firstLoop = false;
-                continue;
-            }
-
-            /* Packet rates */
-            rate = 1000.0 * ((double) packetsRead) / time;
-            totalPackets += packetsRead;
-            totalT += time;
-            avgRate = 1000.0 * ((double) totalPackets) / totalT;
-            printf(" Packets:  %3.4g Hz,    %3.4g Avg.\n", rate, avgRate);
-
-            /* Actual Data rates (no header info) */
-            rate = ((double) byteCount) / (1000*time);
-            totalBytes += byteCount;
-            avgRate = ((double) totalBytes) / (1000*totalT);
-            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
-
-            byteCount = packetsRead = 0;
-
-            clock_gettime(CLOCK_REALTIME, &t1);
-            time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
-        }
-
-    }
+//        byteCount   += nBytes;
+//        packetsRead += packetCount;
+//        offset = 0;
+//
+//        // stats
+//        clock_gettime(CLOCK_REALTIME, &t2);
+//        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
+//        time = time2 - time1;
+//
+//        if (time > 5000) {
+//            // Ignore the very first counts as blastee starts before blaster and
+//            // that messes up the stats.
+//
+//            // reset things if #s rolling over
+//            if (firstLoop || (totalBytes < 0) || (totalT < 0))  {
+//                totalT = totalBytes = totalPackets = byteCount = packetsRead = 0;
+//                time1 = time2;
+//                firstLoop = false;
+//                continue;
+//            }
+//
+//            /* Packet rates */
+//            rate = 1000.0 * ((double) packetsRead) / time;
+//            totalPackets += packetsRead;
+//            totalT += time;
+//            avgRate = 1000.0 * ((double) totalPackets) / totalT;
+//            printf(" Packets:  %3.4g Hz,    %3.4g Avg.\n", rate, avgRate);
+//
+//            /* Actual Data rates (no header info) */
+//            rate = ((double) byteCount) / (1000*time);
+//            totalBytes += byteCount;
+//            avgRate = ((double) totalBytes) / (1000*totalT);
+//            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
+//
+//            byteCount = packetsRead = 0;
+//
+//            clock_gettime(CLOCK_REALTIME, &t1);
+//            time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
+//        }
+//
+//    }
 
     return (NULL);
 }
 
 
+
 int main(int argc, char **argv) {
 
-    int idCount;
+    int idCount, ringSize = 2;
     // Set this to max expected data size
     int bufSize = 1020000;
     int recvBufBytes = 0, recvBufSize = 0;
@@ -326,13 +350,15 @@ int main(int argc, char **argv) {
     memset(fileName, 0, INPUT_LENGTH_MAX);
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &startingPort, &idCount, &debug, &repeat, &useIPv6, fileName, listeningAddr);
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &startingPort, &idCount, &ringSize, &debug, &useIPv6, fileName, listeningAddr);
+
+    std::shared_ptr<ejfat::BufferSupply> supplies[idCount];
 
     for (int i = 0; i < idCount; i++) {
 
         int udpSocket;
 
-        std::shared_ptr<ejfat::BufferSupply> supply = std::make_shared<ejfat::BufferSupply>(16, 1000000);
+        supplies[i] = std::make_shared<ejfat::BufferSupply>(ringSize, bufSize);
 
         // Fall back on defaults if not set by user
         if (recvBufSize == 0) {
@@ -428,24 +454,12 @@ int main(int argc, char **argv) {
             exit(1);
         }
 
+        // Place for incoming data will be a supply of buffers (disruptor's ring buffer)
+        arg->supply = supplies[i];
         arg->socket = udpSocket;
         arg->id = i;
         arg->bufferSize = bufSize;
-        arg->repeat = repeat;
 
-        // Place for incoming data will be a FIFO -- std::queue. If it's performance that's needed,
-        // boost::circular_buffer<> is better, and disruptor's RingBuffer<> is most likely
-        // better than that.
-
-        std::shared_ptr<std::queue<char *>> q = std::make_shared<std::queue<char *>>();
-
-        char *dataBuf = (char *) malloc(bufSize);
-        if (dataBuf == NULL) {
-            fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
-            exit(1);
-        }
-
-        arg->buffer = dataBuf;
 
         pthread_t thd;
         int status = pthread_create(&thd, NULL, thread, (void *) arg);
@@ -455,8 +469,49 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Open output file
+
+    FILE *fp = nullptr;
+    if (strlen(fileName) > 0) {
+        fp = fopen (fileName, "w");
+    }
+    else {
+        fp = stdout;
+    }
+
+    // validate file open for writing
+    if (!fp) {
+        fprintf(stderr, "file open failed: %s\n", strerror(errno));
+        return 1;
+    }
+
+
+    int totalBytesGathered = 0;
+
+    // Now rejoin, thru the ring buffers, everything collected in each UDP socket
+    for (int i = 0; i < idCount; i++) {
+
+        // Get buffer from supply that a receiving thread wrote data into
+        auto item = supplies[i]->consumerGet();
+
+        // Get data
+        auto byteBuf = item->getBufferAsIs();
+        std::cout << "       client got " << (item->getUserInt())  << " bytes" << ", should be same as lim " << byteBuf->limit() << std::endl;
+totalBytesGathered += item->getUserInt();
+
+        // Write out what was received
+        writeBuffer((char *)(byteBuf->array()), byteBuf->limit(), fp, debug);
+
+
+        // Send it to back to supply for reuse
+        supplies[i]->release(item);
+    }
+    std::cout << "       client got " << totalBytesGathered  << " total bytes" << std::endl;
+
+    fclose(fp);
+
     // Don't let this thread end? 2.75 hours
-    sleep(10000);
+    sleep(4);
 
     return 0;
 }

@@ -273,12 +273,12 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
 // Quantities to be shared by each sending thread
 static int spins = 0;
-static uint32_t offset = 0, delay = 0, sendBufSize = 0, idCount = 1, maxUdpPayload;
+static uint32_t delay = 0, sendBufSize = 0, idCount = 1, maxUdpPayload;
 static uint16_t lbPort = 0x4c42; // FPGA port is default
 static uint64_t tick = 1;
 static int mtu, version = 1, protocol = 1, startingEntropy = 0;
 static uint16_t startingId = 1;
-static bool debug = false, repeat = false, useIPv6 = false;
+static bool debug = true, repeat = false, useIPv6 = false;
 static char lbHost[INPUT_LENGTH_MAX], filename[INPUT_LENGTH_MAX], interface[16];
 
 
@@ -302,6 +302,7 @@ static void *thread(void *arg) {
     int clientSocket = tArg->socket;
     int entropy = tArg->entropy;
     char *buf = tArg->buffer;
+    uint32_t offset = 0;
 
     int err;
     bool firstBuffer = true;
@@ -309,7 +310,8 @@ static void *thread(void *arg) {
     int currentSpins = spins;
     double x=0., y=0., t=0.;
 
-    fprintf(stdout, "spins = %u, currentSpins = %u\n", spins, currentSpins);
+    //fprintf(stdout, "spins = %u, currentSpins = %u\n", spins, currentSpins);
+    if (debug) fprintf(stderr, "new thread: id = %d, entropy = %d\n\n", id, entropy);
 
     // Statistics
     int64_t packetsSent=0, packetCount=0, byteCount=0, totalBytes=0, totalPackets=0;
@@ -325,7 +327,7 @@ static void *thread(void *arg) {
         err = sendPacketizedBufferFast(buf, bufSize,
                                        maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, id, &offset, delay,
-                                       firstBuffer, lastBuffer, debug, &packetsSent);
+                                       firstBuffer, lastBuffer, false, &packetsSent);
 
         if (spins > 0) {
             while (--currentSpins > 0) {
@@ -346,7 +348,11 @@ static void *thread(void *arg) {
 
         // One and done
         if (!repeat) {
+            if (debug) fprintf(stderr, "new thread id %d: break since repeat is false\n", id);
             break;
+        }
+        else {
+            if (debug) fprintf(stderr, "new thread id %d: REPEAT\n", id);
         }
 
         // spin delay
@@ -419,7 +425,6 @@ int main(int argc, char **argv) {
 
     // Open file
     size_t fileSize = 0L;
-    int partialBufSize = 0;
     FILE *fp = fopen(filename, "r");
     if (fp == nullptr) {
         fprintf(stderr, "\n ******* file %s, does not exist or cannot open\n\n", filename);
@@ -438,8 +443,12 @@ int main(int argc, char **argv) {
     }
 
     // How many bytes of original buffer does each thread (id) send?
-    // Note: the last id may send a little more.
-    partialBufSize = fileSize / idCount;
+    // Note: the last id may send a little less.
+    size_t partialBufSize = fileSize / idCount + 1;
+    fprintf(stderr, "\n ******* file %s is %lu bytes, split into %d parts, each %lu\n", filename, fileSize, idCount, partialBufSize);
+    size_t bytesToWrite, remainingBytes = fileSize;
+
+    // TODO: make adjustments for last buffer's length !!!
 
     // Break data into multiple packets of max MTU size.
     // If the mtu was not set on the command line, get it progamatically
@@ -527,9 +536,9 @@ int main(int argc, char **argv) {
             // Configure settings in address struct
             memset(&serverAddr, 0, sizeof(serverAddr));
             serverAddr.sin_family = AF_INET;
-            if (debug) fprintf(stderr, "Sending on UDP port %hu\n", lbPort);
+//if (debug) fprintf(stderr, "Sending on UDP port %hu\n", lbPort);
             serverAddr.sin_port = htons(lbPort);
-            if (debug) fprintf(stderr, "Connecting to host %s\n", lbHost);
+//if (debug) fprintf(stderr, "Connecting to host %s\n", lbHost);
             serverAddr.sin_addr.s_addr = inet_addr(lbHost);
             memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
@@ -556,25 +565,29 @@ int main(int argc, char **argv) {
             return -1;
         }
 
+        // How many bytes do we write in this thread?
+        // We try to write partialBufSize, unless there are less
+        bytesToWrite = remainingBytes > partialBufSize ? partialBufSize : remainingBytes;
+        remainingBytes -= bytesToWrite;
+
         arg->socket = clientSocket;
         arg->id = startingId + i;
-        arg->bufferSize = partialBufSize;
+        arg->bufferSize = bytesToWrite;
         arg->entropy = startingEntropy + i;
         arg->repeat = repeat;
-        // Last buf needs to pick up remaining bytes
-        if (i == idCount - 1) {
-            arg->bufferSize += fileSize % idCount;
-        }
+
+        if (debug) fprintf(stderr, "\nStart thread id = %d, entropy = %d, bytes to write = %lu, remaining = %lu\n\n",
+                           arg->id, arg->entropy, bytesToWrite, remainingBytes);
 
         // Copy data to be sent
-        arg->buffer = (char *)malloc(partialBufSize);
+        arg->buffer = (char *)malloc(bytesToWrite);
         if (arg->buffer == NULL) {
             fprintf(stderr, "\n ******* ran out of memory\n\n");
             return -1;
         }
 
-        size_t nBytes = fread(arg->buffer, 1, partialBufSize, fp);
-        if (nBytes != partialBufSize) {
+        size_t nBytes = fread(arg->buffer, 1, bytesToWrite, fp);
+        if (nBytes != bytesToWrite) {
             // Error in reading
             perror("Error reading file: ");
             return -1;
