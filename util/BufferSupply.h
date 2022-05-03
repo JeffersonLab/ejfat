@@ -21,7 +21,7 @@
 
 #include "ByteOrder.h"
 #include "BufferSupplyItem.h"
-#include "Disruptor.h"
+#include "Disruptor/Disruptor.h"
 #include "Disruptor/SpinCountBackoffWaitStrategy.h"
 
 

@@ -17,7 +17,7 @@
 #include <functional>
 
 
-#include "Disruptor.h"
+#include "Disruptor/Disruptor.h"
 #include "ByteOrder.h"
 #include "ByteBuffer.h"
 

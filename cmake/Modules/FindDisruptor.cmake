@@ -10,8 +10,8 @@ pkg_check_modules(PC_LIBDISRUPTOR QUIET libDisruptor)
 
 set(ET_VERSION ${PC_LIBDISRUPTOR_VERSION})
 
-find_path(DISRUPTOR_INCLUDE_DIR Disruptor.h
-        PATHS $ENV{CODA}/common/include $ENV{DISRUPTOR_CPP_HOME}/Disruptor)
+find_path(DISRUPTOR_INCLUDE_DIR Disruptor/Disruptor.h
+        PATHS $ENV{CODA}/common/include $ENV{DISRUPTOR_CPP_HOME})
 
 find_library(DISRUPTOR_LIBRARY
              NAMES Disruptor
