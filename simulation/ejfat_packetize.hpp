@@ -200,7 +200,7 @@ namespace ejfat {
             *(buffer+2) = version;
             *(buffer+3) = protocol;
             // Put the data in network byte order (big endian)
-            *(buffer+6) = htons(entropy);
+            *((uint16_t *)(buffer + 6)) = htons(entropy);
             *((uint64_t *)(buffer + 8)) = htonll(tick);
         }
 
