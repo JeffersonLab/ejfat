@@ -40,7 +40,7 @@ static void printHelp(char *programName) {
             "        [-mtu <desired MTU size>]",
             "        [-t <tick>]",
             "        [-ver <version>]",
-            "        [-id <data id>]",
+            "        [-id <data id / entropy>]",
             "        [-pro <protocol>]",
             "        [-c <# of times to read thru file or out-of-order (test) data w/ increasing tick>]",
             "        [-d <delay in millisec between packets>]",
