@@ -276,7 +276,7 @@ static int spins = 0;
 static uint32_t delay = 0, sendBufSize = 0, idCount = 1, maxUdpPayload;
 static uint16_t lbPort = 0x4c42; // FPGA port is default
 static uint64_t tick = 1;
-static int mtu, version = 1, protocol = 1, startingEntropy = 0;
+static int mtu, version = 2, protocol = 1, startingEntropy = 0;
 static uint16_t startingId = 1;
 static bool debug = true, repeat = false, useIPv6 = false;
 static char lbHost[INPUT_LENGTH_MAX], filename[INPUT_LENGTH_MAX], interface[16];
