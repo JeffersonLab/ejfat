@@ -149,8 +149,6 @@ set(CPP_HEADER_FILES
 # ie don't include DIS_EXEC_FILES here
 set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
 
-set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
-
 
 
 # Disruptor build is optional and set it to OFF by default
