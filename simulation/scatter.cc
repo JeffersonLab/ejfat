@@ -571,7 +571,7 @@ int main(int argc, char **argv) {
         remainingBytes -= bytesToWrite;
 
         arg->socket = clientSocket;
-        arg->id = startingId + i;
+        arg->id = startingEntropy + i;
         arg->bufferSize = bytesToWrite;
         arg->entropy = startingEntropy + i;
         arg->repeat = repeat;
