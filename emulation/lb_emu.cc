@@ -102,7 +102,6 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         }
-//        fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP && passedT && passedR)) { Usage(); exit(1); }
@@ -224,8 +223,8 @@ int main (int argc, char *argv[])
     uint8_t*  pBufRe = &buffer[lblen];
     uint16_t* pLbEntrp = (uint16_t*) &buffer[lblen-sizeof(uint16_t)-sizeof(uint64_t)];
     uint64_t* pLbTick  = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
-    uint16_t* pReDid   = (uint16_t*) &buffer[mdlen-sizeof(uint16_t)-sizeof(uint32_t)-sizeof(uint64_t)];
-    uint32_t* pReSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint32_t)-sizeof(uint64_t)];
+    uint16_t* pReDid   = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint32_t* pReSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
     uint64_t* pReTick  = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
 
     while(1){
@@ -242,12 +241,12 @@ int main (int argc, char *argv[])
         // decode to host encoding
         uint16_t lb_entrp   = ntohs(*pLbEntrp);
         uint64_t lb_tick    = NTOHLL(*pLbTick);
-        uint8_t re_vrsn     = (pBufRe[0] & 0xf0) >> 4;
-        uint8_t re_frst     = (pBufRe[1] & 0x02) >> 1;
-        uint8_t re_lst      =  pBufRe[1] & 0x01;
         uint32_t re_seq     = ntohl(*pReSeq);
         uint16_t re_data_id = ntohs(*pReDid);
         uint64_t re_tick    = NTOHLL(*pReTick);
+        uint8_t re_vrsn     = (pBufRe[0] & 0xf0) >> 4;
+        uint8_t re_frst     = (pBufRe[1] & 0x02) >> 1;
+        uint8_t re_lst      =  pBufRe[1] & 0x01;
 
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,

@@ -41,7 +41,7 @@ int main (int argc, char *argv[])
 {
     const size_t max_pckt_sz = 9000-20-8;  // = MTU - IP header - UDP header
     const size_t lblen       = 16;
-    const size_t relen       = 16;
+    const size_t relen       = 8+8;
     const size_t mdlen       = lblen + relen;
 
     int optc;
@@ -113,7 +113,6 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         }
-//        fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
