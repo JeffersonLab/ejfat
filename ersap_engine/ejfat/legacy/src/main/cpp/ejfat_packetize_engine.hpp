@@ -12,12 +12,22 @@ public:
 
     EjfatPacketizeEngine();
 
+    // Send a single buffer
     void process(char *buffer, uint32_t bufLen, uint64_t tick);
 
     void process(char *buffer, uint32_t bufLen,
                  std::string & host, const std::string & interface,
                  int mtu, uint16_t port, uint64_t tick,
                  int protocol, int entropy, int version, uint16_t dataId,
+                 uint32_t delay, bool debug, bool useIPv6);
+
+    // Send an array of buffers
+    void process(char **buffers, uint32_t *bufLens, int *entropys, int bufCount, uint64_t tick);
+
+    void process(char **buffers, uint32_t *bufLens, int *entropys, int bufCount,
+                 std::string & host, const std::string & interface,
+                 int mtu, uint16_t port, uint64_t tick,
+                 int protocol, int version,
                  uint32_t delay, bool debug, bool useIPv6);
 
     void parseConfigFile();

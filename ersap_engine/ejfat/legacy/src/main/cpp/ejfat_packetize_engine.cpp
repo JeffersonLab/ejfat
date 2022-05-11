@@ -145,7 +145,8 @@ namespace ejfat {
         //        std::cout << "EJFAT processing..." << std::endl;
 
         int err = ::ejfat::sendBuffer(buffer, bufLen, host, interface,
-                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true, useIPv6);
+                                      mtu, port, tick, protocol, entropy,
+                                      version, dataId, delay, debug, true, useIPv6);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);
@@ -162,11 +163,79 @@ namespace ejfat {
 //        std::cout << "EJFAT processing..." << std::endl;
 
         int err = ::ejfat::sendBuffer(buffer, bufLen, host, interface,
-                             mtu, port, tick, protocol, entropy, version, dataId, delay, debug, true, useIPv6);
+                                      mtu, port, tick, protocol, entropy,
+                                      version, dataId, delay, debug, true, useIPv6);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);
         }
     }
+
+
+
+    /**
+     * Packetize buffers and send to given destinations.
+     *
+     * @param buffers  array of buffers
+     * @param bufLens  array of buffer lengths in bytes
+     * @param entropys array of entropy values. Since dataId must match entropy, just use entropy for data Id.
+     * @param bufCount number of array elements
+     * @param tick
+     */
+    void EjfatPacketizeEngine::process(char **buffers, uint32_t *bufLens, int *entropys, int bufCount, uint64_t tick)
+    {
+        //        std::cout << "EJFAT processing..." << std::endl;
+        for (int i=0; i < bufCount; i++) {
+            int err = ::ejfat::sendBuffer(buffers[i], bufLens[i], host, interface,
+                                          mtu, port, tick, protocol, entropys[i],
+                                          version, entropys[i], delay, debug, true, useIPv6);
+            if (err < 0) {
+                fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
+                exit(-1);
+            }
+        }
+    }
+
+
+    /**
+     * Packetize buffers and send to given destinations.
+     *
+     * @param buffers  array of buffers
+     * @param bufLens  array of buffer lengths in bytes
+     * @param entropys array of entropy values. Since dataId must match entropy, just use entropy for data Id.
+     * @param bufCount number of array elements
+     * @param host
+     * @param interface
+     * @param mtu
+     * @param port
+     * @param tick
+     * @param protocol
+     * @param version this must = 2.
+     * @param delay
+     * @param debug
+     * @param useIPv6
+     */
+    void EjfatPacketizeEngine::process(char **buffers, uint32_t *bufLens, int *entropys, int bufCount,
+                                       std::string & host, const std::string & interface,
+                                       int mtu, uint16_t port, uint64_t tick,
+                                       int protocol, int version,
+                                       uint32_t delay, bool debug, bool useIPv6)
+    {
+        //        std::cout << "EJFAT processing..." << std::endl;
+        // for now set by hand
+        version = 2;
+
+        for (int i=0; i < bufCount; i++) {
+            int err = ::ejfat::sendBuffer(buffers[i], bufLens[i], host, interface,
+                                          mtu, port, tick, protocol, entropys[i],
+                                          version, entropys[i], delay, debug, true, useIPv6);
+            if (err < 0) {
+                fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
+                exit(-1);
+            }
+        }
+    }
+
+
 } // end namespace ejfat
 } // end namespace ersap
