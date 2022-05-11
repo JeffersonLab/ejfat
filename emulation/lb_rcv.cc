@@ -19,6 +19,7 @@
 #include <iostream>
 #include <inttypes.h>
 #include <netdb.h>
+#include <time.h>
 
 using namespace std;
 
@@ -32,7 +33,7 @@ using namespace std;
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
 const size_t max_data_ids = 100;          // support up to 10 data_ids
 const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
-const size_t relen        = 8+8;     // 8 for flags, data_id
+const size_t relen        = 8+8;     // 8 for flags, data_id, 8 for tick (event_id)
 const size_t mdlen        = relen;
 
 // set up some cachd buffers for out-of-sequence work
@@ -108,7 +109,6 @@ int main (int argc, char *argv[])
             Usage();
             exit(1);
         }
-//        fprintf(stdout, "%s ", optarg);
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
@@ -180,8 +180,8 @@ int main (int argc, char *argv[])
     }
     uint16_t num_data_ids = 0;  // number of data_ids encountered in this session
 
-    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint16_t)-sizeof(uint32_t)-sizeof(uint64_t)];
-    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint32_t)-sizeof(uint64_t)];
+    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
     uint64_t* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)];
 
     do {
@@ -191,12 +191,12 @@ int main (int argc, char *argv[])
         nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
 
         // decode to host encoding
+        uint32_t seq     = ntohl(*pSeq);
+        uint16_t data_id = ntohs(*pDid);
+        uint64_t re_tick = NTOHLL(*pReTick);
         uint8_t vrsn     = pBufRe[0] & 0xf;
         uint8_t frst     = pBufRe[1] == 0x2; //(pBufRe[1] & 0x02) >> 1;
         uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
-        uint16_t data_id = ntohs(*pDid);
-        uint32_t seq     = ntohl(*pSeq);
-        uint64_t re_tick    = NTOHLL(*pReTick);
 
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
@@ -223,7 +223,8 @@ int main (int argc, char *argv[])
                         cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
 
         if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
-                                                    == max_seq[data_id] + 1)  { //build blob and transfer
+                                                    == max_seq[data_id] + 1)  { 
+		    //build blob and transfer
             uint16_t evnt_sz = 0;
             for(uint8_t i = 0; i <= max_seq[data_id]; i++) {
                  //setup egress buffer for ERSAP
@@ -245,7 +246,17 @@ int main (int argc, char *argv[])
                     pckt_sz[i][j] = 0;
                 }
             }
-            num_data_ids = 0;  // number of data_ids encountered in this session
+            num_data_ids = 0;  // reset number of data_ids encountered in this session
+ 
+            // `time_t` is an arithmetic time type
+            time_t now;
+         
+            // Obtain current time
+            // `time()` returns the current time of the system as a `time_t` value
+            time(&now);
+         
+            // Convert to local time format and print to stdout
+            fprintf ( stdout, "Today is %s", ctime(&now));
         }
         if(passedV) cout << endl;
     } while(1);
