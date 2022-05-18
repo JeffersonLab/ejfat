@@ -54,6 +54,7 @@ void   Usage(void)
         -6 Use IPV6 \n\
         -i listen address (string)  \n\
         -p listen port (number)  \n\
+        -f flush packets immediately -  do not buffer reassembly \n\
         -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
@@ -74,12 +75,12 @@ int main (int argc, char *argv[])
     extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false,
-	passedV=false;
+        passedV=false, passedF=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;                  // listening port
 
-    while ((optc = getopt(argc, argv, "i:p:6v")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:6fv")) != -1)
     {
         switch (optc)
         {
@@ -98,7 +99,11 @@ int main (int argc, char *argv[])
         case 'p':
             lstn_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
-            fprintf(stdout, "-p %d", lstn_prt);
+            fprintf(stdout, "-p %d ", lstn_prt);
+            break;
+        case 'f':
+            passedF = true;
+            fprintf(stdout, "-f ");
             break;
         case 'v':
             passedV = true;
@@ -135,6 +140,18 @@ int main (int argc, char *argv[])
             exit(1);
         }
 
+        /* increase UDP receive buffer size */
+        int recvBufSize = 0;
+    #ifdef __APPLE__
+        // By default set recv buf size to 7.4 MB which is the highest
+        // it wants to go before before reverting back to 787kB.
+        recvBufSize = 7400000;
+    #else
+        // By default set recv buf size to 25 MB
+        recvBufSize = 25000000;
+    #endif
+        setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+
         /*Configure settings in address struct*/
         /* clear it out */
         memset(&lstn_addr6, 0, sizeof(lstn_addr6));
@@ -152,6 +169,10 @@ int main (int argc, char *argv[])
 
         /*Create UDP socket for reception from sender */
         lstn_sckt = socket(PF_INET, SOCK_DGRAM, 0);
+
+        /* increase UDP receive buffer size */
+        int recvBufSize = 25000000;
+        setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
 
         /*Configure settings in address struct*/
         lstn_addr.sin_family = AF_INET;
@@ -189,6 +210,13 @@ int main (int argc, char *argv[])
 
         nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
 
+        if(passedF) {
+            uint16_t data_id = ntohs(*pDid);
+            uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
+            rs[data_id].write((char*)&in_buff[mdlen], nBytes-mdlen);
+            if(lst) break; else continue;
+        }
+
         // decode to host encoding
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
@@ -204,14 +232,14 @@ int main (int argc, char *argv[])
         if(passedV) {
             fprintf ( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
             fprintf ( stdout, "frst = %d / lst = %d ", frst, lst); 
-            fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);	
+            fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);
         }
 
         if(data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
         data_ids_inuse[data_id] = true;
         lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
         if(lst) max_seq[data_id] = seq;
-        if(seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded\n"; exit(1); }	
+        if(seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded\n"; exit(1); }
         memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
         pckt_sz[data_id][seq] = nBytes-relen;
             pckt_cache_inuse[data_id][seq] = true;
@@ -221,7 +249,7 @@ int main (int argc, char *argv[])
 
         if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
                                                     == max_seq[data_id] + 1)  { 
-		    //build blob and transfer
+            //build blob and transfer
             uint16_t evnt_sz = 0;
             for(uint8_t i = 0; i <= max_seq[data_id]; i++) {
                  //setup egress buffer for ERSAP
