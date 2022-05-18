@@ -55,6 +55,7 @@ void   Usage(void)
         -i listen address (string)  \n\
         -p listen port (number)  \n\
         -f flush packets immediately -  do not buffer reassembly \n\
+        -m inhibit reassembly - only metadata logging - conflicts with -f \n\
         -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
@@ -75,12 +76,12 @@ int main (int argc, char *argv[])
     extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false,
-        passedV=false, passedF=false;
+        passedV=false, passedF=false, passedM=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;                  // listening port
 
-    while ((optc = getopt(argc, argv, "i:p:6fv")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:6fmv")) != -1)
     {
         switch (optc)
         {
@@ -105,6 +106,10 @@ int main (int argc, char *argv[])
             passedF = true;
             fprintf(stdout, "-f ");
             break;
+        case 'm':
+            passedM = true;
+            fprintf(stdout, "-m ");
+            break;
         case 'v':
             passedV = true;
             fprintf(stdout, "-v ");
@@ -117,10 +122,11 @@ int main (int argc, char *argv[])
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
+    if( (passedF && passedM)) { Usage(); exit(1); }
 
     // pre-open all data_id streams for tick
     ofstream rs[max_data_ids];
-    for(uint16_t s = 0; s < max_data_ids; s++) {
+    if(!passedM) for(uint16_t s = 0; s < max_data_ids; s++) {
         char x[64];
         sprintf(x,"/tmp/rs_%d_%d",lstn_prt,s);
         rs[s].open(x,std::ios::binary | std::ios::out);
@@ -210,7 +216,7 @@ int main (int argc, char *argv[])
 
         nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
 
-        if(passedF) {
+        if(passedF && !passedM) {
             uint16_t data_id = ntohs(*pDid);
             uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
             rs[data_id].write((char*)&in_buff[mdlen], nBytes-mdlen);
@@ -235,19 +241,21 @@ int main (int argc, char *argv[])
             fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);
         }
 
-        if(data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
-        data_ids_inuse[data_id] = true;
-        lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
+        if(!passedM && data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
+        if(!passedM) data_ids_inuse[data_id] = true;
+        if(!passedM) lst_pkt_rcd[data_id] = lst == 1; // assumes in-order !!!!  - FIX THIS
         if(lst) max_seq[data_id] = seq;
-        if(seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded\n"; exit(1); }
-        memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
-        pckt_sz[data_id][seq] = nBytes-relen;
+        if(!passedM && seq >= max_ooo_pkts) { if(passedV) cerr << "packet buffering capacity exceeded\n"; exit(1); }
+        if(!passedM) {
+            memmove(pckt_cache[data_id][seq], &in_buff[mdlen], nBytes-relen);
+            pckt_sz[data_id][seq] = nBytes-relen;
             pckt_cache_inuse[data_id][seq] = true;
+        }
 
-        if(passedV) fprintf (stdout, "cnt_trues %d max_seq[%i] = %d\n", 
+        if(passedV && !passedM) fprintf (stdout, "cnt_trues %d max_seq[%i] = %d\n", 
                         cnt_trues(pckt_cache_inuse[data_id], max_ooo_pkts), data_id, max_seq[data_id]);
 
-        if(cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
+        if(!passedM && cnt_trues(pckt_cache_inuse[data_id], max_seq[data_id]== -1?max_ooo_pkts:max_seq[data_id] + 1) 
                                                     == max_seq[data_id] + 1)  { 
             //build blob and transfer
             uint16_t evnt_sz = 0;
