@@ -85,11 +85,11 @@ int main (int argc, char *argv[])
         case 'p':
             dst_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
-            fprintf(stdout, "-p %d", dst_prt);
+            fprintf(stdout, "-p %d ", dst_prt);
             break;
         case 't':
             lb_tick = (uint64_t) atoi((const char *) optarg) ;
-            fprintf(stdout, "-t %lu", lb_tick);
+            fprintf(stdout, "-t %lu ", lb_tick);
             break;
         case 'd':
             re_data_id = (uint16_t) atoi((const char *) optarg) ;
