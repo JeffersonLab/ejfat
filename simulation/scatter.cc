@@ -33,7 +33,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-repeat] [ip6]",
             "        [-host <host of FPGA or emulator]",
@@ -48,8 +48,9 @@ static void printHelp(char *programName) {
             "        [-pro <protocol>]",
             "        [-e <starting entropy #>]",
             "        [-s <UDP send buffer size>]",
+            "        [-repeat (repeatedly send same data in loop)]",
             "        [-spin <# of spins to delay between buffers>]",
-            "        [-d <delay in millisec between packets>]");
+            "        [-d <delay in MICROsec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will read a file and divide it into 1 chunk per data id\n");
     fprintf(stderr, "        with a separate thread for each id to packetize & send its data. Data can be repeatedly sent.\n");
@@ -275,7 +276,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 static int spins = 0;
 static uint32_t delay = 0, sendBufSize = 0, idCount = 1, maxUdpPayload;
 static uint16_t lbPort = 0x4c42; // FPGA port is default
-static uint64_t tick = 1;
+static uint64_t tick = 0;
 static int mtu, version = 2, protocol = 1, startingEntropy = 0;
 static uint16_t startingId = 1;
 static bool debug = true, repeat = false, useIPv6 = false;
@@ -311,7 +312,7 @@ static void *thread(void *arg) {
     double x=0., y=0., t=0.;
 
     //fprintf(stdout, "spins = %u, currentSpins = %u\n", spins, currentSpins);
-    if (debug) fprintf(stderr, "new thread: id = %d, entropy = %d\n\n", id, entropy);
+    if (debug) fprintf(stderr, "new thread: id = %d, entropy = %d, spins = %d\n\n", id, entropy, spins);
 
     // Statistics
     int64_t packetsSent=0, packetCount=0, byteCount=0, totalBytes=0, totalPackets=0;
@@ -324,6 +325,7 @@ static void *thread(void *arg) {
     time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
 
     while (true) {
+//fprintf(stderr, "send buf: tick = %llu, id = %d, entropy = %d\n\n", tick, id, entropy);
         err = sendPacketizedBufferFast(buf, bufSize,
                                        maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, id, &offset, delay,
@@ -351,9 +353,6 @@ static void *thread(void *arg) {
             if (debug) fprintf(stderr, "new thread id %d: break since repeat is false\n", id);
             break;
         }
-        else {
-            if (debug) fprintf(stderr, "new thread id %d: REPEAT\n", id);
-        }
 
         // spin delay
 
@@ -376,18 +375,24 @@ static void *thread(void *arg) {
             }
 
             /* Packet rates */
-            rate = 1000.0 * ((double) packetCount) / time;
-            totalPackets += packetCount;
             totalT += time;
-            avgRate = 1000.0 * ((double) totalPackets) / totalT;
-            printf(" Packets:  %3.4g Hz,    %3.4g Avg.\n", rate, avgRate);
+//            rate = 1000.0 * ((double) packetCount) / time;
+//            totalPackets += packetCount;
+//            avgRate = 1000.0 * ((double) totalPackets) / totalT;
+//printf(" Packets %d:  %3.4g Hz,    %3.4g Avg.\n", id, rate, avgRate);
 
             /* Actual Data rates (no header info) */
             rate = ((double) byteCount) / (1000*time);
             totalBytes += byteCount;
             avgRate = ((double) totalBytes) / (1000*totalT);
-            // Must print out t to keep it from being optimized away
-            printf(" Data:    %3.4g MB/s,  %3.4g Avg., t/t = %d\n\n", rate, avgRate, (int)(t/t));
+
+            if (spins > 0) {
+                // Must print out t to keep it from being optimized away
+                printf(" Data %d:    %3.4g MB/s,  %3.4g Avg., t/t = %d\n\n", id, rate, avgRate, (int) (t / t));
+            }
+            else {
+                printf(" Data %d:    %3.4g MB/s,  %3.4g Avg.\n\n", id, rate, avgRate);
+            }
 
             byteCount = packetCount = 0;
 
@@ -436,8 +441,8 @@ int main(int argc, char **argv) {
     fileSize = ftell(fp);
     rewind(fp);
 
-    // There must be limits on file size (10MB) as we read it into memory
-    if (fileSize > 10000000) {
+    // There must be limits on file size (12MB) as we read it into memory
+    if (fileSize > 12000000) {
         fprintf(stderr, "\n ******* file %s is too big, pick something < 10MB\n\n", filename);
         return -1;
     }
