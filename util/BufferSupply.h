@@ -36,20 +36,19 @@ namespace ejfat {
      *
      * 1) It can be used as a simple supply of ByteBuffer(Item)s.
      * In this mode, only get() and release() are called. A user does a {@link #get()},
-     * uses that buffer, then calls release() when done with it. If there are
+     * uses that buffer, then calls {@link #release()} when done with it. If there are
      * multiple users of a single buffer (say 5), then call bufferItem.setUsers(5)
      * before it is used and the buffer is only released when all 5 users have
      * called release().<p>
      *
      * 2) It can be used as a supply of ByteBuffers in which a single
      * producer provides data for a single consumer which is waiting for that data.
-     * The producer does a get(), fills the buffer with data, and finally does a publish()
+     * The producer does a {@link #get()}, fills the buffer with data, and finally does a {@link #publish()}
      * to let the consumer know the data is ready. Simultaneously, a consumer does a
-     * consumerGet() to access the data buffer once it is ready. To preserve all the data
-     * as the producer wrote it, use the {@link BufferSupplyItem.getBufferAsIs() when getting
-     * the data buffer. The consumer then calls
-     * release() when finished which allows the producer to reuse the
-     * now unused buffer.<p>
+     * {@link #consumerGet()} to access the data buffer once it is ready. To preserve all the data
+     * as the producer wrote it, use the {@link BufferSupplyItem#getBuffer()} when getting
+     * the data buffer. The consumer then calls {@link #release()} when finished
+     * which allows the producer to reuse the now unused buffer.<p>
      *
      *
      * <pre><code>
