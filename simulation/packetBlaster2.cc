@@ -416,12 +416,14 @@ int main(int argc, char **argv) {
 
     if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-    bufsize = mtu + HEADER_BYTES;
+    bufsize = mtu;
     char *buf = (char *) malloc(bufsize);
     if (buf == NULL) {
         fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufsize);
         return -1;
     }
+
+    size_t dataBytes = bufsize - HEADER_BYTES;
 
     std::srand(1);
     for (int i=0; i < bufsize; i++) {
@@ -442,18 +444,14 @@ int main(int argc, char **argv) {
     setReMetadata(buf + LB_HEADER_BYTES,
                   veryFirstPacket, veryLastPacket,
                   tick, offset, version, dataId);
-
-    // This is where and how many bytes to write for data
-    memcpy(buf + HEADER_BYTES, (const void *)buf, bufsize);
-
-    size_t dataBytes = bufsize - HEADER_BYTES;
+    
 
     fprintf(stderr, "\npacketBlaster2: finished preparing buffer\n");
 
     while (true) {
 
         // Send message to receiver
-        err = send(clientSocket, buf, dataBytes, 0);
+        err = send(clientSocket, buf, bufsize, 0);
         if (err == -1) {
             fprintf(stderr, "\npacketBlaster2: errno = %d, %s\n\n", errno, strerror(errno));
             return (-1);
