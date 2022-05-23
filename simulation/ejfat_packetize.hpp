@@ -380,7 +380,7 @@ namespace ejfat {
 
             // delay if any
             if (delay > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                std::this_thread::sleep_for(std::chrono::microseconds(delay));
             }
 
             dataLen -= bytesToWrite;
