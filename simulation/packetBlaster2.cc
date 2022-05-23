@@ -416,7 +416,7 @@ int main(int argc, char **argv) {
 
     if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-    bufsize = mtu;
+    bufsize = mtu + HEADER_BYTES;
     char *buf = (char *) malloc(bufsize);
     if (buf == NULL) {
         fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufsize);
@@ -435,10 +435,6 @@ int main(int argc, char **argv) {
     bool veryLastPacket  = true;
 
 
-    size_t bytesToWrite = bufsize, dataBytes;
-    const char *getDataFrom = buf;
-
-
     // Write LB meta data into buffer
     setLbMetadata(buf, tick, version, protocol, entropy);
 
@@ -448,9 +444,9 @@ int main(int argc, char **argv) {
                   tick, offset, version, dataId);
 
     // This is where and how many bytes to write for data
-    memcpy(buf + HEADER_BYTES, (const void *)getDataFrom, bytesToWrite);
+    memcpy(buf + HEADER_BYTES, (const void *)buf, bufsize);
 
-    dataBytes = HEADER_BYTES + bytesToWrite;
+    size_t dataBytes = bufsize - HEADER_BYTES;
 
     fprintf(stderr, "\npacketBlaster2: finished preparing buffer\n");
 
@@ -482,7 +478,8 @@ int main(int argc, char **argv) {
         }
 
 
-        totalBytes += bytesToWrite;
+        // Total data bytes
+        totalBytes += dataBytes;
         totalPackets++;
         tick++;
     }
