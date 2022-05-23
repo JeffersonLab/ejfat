@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <map>
+#include <cmath>
 #include <getopt.h>
 #include <cinttypes>
 
@@ -439,9 +440,11 @@ static inline uint64_t bswap_64(uint64_t x) {
 
             // TODO: build if sequence is file offset
 
+            int64_t prevTick = -1;
             uint64_t packetTick;
-            uint32_t sequence, expectedSequence = *expSequence;
+            uint32_t sequence, prevSequence = 0, expectedSequence = *expSequence;
 
+            bool dumpTick;
             bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
             int  version, nBytes, bytesRead;
             uint16_t dataId;
@@ -457,6 +460,8 @@ static inline uint64_t bswap_64(uint64_t x) {
             if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
 
             while (true) {
+
+                dumpTick = false;
 
                 if (veryFirstRead) {
                     // Read in one packet, return value does NOT include RE header
@@ -488,6 +493,44 @@ static inline uint64_t bswap_64(uint64_t x) {
                     memcpy(writeHeaderAt, headerStorage, HEADER_BYTES);
                 }
 
+                // This if-else statement is what enables the packet reading/parsing to keep
+                // up an input rate that is too high (causing dropped packets) and still salvage
+                // much of what is coming in.
+                if (packetTick != prevTick) {
+                    expectedSequence = 0;
+                    veryFirstRead = true;
+
+                    if (sequence != 0) {
+                        // Already have trouble, looks like we dropped the first packet of a tick.
+                        // So go ahead and dump the rest of the tick in an effort to keep up.
+                        //printf("Skip id %hu, t %llu, s %u\n", dataId, packetTick, sequence);
+                        continue;
+                    }
+
+                    // If here, new record, seq = 0
+
+                    // Dump everything we saved from previous tick.
+                    // Delete all out-of-seq packets.
+                    outOfOrderPackets.clear();
+                    dumpTick = false;
+                }
+                // Same tick as last packet
+                else {
+                    if (dumpTick || (std::abs((int)(sequence - prevSequence)) > 1)) {
+                        // If here, the sequence hopped by at least 2,
+                        // probably dropped at least 1,
+                        // so drop rest of packets for record.
+                        // This branch of the "if" will no longer
+                        // be executed once the next record shows up.
+                        veryFirstRead = true;
+                        expectedSequence = 0;
+                        dumpTick = true;
+                        prevSequence = sequence;
+                        //printf("Dump id %hu, t %llu, s %u\n", dataId, packetTick, sequence);
+                        continue;
+                    }
+                }
+
                 // TODO: What if we get a zero-length packet???
 
                 if (sequence == 0) {
@@ -495,17 +538,21 @@ static inline uint64_t bswap_64(uint64_t x) {
                     *bytesPerPacket = nBytes;
                 }
 
+                prevTick = packetTick;
+                prevSequence = sequence;
+
+
                 if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
                                    nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
 
-                // Check to see if packet is ou-of-sequence
+                // Check to see if packet is out-of-sequence
                 if (sequence != expectedSequence) {
                     if (debug) fprintf(stderr, "\n    Got seq %u, expecting %u\n", sequence, expectedSequence);
 
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
                         freeMap(outOfOrderPackets);
-                        fprintf(stderr, "    Already got seq %u once before!\n", sequence);
+                        fprintf(stderr, "    Already got seq %u, id %hu, t %llu\n", sequence, dataId, packetTick);
                         return OUT_OF_ORDER;
                     }
 
