@@ -439,6 +439,14 @@ int main(int argc, char **argv) {
     serverAddr.sin_addr.s_addr = inet_addr(host);
     memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
+
+#ifdef __linux__
+    {
+        int val = IP_PMTUDISC_DO;
+        setsockopt(clientSocket, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+    }
+#endif
+
     if (send || sendnocp) {
         fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
         int err = connect(clientSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
