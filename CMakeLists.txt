@@ -128,6 +128,7 @@ set(SIM_EXEC_FILES
         simulation/udp_send_order.cc
         simulation/packetBlastee.cc
         simulation/packetBlaster.cc
+        simulation/packetBlaster2.cc
         )
 
 set(TEST_FILES
