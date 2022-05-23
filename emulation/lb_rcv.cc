@@ -54,8 +54,8 @@ void   Usage(void)
         -6 Use IPV6 \n\
         -i listen address (string)  \n\
         -p listen port (number)  \n\
-        -f flush packets immediately -  do not buffer reassembly \n\
-        -m inhibit reassembly - only metadata logging - conflicts with -f \n\
+        -w write packets immediately without sequence checking/buffering \n\
+        -m inhibit reassembly - only metadata logging - conflicts with -w \n\
         -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
@@ -76,12 +76,12 @@ int main (int argc, char *argv[])
     extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false,
-        passedV=false, passedF=false, passedM=false;
+        passedV=false, passedW=false, passedM=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;                  // listening port
 
-    while ((optc = getopt(argc, argv, "i:p:6fmv")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:6mvw")) != -1)
     {
         switch (optc)
         {
@@ -102,9 +102,9 @@ int main (int argc, char *argv[])
             passedP = true;
             fprintf(stdout, "-p %d ", lstn_prt);
             break;
-        case 'f':
-            passedF = true;
-            fprintf(stdout, "-f ");
+        case 'w':
+            passedW = true;
+            fprintf(stdout, "-w ");
             break;
         case 'm':
             passedM = true;
@@ -122,7 +122,7 @@ int main (int argc, char *argv[])
     }
     fprintf(stdout, "\n");
     if(!(passedI && passedP)) { Usage(); exit(1); }
-    if( (passedF && passedM)) { Usage(); exit(1); }
+    if( (passedW && passedM)) { Usage(); exit(1); }
 
     // pre-open all data_id streams for tick
     ofstream rs[max_data_ids];
@@ -216,13 +216,6 @@ int main (int argc, char *argv[])
 
         nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
 
-        if(passedF && !passedM) {
-            uint16_t data_id = ntohs(*pDid);
-            uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
-            rs[data_id].write((char*)&in_buff[mdlen], nBytes-mdlen);
-            if(lst) break; else continue;
-        }
-
         // decode to host encoding
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
@@ -230,16 +223,23 @@ int main (int argc, char *argv[])
         uint8_t frst     = pBufRe[1] == 0x2; //(pBufRe[1] & 0x02) >> 1;
         uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
 
+        if(passedW && !passedM)  rs[data_id].write((char*)&in_buff[mdlen], nBytes-mdlen);
+
+/***
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
         if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
                        sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV)) {
             perror("getnameinfo ");
         }
-        if(passedV) {
-            fprintf ( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
+***/
+        if(passedV || passedM) {
+//            fprintf ( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
+            fprintf ( stdout, "Received %d bytes: ", nBytes);
             fprintf ( stdout, "frst = %d / lst = %d ", frst, lst); 
-            fprintf ( stdout, " / data_id = %d / seq = %d ", data_id, seq);
+            fprintf ( stdout, " / data_id = %d / seq = %d \n", data_id, seq);
         }
+
+        if(passedW && !passedM) continue; //if(lst) break; else continue;
 
         if(!passedM && data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
         if(!passedM) data_ids_inuse[data_id] = true;
@@ -268,7 +268,6 @@ int main (int argc, char *argv[])
             // forward data to sink skipping past lb meta data
             if(passedV) fprintf (stdout, "writing seq %d  size = %d\n", seq, evnt_sz);
             rs[data_id].write((char*)out_buff, evnt_sz);
-            rs[data_id].flush();
             // start all data_id streams at seq = 0
             for(uint16_t i = 0; i < max_data_ids; i++) {
                 data_ids_inuse[i] = false;
@@ -291,7 +290,7 @@ int main (int argc, char *argv[])
             // Convert to local time format and print to stdout
             fprintf ( stdout, "Today is %s", ctime(&now));
         }
-        if(passedV) cout << endl;
+        //if(passedV) cout << endl;
     } while(1);
     return 0;
 }
