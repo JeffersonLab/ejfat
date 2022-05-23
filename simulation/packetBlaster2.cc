@@ -452,12 +452,14 @@ int main(int argc, char **argv) {
 
     dataBytes = HEADER_BYTES + bytesToWrite;
 
+    fprintf(stderr, "\npacketBlaster2: finished preparing buffer\n");
 
     while (true) {
 
         // Send message to receiver
         err = send(clientSocket, buf, dataBytes, 0);
         if (err == -1) {
+            fprintf(stderr, "\npacketBlaster2: errno = %d, %s\n\n", errno, strerror(errno));
             return (-1);
         }
 
@@ -475,8 +477,7 @@ int main(int argc, char **argv) {
 
         if (err < 0) {
             // Should be more info in errno
-            EDESTADDRREQ;
-            fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
+            fprintf(stderr, "\npacketBlaster2: errno = %d, %s\n\n", errno, strerror(errno));
             exit(1);
         }
 
