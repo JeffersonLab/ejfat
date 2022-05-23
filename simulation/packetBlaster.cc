@@ -291,6 +291,83 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 }
 
 
+// Statistics
+static volatile uint64_t totalBytes=0, totalPackets=0;
+
+
+// Thread to send to gather application
+static void *thread(void *arg) {
+
+    uint64_t packetCount, byteCount;
+    uint64_t prevTotalPackets, prevTotalBytes;
+    uint64_t currTotalPackets, currTotalBytes;
+    // Ignore first rate calculation as it's most likely a bad value
+    bool skipFirst = true;
+
+    double rate, avgRate;
+    int64_t totalT = 0, time, time1, time2;
+    struct timespec t1, t2;
+
+    // Get the current time
+    clock_gettime(CLOCK_REALTIME, &t1);
+    time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
+
+    while (true) {
+
+        prevTotalBytes   = totalBytes;
+        prevTotalPackets = totalPackets;
+
+        // Delay 5 seconds between printouts
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+
+        // Read time
+        clock_gettime(CLOCK_REALTIME, &t2);
+        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
+        time = time2 - time1;
+        totalT += time;
+
+        currTotalBytes   = totalBytes;
+        currTotalPackets = totalPackets;
+
+        if (skipFirst) {
+            skipFirst = false;
+            time1 = time2;
+            totalT = totalBytes = totalPackets = 0;
+            continue;
+        }
+
+        // Use for instantaneous rates
+        byteCount   = currTotalBytes   - prevTotalBytes;
+        packetCount = currTotalPackets - prevTotalPackets;
+
+        // Reset things if #s rolling over
+        if ( (byteCount < 0) || (totalT < 0) )  {
+            totalT = totalBytes = totalPackets = 0;
+            time1 = time2;
+            continue;
+        }
+
+        // Packet rates
+        rate = 1000.0 * ((double) packetCount) / time;
+        avgRate = 1000.0 * ((double) currTotalPackets) / totalT;
+        printf(" Packets:  %3.4g Hz,    %3.4g Avg\n", rate, avgRate);
+
+        // Actual Data rates (no header info)
+        rate = ((double) byteCount) / (1000*time);
+        avgRate = ((double) currTotalBytes) / (1000*totalT);
+        // Must print out t to keep it from being optimized away
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
+
+        clock_gettime(CLOCK_REALTIME, &t1);
+        time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
+    }
+
+    return (NULL);
+}
+
+
+
+
 
 /**
  * Doing things this way is like reading a buffer bit-by-bit
@@ -372,6 +449,14 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Start thread to do rate printout
+    pthread_t thd;
+    int status = pthread_create(&thd, NULL, thread, (void *) nullptr);
+    if (status != 0) {
+        fprintf(stderr, "\n ******* error creating thread\n\n");
+        return -1;
+    }
+
     if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
     // To avoid having file reads contaminate our performance measurements,
@@ -403,14 +488,7 @@ int main(int argc, char **argv) {
     fprintf(stdout, "spins = %u, currentSpins = %u\n",spins, currentSpins);
 
     // Statistics
-    int64_t packetsSent=0, packetCount=0, byteCount=0, totalBytes=0, totalPackets=0;
-    double rate = 0.0, avgRate = 0.0;
-    int64_t totalT = 0, time, time1, time2;
-    struct timespec t1, t2;
-
-    // Get the current time
-    clock_gettime(CLOCK_REALTIME, &t1);
-    time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
+    int64_t packetsSent=0;
 
     while (true) {
         if (sendnocp) {
@@ -454,44 +532,10 @@ int main(int argc, char **argv) {
 
         // spin delay
 
-        byteCount   += bufsize;
-        packetCount += packetsSent;
+        totalBytes   += bufsize;
+        totalPackets += packetsSent;
         offset = 0;
         tick++;
-
-        // stats
-        clock_gettime(CLOCK_REALTIME, &t2);
-        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
-        time = time2 - time1;
-
-        if (time > 5000) {
-            // reset things if #s rolling over
-            if ( (totalBytes < 0) || (totalT < 0) )  {
-                totalT = totalBytes = totalPackets = byteCount = packetCount = 0;
-                time1 = time2;
-                continue;
-            }
-
-            /* Packet rates */
-            rate = 1000.0 * ((double) packetCount) / time;
-            totalPackets += packetCount;
-            totalT += time;
-            avgRate = 1000.0 * ((double) totalPackets) / totalT;
-            printf(" Packets:  %3.4g Hz,    %3.4g Avg.\n", rate, avgRate);
-
-            /* Actual Data rates (no header info) */
-            rate = ((double) byteCount) / (1000*time);
-            totalBytes += byteCount;
-            avgRate = ((double) totalBytes) / (1000*totalT);
-            // Must print out t to keep it from being optimized away
-            printf(" Data:    %3.4g MB/s,  %3.4g Avg., t/t = %d\n\n", rate, avgRate, (int)(t/t));
-
-            byteCount = packetCount = 0;
-
-            clock_gettime(CLOCK_REALTIME, &t1);
-            time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
-        }
-
     }
 
     return 0;
