@@ -20,6 +20,8 @@
 #include <inttypes.h>
 #include <netdb.h>
 #include <time.h>
+#include <chrono>
+#include <ctime>
 
 using namespace std;
 
@@ -210,6 +212,9 @@ int main (int argc, char *argv[])
     uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint32_t)];
     uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
 
+    auto t_start = std::chrono::high_resolution_clock::now();
+    auto t_end   = std::chrono::high_resolution_clock::now();
+
     do {
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
@@ -223,7 +228,16 @@ int main (int argc, char *argv[])
         uint8_t frst     = pBufRe[1] == 0x2; //(pBufRe[1] & 0x02) >> 1;
         uint8_t lst      = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
 
+        if(frst) t_start = std::chrono::high_resolution_clock::now();
+
         if(passedW && !passedM)  rs[data_id].write((char*)&in_buff[mdlen], nBytes-mdlen);
+
+        if(lst) {
+            t_end = std::chrono::high_resolution_clock::now();
+            std::cout << "Wall clock time passed: "
+                      << std::chrono::duration<double, std::micro>(t_end-t_start).count()
+                      << " us" << std::endl;
+        }
 
 /***
         char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
@@ -239,7 +253,7 @@ int main (int argc, char *argv[])
             fprintf ( stdout, " / data_id = %d / seq = %d \n", data_id, seq);
         }
 
-        if(passedW && !passedM) continue; //if(lst) break; else continue;
+        if(passedW && !passedM) continue; //if(lst) break; else continue;///////////////////////////////////////////////////
 
         if(!passedM && data_id >= max_data_ids) { if(passedV) cerr << "packet data_id exceeds bounds\n"; exit(1); }
         if(!passedM) data_ids_inuse[data_id] = true;
