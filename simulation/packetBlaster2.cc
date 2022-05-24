@@ -35,7 +35,7 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v]",
+            "        [-h] [-v] [-ip6]",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
@@ -47,7 +47,7 @@ static void printHelp(char *programName) {
             "        [-e <entropy>]",
             "        [-b <buffer size>]",
             "        [-s <UDP send buffer size>]",
-            "        [-d <delay in millisec between packets>]");
+            "        [-d <delay in microsec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send file repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
@@ -59,7 +59,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
                       uint32_t *bufsize, uint32_t *sendBufSize, int *spins,
-                      bool *debug, char* host, char *interface) {
+                      bool *debug, bool *useIPv6, char* host, char *interface) {
 
     *mtu = 0;
     int c, i_tmp;
@@ -73,6 +73,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ver",   1, NULL, 3},
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
+             {"ip6",  0, NULL, 6},
              {"spin",  1, NULL, 9},
              {0,       0, 0,    0}
             };
@@ -213,6 +214,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *protocol = i_tmp;
                 break;
 
+            case 6:
+                // use IP version 6
+                *useIPv6 = true;
+                break;
+
             case 9:
                 // PORT
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -334,13 +340,14 @@ static void *thread(void *arg) {
  */
 int main(int argc, char **argv) {
 
-    int spins = 0;
+    int spins = 0, err;
     uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
     int mtu, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
     bool debug = false;
+    bool useIPv6 = false;
 
     char host[INPUT_LENGTH_MAX], interface[16];
     memset(host, 0, INPUT_LENGTH_MAX);
@@ -349,7 +356,7 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &sendBufSize, &spins, &debug,
+              &delay, &bufsize, &sendBufSize, &spins, &debug, &useIPv6,
               host, interface);
 
 
@@ -369,42 +376,90 @@ int main(int argc, char **argv) {
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
 
     // Create UDP socket
-    int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
+    int clientSocket;
 
+    if (useIPv6) {
+        struct sockaddr_in6 serverAddr6;
+
+        /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+        if ((clientSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv6 client socket");
+            return -1;
+        }
+
+        socklen_t size = sizeof(int);
+        int sendBufBytes = 0;
 #ifndef __APPLE__
-    // Try to increase send buf size - by default to 25 MB
-    sendBufSize = sendBufSize <= 0 ? 25000000 : sendBufSize;
-    setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufSize, sizeof(sendBufSize));
+        // Try to increase send buf size - by default to 25 MB
+            sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
+            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
 #endif
+        sendBufBytes = 0; // clear it
+        getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+        if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-    // Read back the UDP send buffer size in bytes
-    socklen_t size = sizeof(int);
-    uint32_t sendBufBytes = 0;
-    getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
-    fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+        // Configure settings in address struct
+        // Clear it out
+        memset(&serverAddr6, 0, sizeof(serverAddr6));
+        // it is an INET address
+        serverAddr6.sin6_family = AF_INET6;
+        // the port we are going to send to, in network byte order
+        serverAddr6.sin6_port = htons(port);
+        // the server IP address, in network byte order
+        inet_pton(AF_INET6, host, &serverAddr6.sin6_addr);
 
-    // Configure settings in address struct
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(port);
-    serverAddr.sin_addr.s_addr = inet_addr(host);
-    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-#ifdef __linux__
-    {
-        int val = IP_PMTUDISC_DO;
-        setsockopt(clientSocket, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
-    }
-#endif
-
-        fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
-        int err = connect(clientSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+        int err = connect(clientSocket, (const sockaddr *)&serverAddr6, sizeof(struct sockaddr_in6));
         if (err < 0) {
             if (debug) perror("Error connecting UDP socket:");
             close(clientSocket);
-            return err;
+            exit(1);
         }
+    }
+    else {
+        struct sockaddr_in serverAddr;
+
+        // Create UDP socket
+        if ((clientSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv4 client socket");
+            return -1;
+        }
+
+        // Try to increase send buf size to 25 MB
+        socklen_t size = sizeof(int);
+        int sendBufBytes = 0;
+#ifndef __APPLE__
+        // Try to increase send buf size - by default to 25 MB
+            sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
+            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
+#endif
+        sendBufBytes = 0; // clear it
+        getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+        if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+
+        // Configure settings in address struct
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        //if (debug) fprintf(stderr, "Sending on UDP port %hu\n", lbPort);
+        serverAddr.sin_port = htons(port);
+        //if (debug) fprintf(stderr, "Connecting to host %s\n", lbHost);
+        serverAddr.sin_addr.s_addr = inet_addr(host);
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+        int err = connect(clientSocket, (const sockaddr *)&serverAddr, sizeof(struct sockaddr_in));
+        if (err < 0) {
+            if (debug) perror("Error connecting UDP socket:");
+            close(clientSocket);
+            exit(1);
+        }
+    }
+
+    // set the don't fragment bit
+#ifdef __linux__
+    {
+            int val = IP_PMTUDISC_DO;
+            setsockopt(clientSocket, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+        }
+#endif
 
     // Start thread to do rate printout
     pthread_t thd;
@@ -465,9 +520,9 @@ int main(int argc, char **argv) {
 //        *((uint64_t *)(buf + 8 + LB_HEADER_BYTES)) = htonll(tick);
 
         // delay if any
-        //                if (delay > 0) {
-        //                    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
-        //                }
+        if (delay > 0) {
+            std::this_thread::sleep_for(std::chrono::microseconds(delay));
+        }
 
 
         // Total data bytes
