@@ -54,8 +54,8 @@ void   Usage(void)
     char usage_str[] =
         "\nUsage: \n\
         -6 Use IPV6 \n\
-        -i listen address (string)  \n\
-        -p listen port (number)  \n\
+        -i listen address  \n\
+        -p listen port  \n\
         -w write packets immediately without sequence checking/buffering \n\
         -m inhibit reassembly - only metadata logging - conflicts with -w \n\
         -v verbose mode (default is quiet)  \n\

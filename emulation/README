@@ -6,10 +6,7 @@
 Data Source:
 -------------
 
-tx=$(mktemp); cat <file> | pktzr_md -s <mtu_size> -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> -n <num_data_ids=1>  2> $tx
-
-the <num_data_ids> parm will determine how many replicates of the source data will be sent with incremental data_ids starting with the value of the parm -d <data_id>
-
+tx=$(mktemp); cat <file> | pktzr_md -s <mtu_size> -i <destination ip> -p <destination port=19522> -t <tick=1> -d <data_id=1> [-e -v] 2> $tx
 
 e.g.,
 
@@ -23,11 +20,11 @@ NOTE: defaults to IPV4; to use IPV6 include a -6 flag in the invocation
 
 Usage: 
         -6 Use IPV6 
-        -i <destination address> (string)  
-        -p <destination port> (number)  
+        -i <destination address>  
+        -p <destination port>  
         -t <tick>  
         -d <data_id>  
-        -n <num_data_ids starting from initial>  
+        -e Use LB port entropy  
         -v verbose mode (default is quiet)  
         -s <max packet size> (default 9000)  
         -h help 
@@ -50,15 +47,17 @@ NOTE: defaults to IPV4; to use IPV6 include an -6 flag in the invocation
 
 Usage: 
         -6 Use IPV6 
-        -i <destination address> (string)  
-        -p <destination port> (number)  
+        -i <destination address>  
+        -p <destination port>  
         -t <send address>  
-        -r <send port> (number)  
+        -r <send base port>  
+        -e num base port entropy bits (0) 
         -v verbose mode (default is quiet)  
         -h help 
 
 Required: -i -p -t -r
 
+-e <n> specifies n bits of destination port entropy for distributing data_id streams among destination ports numbered upwards from base port.
 
 -------------
 Data Sink:
@@ -79,13 +78,13 @@ tx=$(mktemp); lb_rcv  -i "<Listen ip>" -p <Listen port>  2> $tx
 
 Note that stderr is being redirected to temp file $tx (in /tmp) and contains the session log
 
-NOTE:  does not work reliably when spanning subsets!
-
 Usage: 
         -6 Use IPV6 
-        -i <destination address> (string)  
-        -p <destination port> (number)  
-        -v verbose mode (default is quiet)  \n\
+        -i <destination address>  
+        -p <destination port>  
+        -w write packets immediately without sequence checking/buffering 
+        -m inhibit reassembly - only metadata logging - conflicts with -w 
+        -v verbose mode (default is quiet)  
         -h help 
 
 Required: -i -p
@@ -93,11 +92,9 @@ Required: -i -p
 
 Capabilities / Limitations (Bugs) / Next Steps:
 - supports both IPV4 and IPV6
-- pktzr_md repicates input data across as many (sequential) data_ids as specified 
-- There is a bug in pktzr_md for max mtu; actual max is 8972
-- lb_emu currently routes traffic to a single destination
+- lb_emu currently routes traffic to a single destination, but will use port entropy
 - lb_rcv only supports contiguous events (ticks) at this time.
-- lb_rcv suports up to 100 concurrent data_ids each with as many as 100 out-of-order packets pending output.
+- lb_rcv suports up to 100 concurrent data_ids each with as many as 1000 out-of-order packets pending output per data_id..
 
 
 

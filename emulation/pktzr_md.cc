@@ -25,11 +25,11 @@ void   Usage(void)
     char usage_str[] =
         "\nUsage: \n\
         -6 Use IPV6 \n\
-        -i destination address (string)  \n\
-        -p destination port (number)  \n\
+        -i destination address  \n\
+        -p destination port  \n\
         -t lb_tick  \n\
         -d re_data_id  \n\
-        -e Use LB entropy  \n\
+        -e Use LB port entropy  \n\
         -v verbose mode (default is quiet)  \n\
         -s max packet size (default 9000)  \n\
         -h help \n\n";
