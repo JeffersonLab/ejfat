@@ -444,7 +444,7 @@ int main(int argc, char **argv) {
     setReMetadata(buf + LB_HEADER_BYTES,
                   veryFirstPacket, veryLastPacket,
                   tick, offset, version, dataId);
-    
+
 
     fprintf(stderr, "\npacketBlaster2: finished preparing buffer\n");
 
@@ -453,33 +453,27 @@ int main(int argc, char **argv) {
         // Send message to receiver
         err = send(clientSocket, buf, bufsize, 0);
         if (err == -1) {
-            fprintf(stderr, "\npacketBlaster2: errno = %d, %s\n\n", errno, strerror(errno));
+            fprintf(stderr, "\npacketBlaster2: A errno = %d, %s\n\n", errno, strerror(errno));
             return (-1);
         }
 
         // Update LB header tick
-        *((uint64_t *)(buf + 8)) = htonll(tick);
+//        *((uint64_t *)(buf + 8)) = htonll(tick);
 
         // Update RE header tick & offset
 //        *((uint32_t *)(buf + 4 + LB_HEADER_BYTES)) = htonl(offset);
-        *((uint64_t *)(buf + 8 + LB_HEADER_BYTES)) = htonll(tick);
+//        *((uint64_t *)(buf + 8 + LB_HEADER_BYTES)) = htonll(tick);
 
         // delay if any
         //                if (delay > 0) {
         //                    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
         //                }
 
-        if (err < 0) {
-            // Should be more info in errno
-            fprintf(stderr, "\npacketBlaster2: errno = %d, %s\n\n", errno, strerror(errno));
-            exit(1);
-        }
-
 
         // Total data bytes
         totalBytes += dataBytes;
         totalPackets++;
-        tick++;
+//        tick++;
     }
 
     return 0;
