@@ -169,7 +169,7 @@ if (BUILD_DIS)
         message(STATUS "Disruptor include dir = "  ${DISRUPTOR_INCLUDE_DIRS})
 
         # Need boost libs for disruptor
-        find_package(Boost REQUIRED system thread chrono)
+        find_package(Boost 1.69 REQUIRED system thread chrono)
 
         if (Boost_FOUND)
             message(STATUS "Boost Found: libs = " ${Boost_LIBRARIES} ", include dirs = " ${Boost_INCLUDE_DIRS})
