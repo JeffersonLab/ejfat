@@ -282,7 +282,7 @@ namespace ejfat {
       * @param dataId         data id in reassembly header.
       * @param offset         value-result parameter that passes in the sequence number of first packet
       *                       and returns the sequence to use for next packet to be sent.
-      * @param delay          delay in millisec between each packet being sent.
+      * @param delay          delay in microsec between each packet being sent.
       * @param firstBuffer    if true, this is the first buffer to send in a sequence.
       * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
       * @param debug          turn debug printout on & off.
@@ -423,7 +423,7 @@ namespace ejfat {
      * @param dataId         data id in reassembly header.
      * @param offset         value-result parameter that passes in the sequence number of first packet
      *                       and returns the sequence to use for next packet to be sent.
-     * @param delay          delay in millisec between each packet being sent.
+     * @param delay          delay in microsec between each packet being sent.
      * @param firstBuffer    if true, this is the first buffer to send in a sequence.
      * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
      * @param debug          turn debug printout on & off.
@@ -516,7 +516,7 @@ namespace ejfat {
 
             // delay if any
             if (delay > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                std::this_thread::sleep_for(std::chrono::microseconds(delay));
             }
 
             totalDataBytesSent += bytesToWrite;
@@ -555,7 +555,7 @@ namespace ejfat {
      * @param dataId         data id in reassembly header.
      * @param offset         value-result parameter that passes in the sequence number of first packet
      *                       and returns the sequence to use for next packet to be sent.
-     * @param delay          delay in millisec between each packet being sent.
+     * @param delay          delay in microsec between each packet being sent.
      * @param firstBuffer    if true, this is the first buffer to send in a sequence.
      * @param lastBuffer     if true, this is the last buffer to send in a sequence.
      * @param debug          turn debug printout on & off.
@@ -642,7 +642,7 @@ namespace ejfat {
 
                 // delay if any
                 if (delay > 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                    std::this_thread::sleep_for(std::chrono::microseconds(delay));
                 }
 
                 totalDataBytesSent += bytesToWrite;
@@ -681,7 +681,7 @@ namespace ejfat {
      * @param dataId         data id in reassembly header.
      * @param offset         value-result parameter that passes in the sequence number of first packet
      *                       and returns the sequence to use for next packet to be sent.
-     * @param delay          delay in millisec between each packet being sent.
+     * @param delay          delay in microsec between each packet being sent.
      * @param firstBuffer    if true, this is the first buffer to send in a sequence.
      * @param lastBuffer     if true, this is the last buffer to send in a sequence.
      * @param debug          turn debug printout on & off.
@@ -786,7 +786,7 @@ namespace ejfat {
 
             // delay if any
             if (delay > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                std::this_thread::sleep_for(std::chrono::microseconds(delay));
             }
 
             totalDataBytesSent += bytesToWrite;
@@ -826,7 +826,7 @@ namespace ejfat {
       * @param entropy    entropy in reassembly header.
       * @param version    version in reassembly header.
       * @param dataId     data id in reassembly header.
-      * @param delay      delay in millisec between each packet being sent.
+      * @param delay      delay in microsec between each packet being sent.
       * @param debug      turn debug printout on & off.
       * @param fast       if true, call {@link #sendPacketizedBufferFast}, else call
       *                   {@link #sendPacketizedBufferSend}. Be warned that the "Fast"
