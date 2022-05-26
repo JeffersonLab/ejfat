@@ -14,7 +14,11 @@
  * This assumes there is an emulator or FPGA between this and the sending program.
  */
 
-#include "time.h"
+#include <cstdlib>
+#include <time.h>
+#include <thread>
+#include <cmath>
+#include <chrono>
 
 #include "ejfat_assemble_ersap.hpp"
 
@@ -35,14 +39,13 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-fast] [-recvmsg]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-b <internal buffer byte size]",
-            "        [-r <UDP receive buffer byte size]",
-            "        <output file name>");
+            "        [-r <UDP receive buffer byte size]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver.\n");
     fprintf(stderr, "        The -fast option uses recvfrom & minimizes data copying by reading into final buf\n");
@@ -60,13 +63,12 @@ static void printHelp(char *programName) {
  * @param recvBufSize filled with UDP receive buffer size.
  * @param port        filled with UDP port to listen on.
  * @param debug       filled with debug flag.
- * @param fileName    filled with output file name.
  * @param listenAddr  filled with IP address to listen on.
  * @param fast        filled with true if reading with recvfrom and minimizing data copy.
  * @param recvmsg     filled with true if reading with recvmsg.
  */
 static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uint16_t* port, bool *debug,
-                      char *fileName, char *listenAddr, bool *fast, bool *recvmsg) {
+                      char *listenAddr, bool *fast, bool *recvmsg) {
 
     int c, i_tmp;
     bool help = false, useFast = false, useRecvMsg = false;
@@ -169,23 +171,90 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uin
 
     }
 
-    // Grab any default args not in option list
-    if (   !optarg
-          && optind < argc // make sure optind is valid
-          && nullptr != argv[optind] // make sure it's not a null string
-          && '\0'    != argv[optind][0] // ... or an empty string
-          && '-'     != argv[optind][0] // ... or another option
-            ) {
-
-        strcpy(fileName, argv[optind]);
-        fprintf(stderr, "Copy optional arg, file = %s\n", fileName);
-    }
-
     if (help) {
         printHelp(argv[0]);
         exit(2);
     }
 }
+
+
+
+// Statistics
+static volatile uint64_t totalBytes=0, totalPackets=0;
+
+
+// Thread to send to gather application
+static void *thread(void *arg) {
+
+    uint64_t packetCount, byteCount;
+    uint64_t prevTotalPackets, prevTotalBytes;
+    uint64_t currTotalPackets, currTotalBytes;
+    // Ignore first rate calculation as it's most likely a bad value
+    bool skipFirst = true;
+
+    double rate, avgRate;
+    int64_t totalT = 0, time;
+    struct timespec t1, t2;
+
+    // Get the current time
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    while (true) {
+
+        prevTotalBytes   = totalBytes;
+        prevTotalPackets = totalPackets;
+
+        // Delay 4 seconds between printouts
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+
+        // Read time
+        clock_gettime(CLOCK_MONOTONIC, &t2);
+
+        currTotalBytes   = totalBytes;
+        currTotalPackets = totalPackets;
+
+        if (skipFirst) {
+            // Don't calculate rates until data is coming in
+            if (currTotalPackets > 0) {
+                skipFirst = false;
+            }
+            t1 = t2;
+            totalT = totalBytes = totalPackets = 0;
+            continue;
+        }
+
+        // Use for instantaneous rates
+        byteCount   = currTotalBytes   - prevTotalBytes;
+        packetCount = currTotalPackets - prevTotalPackets;
+
+        // Reset things if #s rolling over
+        if ( (byteCount < 0) || (totalT < 0) )  {
+            totalT = totalBytes = totalPackets = 0;
+            t1 = t2;
+            continue;
+        }
+
+        // Packet rates
+        time = 1000000L * (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec)/1000L;
+        totalT += time;
+
+        rate = 1000000.0 * ((double) packetCount) / time;
+        avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
+        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %lld microsec\n", rate, avgRate, time);
+
+        // Actual Data rates (no header info)
+        rate = ((double) byteCount) / time;
+        avgRate = ((double) currTotalBytes) / totalT;
+        // Must print out t to keep it from being optimized away
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+    }
+
+
+    return (NULL);
+}
+
 
 
 int main(int argc, char **argv) {
@@ -202,11 +271,10 @@ int main(int argc, char **argv) {
     bool useRecvmsg = false;
     bool useRecvfrom = false;
 
-    char fileName[INPUT_LENGTH_MAX], listeningAddr[16];
-    memset(fileName, 0, INPUT_LENGTH_MAX);
+    char listeningAddr[16];
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &port, &debug, fileName, listeningAddr, &useFast, &useRecvmsg);
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &port, &debug, listeningAddr, &useFast, &useRecvmsg);
 
     if (!(useFast || useRecvmsg)) {
       useRecvfrom = true;
@@ -250,7 +318,15 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    bool last, firstRead = true, firstLoop = true;
+    // Start thread to do rate printout
+    pthread_t thd;
+    int status = pthread_create(&thd, NULL, thread, (void *) nullptr);
+    if (status != 0) {
+        fprintf(stderr, "\n ******* error creating thread\n\n");
+        return -1;
+    }
+
+    bool last, firstRead = true;
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
     uint32_t offset = 0;
@@ -276,14 +352,6 @@ int main(int argc, char **argv) {
 
     // Statistics
     uint32_t packetCount=0;
-    int64_t packetsRead=0, byteCount=0, totalBytes=0, totalPackets=0;
-    double rate = 0.0, avgRate = 0.0;
-    int64_t totalT = 0, time, time1, time2;
-    struct timespec t1, t2;
-
-    // Get the current time
-    clock_gettime(CLOCK_REALTIME, &t1);
-    time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
 
     while (true) {
         if (useFast) {
@@ -303,46 +371,9 @@ int main(int argc, char **argv) {
             break;
         }
 
-        byteCount   += nBytes;
-        packetsRead += packetCount;
+        totalBytes   += nBytes;
+        totalPackets += packetCount;
         offset = 0;
-
-        // stats
-        clock_gettime(CLOCK_REALTIME, &t2);
-        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
-        time = time2 - time1;
-
-        if (time > 5000) {
-            // Ignore the very first counts as blastee starts before blaster and
-            // that messes up the stats.
-
-            // reset things if #s rolling over
-            if (firstLoop || (totalBytes < 0) || (totalT < 0))  {
-                totalT = totalBytes = totalPackets = byteCount = packetsRead = 0;
-                time1 = time2;
-                firstLoop = false;
-                continue;
-            }
-
-            /* Packet rates */
-            rate = 1000.0 * ((double) packetsRead) / time;
-            totalPackets += packetsRead;
-            totalT += time;
-            avgRate = 1000.0 * ((double) totalPackets) / totalT;
-            printf(" Packets:  %3.4g Hz,    %3.4g Avg.\n", rate, avgRate);
-
-            /* Actual Data rates (no header info) */
-            rate = ((double) byteCount) / (1000*time);
-            totalBytes += byteCount;
-            avgRate = ((double) totalBytes) / (1000*totalT);
-            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
-
-            byteCount = packetsRead = 0;
-
-            clock_gettime(CLOCK_REALTIME, &t1);
-            time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
-        }
-
     }
 
     return 0;

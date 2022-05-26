@@ -155,33 +155,32 @@ static void *thread(void *arg) {
     bool skipFirst = true;
 
     double rate, avgRate;
-    int64_t totalT = 0, time, time1, time2;
+    int64_t totalT = 0, time;
     struct timespec t1, t2;
 
     // Get the current time
-    clock_gettime(CLOCK_REALTIME, &t1);
-    time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
+    clock_gettime(CLOCK_MONOTONIC, &t1);
 
     while (true) {
 
         prevTotalBytes   = totalBytes;
         prevTotalPackets = totalPackets;
 
-        // Delay 5 seconds between printouts
+        // Delay 4 seconds between printouts
         std::this_thread::sleep_for(std::chrono::seconds(4));
 
         // Read time
-        clock_gettime(CLOCK_REALTIME, &t2);
-        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
-        time = time2 - time1;
-        totalT += time;
+        clock_gettime(CLOCK_MONOTONIC, &t2);
 
         currTotalBytes   = totalBytes;
         currTotalPackets = totalPackets;
 
         if (skipFirst) {
-            skipFirst = false;
-            time1 = time2;
+            // Don't calculate rates until data is coming in
+            if (currTotalPackets > 0) {
+                skipFirst = false;
+            }
+            t1 = t2;
             totalT = totalBytes = totalPackets = 0;
             continue;
         }
@@ -193,23 +192,25 @@ static void *thread(void *arg) {
         // Reset things if #s rolling over
         if ( (byteCount < 0) || (totalT < 0) )  {
             totalT = totalBytes = totalPackets = 0;
-            time1 = time2;
+            t1 = t2;
             continue;
         }
 
         // Packet rates
-        rate = 1000.0 * ((double) packetCount) / time;
-        avgRate = 1000.0 * ((double) currTotalPackets) / totalT;
-        printf(" Packets:  %3.4g Hz,    %3.4g Avg\n", rate, avgRate);
+        time = 1000000L * (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec)/1000L;
+        totalT += time;
+
+        rate = 1000000.0 * ((double) packetCount) / time;
+        avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
+        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %lld microsec\n", rate, avgRate, time);
 
         // Actual Data rates (no header info)
-        rate = ((double) byteCount) / (1000*time);
-        avgRate = ((double) currTotalBytes) / (1000*totalT);
+        rate = ((double) byteCount) / time;
+        avgRate = ((double) currTotalBytes) / totalT;
         // Must print out t to keep it from being optimized away
         printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
 
-        clock_gettime(CLOCK_REALTIME, &t1);
-        time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
+        clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
     return (NULL);
