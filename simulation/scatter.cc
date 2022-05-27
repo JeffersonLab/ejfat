@@ -49,7 +49,7 @@ static void printHelp(char *programName) {
             "        [-e <starting entropy #>]",
             "        [-s <UDP send buffer size>]",
             "        [-repeat (repeatedly send same data in loop)]",
-            "        [-spin <# of spins to delay between buffers>]",
+            "        [-dpre <delay prescale (2 skips every other delay)>]",
             "        [-d <delay in MICROsec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will read a file and divide it into 1 chunk per data id\n");
@@ -61,7 +61,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *startingEntropy, int *version, uint16_t *startingId,
                       uint64_t* tick, uint32_t* delay,
-                      uint32_t *sendBufSize, int *spins,
+                      uint32_t *delayPrescale, uint32_t *sendBufSize,
                       uint32_t *idCount, uint16_t *port,
                       bool *debug, bool *repeat, bool *useIPv6,
                       char* host, char *interface, char *file) {
@@ -78,7 +78,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ver",   1, NULL, 3},
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
-             {"spin",  1, NULL, 6},
+             {"dpre",  1, NULL, 6},
              {"port",  1, NULL, 7},
              {"repeat",  0, NULL, 8},
              {"ip6",  0, NULL, 9},
@@ -229,13 +229,13 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 break;
 
             case 6:
-                // Spin delay
+                // Delay prescale
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 0) {
-                    *spins = i_tmp;
+                if (i_tmp >= 1) {
+                    *delayPrescale = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -spin, spin >= 0\n");
+                    fprintf(stderr, "Invalid argument to -dpre, pdre >= 1\n");
                     exit(-1);
                 }
                 break;
@@ -273,8 +273,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
 
 // Quantities to be shared by each sending thread
-static int spins = 0;
-static uint32_t delay = 0, sendBufSize = 0, idCount = 1, maxUdpPayload;
+static uint32_t delay = 0, delayPrescale = 1, sendBufSize = 0, idCount = 1, maxUdpPayload;
 static uint16_t lbPort = 0x4c42; // FPGA port is default
 static uint64_t tick = 0;
 static int mtu, version = 2, protocol = 1, startingEntropy = 0;
@@ -308,11 +307,10 @@ static void *thread(void *arg) {
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
-    int currentSpins = spins;
-    double x=0., y=0., t=0.;
+    uint32_t delayPrescaleCounter = delayPrescale;
 
     //fprintf(stdout, "spins = %u, currentSpins = %u\n", spins, currentSpins);
-    if (debug) fprintf(stderr, "new thread: id = %d, entropy = %d, spins = %d\n\n", id, entropy, spins);
+    if (debug) fprintf(stderr, "new thread: id = %d, entropy = %d, delay = %d\n\n", id, entropy, delay);
 
     // Statistics
     int64_t packetsSent=0, packetCount=0, byteCount=0, totalBytes=0, totalPackets=0;
@@ -328,18 +326,8 @@ static void *thread(void *arg) {
 //fprintf(stderr, "send buf: tick = %llu, id = %d, entropy = %d\n\n", tick, id, entropy);
         err = sendPacketizedBufferFast(buf, bufSize,
                                        maxUdpPayload, clientSocket,
-                                       tick, protocol, entropy, version, id, &offset, delay,
+                                       tick, protocol, entropy, version, id, &offset, delay, delayPrescale,
                                        firstBuffer, lastBuffer, false, &packetsSent);
-
-        if (spins > 0) {
-            while (--currentSpins > 0) {
-                // do something that will chew up time
-                x += 3.14159 / 333. + 1234;
-                y += 3.14159 / 333. + 2345;
-                t += x/y + y/x + (x*y)/(x+y);
-            }
-            currentSpins = spins;
-        }
 
         if (err < 0) {
             // Should be more info in errno
@@ -348,13 +336,19 @@ static void *thread(void *arg) {
             exit(1);
         }
 
+        // delay if any
+        if (delay > 0) {
+            if (--delayPrescaleCounter < 1) {
+                std::this_thread::sleep_for(std::chrono::microseconds(delay));
+                delayPrescaleCounter = delayPrescale;
+            }
+        }
+
         // One and done
         if (!repeat) {
             if (debug) fprintf(stderr, "new thread id %d: break since repeat is false\n", id);
             break;
         }
-
-        // spin delay
 
         byteCount   += bufSize;
         packetCount += packetsSent;
@@ -385,14 +379,7 @@ static void *thread(void *arg) {
             rate = ((double) byteCount) / (1000*time);
             totalBytes += byteCount;
             avgRate = ((double) totalBytes) / (1000*totalT);
-
-            if (spins > 0) {
-                // Must print out t to keep it from being optimized away
-                printf(" Data %d:    %3.4g MB/s,  %3.4g Avg., t/t = %d\n\n", id, rate, avgRate, (int) (t / t));
-            }
-            else {
-                printf(" Data %d:    %3.4g MB/s,  %3.4g Avg.\n\n", id, rate, avgRate);
-            }
+            printf(" Data %d:    %3.4g MB/s,  %3.4g Avg.\n\n", id, rate, avgRate);
 
             byteCount = packetCount = 0;
 
@@ -400,6 +387,83 @@ static void *thread(void *arg) {
             time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
         }
     }
+
+    return (NULL);
+}
+
+
+// Statistics
+static volatile uint64_t totalBytes=0, totalPackets=0;
+
+
+// Thread to send to print out rates
+static void *rateThread(void *arg) {
+
+    uint64_t packetCount, byteCount;
+    uint64_t prevTotalPackets, prevTotalBytes;
+    uint64_t currTotalPackets, currTotalBytes;
+    // Ignore first rate calculation as it's most likely a bad value
+    bool skipFirst = true;
+
+    double rate, avgRate;
+    int64_t totalT = 0, time;
+    struct timespec t1, t2;
+
+    // Get the current time
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    while (true) {
+
+        prevTotalBytes   = totalBytes;
+        prevTotalPackets = totalPackets;
+
+        // Delay 4 seconds between printouts
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+
+        // Read time
+        clock_gettime(CLOCK_MONOTONIC, &t2);
+
+        currTotalBytes   = totalBytes;
+        currTotalPackets = totalPackets;
+
+        if (skipFirst) {
+            // Don't calculate rates until data is coming in
+            if (currTotalPackets > 0) {
+                skipFirst = false;
+            }
+            t1 = t2;
+            totalT = totalBytes = totalPackets = 0;
+            continue;
+        }
+
+        // Use for instantaneous rates
+        byteCount   = currTotalBytes   - prevTotalBytes;
+        packetCount = currTotalPackets - prevTotalPackets;
+
+        // Reset things if #s rolling over
+        if ( (byteCount < 0) || (totalT < 0) )  {
+            totalT = totalBytes = totalPackets = 0;
+            t1 = t2;
+            continue;
+        }
+
+        // Packet rates
+        time = 1000000L * (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec)/1000L;
+        totalT += time;
+
+        rate = 1000000.0 * ((double) packetCount) / time;
+        avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
+        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %lld microsec\n", rate, avgRate, time);
+
+        // Actual Data rates (no header info)
+        rate = ((double) byteCount) / time;
+        avgRate = ((double) currTotalBytes) / totalT;
+        // Must print out t to keep it from being optimized away
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+    }
+
 
     return (NULL);
 }
@@ -423,7 +487,7 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &startingEntropy, &version, &startingId, &tick,
-              &delay, &sendBufSize, &spins, &idCount, &lbPort,
+              &delay, &delayPrescale, &sendBufSize, &idCount, &lbPort,
               &debug, &repeat, &useIPv6, lbHost, interface, filename);
 
     fprintf(stderr, "File name = %s\n", filename);

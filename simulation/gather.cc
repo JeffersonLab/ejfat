@@ -24,6 +24,9 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <cerrno>
+#include <thread>
+#include <chrono>
+
 
 #include <iostream>
 #include "ByteBuffer.h"
@@ -246,16 +249,11 @@ static void *thread(void *arg) {
     bool repeat = tArg->repeat;
     std::shared_ptr<ejfat::BufferSupply> supply = tArg->supply;
 
-    bool last, firstRead = true, firstLoop = true;
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
-    uint32_t offset = 0;
     // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
 
-
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
-
-    uint32_t bytesPerPacket;
 
     /*
      * Map to hold out-of-order packets.
@@ -268,29 +266,34 @@ static void *thread(void *arg) {
     // Statistics
     uint32_t packetCount=0;
     int64_t packetsRead=0, byteCount=0, totalBytes=0, totalPackets=0;
-    double rate = 0.0, avgRate = 0.0;
-    int64_t totalT = 0, time, time1, time2;
-    struct timespec t1, t2;
+    uint16_t dataId;
 
-    // Get the current time
-    clock_gettime(CLOCK_REALTIME, &t1);
-    time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
-
+    packetRecvStats stats;
 
     while (true) {
 
         // Get buffer from supply
         auto item = supply->get();
         std::shared_ptr<ByteBuffer> buf = item->getClearedBuffer();
+        clearStats(&stats);
 
         // Fill with data
-        ssize_t nBytes = getPacketizedBufferFast((char *)buf->array(), bufSize, udpSocket,
-                                                 debug, firstRead, &last, &tick, &offset,
-                                                 &bytesPerPacket, &packetCount, outOfOrderPackets);
-
+        ssize_t nBytes = getCompletePacketizedBuffer((char *)buf->array(), bufSize, udpSocket,
+                                                      debug, &tick, &dataId, &stats, outOfOrderPackets);
         if (nBytes < 0) {
-            if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
+            if (debug) {
+                if (nBytes == BUF_TOO_SMALL) {
+                    fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
+                }
+                else {
+                    fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
+                }
+            }
             return (NULL);
+        }
+
+        if (stats.droppedPackets != 0) {
+            fprintf(stderr, "Dropped at least %llu packets\n", stats.droppedPackets);
         }
 
         // Send it to consumer
@@ -300,56 +303,87 @@ static void *thread(void *arg) {
         supply->publish(item);
 
 //        byteCount   += nBytes;
-//        packetsRead += packetCount;
-//        offset = 0;
-//
-//        // stats
-//        clock_gettime(CLOCK_REALTIME, &t2);
-//        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
-//        time = time2 - time1;
-//
-//        if (time > 5000) {
-//            // Ignore the very first counts as blastee starts before blaster and
-//            // that messes up the stats.
-//
-//            // reset things if #s rolling over
-//            if (firstLoop || (totalBytes < 0) || (totalT < 0))  {
-//                totalT = totalBytes = totalPackets = byteCount = packetsRead = 0;
-//                time1 = time2;
-//                firstLoop = false;
-//                continue;
-//            }
-//
-//            /* Packet rates */
-//            rate = 1000.0 * ((double) packetsRead) / time;
-//            totalPackets += packetsRead;
-//            totalT += time;
-//            avgRate = 1000.0 * ((double) totalPackets) / totalT;
-//            printf(" Packets:  %3.4g Hz,    %3.4g Avg.\n", rate, avgRate);
-//
-//            /* Actual Data rates (no header info) */
-//            rate = ((double) byteCount) / (1000*time);
-//            totalBytes += byteCount;
-//            avgRate = ((double) totalBytes) / (1000*totalT);
-//            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
-//
-//            byteCount = packetsRead = 0;
-//
-//            clock_gettime(CLOCK_REALTIME, &t1);
-//            time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
-//        }
-//
+//        packetsRead += stats.acceptedPackets;
+
         if (!repeat) {
             break;
         }
 
-        offset = 0;
-        firstRead = true, firstLoop = true;
         outOfOrderPackets.clear();
     }
 
     return (NULL);
 }
+
+
+
+
+// Statistics
+static volatile uint64_t totalBytes=0;
+
+
+// Thread to send to print out rates
+static void *rateThread(void *arg) {
+
+    uint64_t byteCount, prevTotalBytes, currTotalBytes;
+    // Ignore first rate calculation as it's most likely a bad value
+    bool skipFirst = true;
+
+    double rate, avgRate;
+    int64_t totalT = 0, time;
+    struct timespec t1, t2;
+
+    // Get the current time
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    while (true) {
+
+        prevTotalBytes = totalBytes;
+
+        // Delay 4 seconds between printouts
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+
+        // Read time
+        clock_gettime(CLOCK_MONOTONIC, &t2);
+
+        currTotalBytes = totalBytes;
+
+        if (skipFirst) {
+            // Don't calculate rates until data is coming in
+            if (currTotalBytes > 0) {
+                skipFirst = false;
+            }
+            t1 = t2;
+            totalT = totalBytes = 0;
+            continue;
+        }
+
+        // Use for instantaneous rates
+        byteCount = currTotalBytes - prevTotalBytes;
+
+        // Reset things if #s rolling over
+        if ( (byteCount < 0) || (totalT < 0) )  {
+            totalT = totalBytes = 0;
+            t1 = t2;
+            continue;
+        }
+
+        // Rates
+        time = 1000000L * (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec)/1000L;
+        totalT += time;
+
+        // Actual Data rates (no header info)
+        rate = ((double) byteCount) / time;
+        avgRate = ((double) currTotalBytes) / totalT;
+        // Must print out t to keep it from being optimized away
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+    }
+
+    return (NULL);
+}
+
 
 
 
@@ -488,6 +522,13 @@ int main(int argc, char **argv) {
         }
     }
 
+    pthread_t rthd;
+    int status = pthread_create(&rthd, NULL, rateThread, nullptr);
+    if (status != 0) {
+        fprintf(stderr, "\n ******* error creating rate thread\n\n");
+        return -1;
+    }
+
     // Open output file
 
     FILE *fp = nullptr;
@@ -500,17 +541,7 @@ int main(int argc, char **argv) {
         }
     }
 
-
     // Statistics
-    int totalBytesGathered = 0;
-    int64_t byteCount=0, totalBytes=0;
-    double rate = 0.0, avgRate = 0.0;
-    int64_t totalT = 0, time, time1, time2;
-    struct timespec t1, t2;
-
-    // Get the current time
-    clock_gettime(CLOCK_REALTIME, &t1);
-    time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L; // milliseconds
 
     while (true) {
 
@@ -526,7 +557,7 @@ int main(int argc, char **argv) {
             auto byteBuf = item->getBuffer();
 //std::cout << "       client got " << (item->getUserInt()) << " bytes" << ", should be same as lim "
 //          << byteBuf->limit() << std::endl;
-            totalBytesGathered += item->getUserInt();
+            totalBytes += item->getUserInt();
 
             // Write out what was received
             if (fp != nullptr) {
@@ -536,36 +567,6 @@ std::cout << "       writing data to file!" << byteBuf->limit() << std::endl;
 
             // Send it to back to supply for reuse
             supplies[i]->release(item);
-        }
-
-        // stats
-        clock_gettime(CLOCK_REALTIME, &t2);
-        time2 = 1000L*t2.tv_sec + t2.tv_nsec/1000000L; /* milliseconds */
-        time = time2 - time1;
-
-//std::cout << "       time = " << time << ", time to print = " << btoa(time > 5000) << std::endl;
-
-        if (time > 5000) {
-            // reset things if #s rolling over
-            if ( (totalBytes < 0) || (totalT < 0) )  {
-                totalT = totalBytes = byteCount = 0;
-                time1 = time2;
-                continue;
-            }
-
-            totalT += time;
-
-            // Actual Data rates (no header info)
-            rate = ((double) totalBytesGathered) / (1000*time);
-            totalBytes += totalBytesGathered;
-            avgRate = ((double) totalBytes) / (1000*totalT);
-
-            printf(" Data:    %3.4g MB/s,  %3.4g Avg.\n\n", rate, avgRate);
-
-            totalBytesGathered = 0;
-
-            clock_gettime(CLOCK_REALTIME, &t1);
-            time1 = 1000L*t1.tv_sec + t1.tv_nsec/1000000L;
         }
 
         if (!repeat || fp != nullptr) {
