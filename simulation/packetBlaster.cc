@@ -544,7 +544,7 @@ int main(int argc, char **argv) {
         totalBytes   += bufsize;
         totalPackets += packetsSent;
         offset = 0;
-        tick++;
+        //tick++;
     }
 
     return 0;
