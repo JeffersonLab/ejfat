@@ -230,7 +230,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
  */
 int main(int argc, char **argv) {
 
-    uint32_t offset = 0, delay = 0;
+    uint32_t offset = 0, delay = 0, delayPrescale = 1;
     uint32_t cycleCount=1;  // # of times to cycle through sending same data but with advancing tick
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
@@ -423,7 +423,7 @@ int main(int argc, char **argv) {
 
         fprintf(stderr, "Sending offset = %u, tick = %llu\n", offset, tick);
         err = sendPacketizedBufferFast(buf, nBytes, maxUdpPayload, clientSocket,
-                                       tick, protocol, entropy, version, dataId, &offset, delay,
+                                       tick, protocol, entropy, version, dataId, &offset, delay, delayPrescale,
                                        firstBuffer, lastBuffer, debug, &packetsSent);
         if (err < 0) {
             // Should be more info in errno
