@@ -283,6 +283,7 @@ namespace ejfat {
       * @param offset         value-result parameter that passes in the sequence number of first packet
       *                       and returns the sequence to use for next packet to be sent.
       * @param delay          delay in microsec between each packet being sent.
+      * @param delayPrescale  delay only every Nth time.
       * @param firstBuffer    if true, this is the first buffer to send in a sequence.
       * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
       * @param debug          turn debug printout on & off.
@@ -293,13 +294,14 @@ namespace ejfat {
     static int sendPacketizedBufferFast(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                         int clientSocket, uint64_t tick, int protocol, int entropy,
                                         int version, uint16_t dataId,
-                                        uint32_t *offset, uint32_t delay,
+                                        uint32_t *offset, uint32_t delay, uint32_t delayPrescale,
                                         bool firstBuffer, bool lastBuffer, bool debug,
                                         int64_t *packetsSent) {
 
         int err;
         int64_t sentPackets=0;
         size_t bytesToWrite;
+        uint32_t delayCounter = delayPrescale;
 
         // The very first packet goes in here
         char packetStorage[maxUdpPayload + HEADER_BYTES];
@@ -380,7 +382,10 @@ namespace ejfat {
 
             // delay if any
             if (delay > 0) {
-                std::this_thread::sleep_for(std::chrono::microseconds(delay));
+                if (--delayCounter < 1) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(delay));
+                    delayCounter = delayPrescale;
+                }
             }
 
             dataLen -= bytesToWrite;
@@ -827,6 +832,7 @@ namespace ejfat {
       * @param version    version in reassembly header.
       * @param dataId     data id in reassembly header.
       * @param delay      delay in microsec between each packet being sent.
+      * @param delayPrescale  delay only every Nth time.
       * @param debug      turn debug printout on & off.
       * @param fast       if true, call {@link #sendPacketizedBufferFast}, else call
       *                   {@link #sendPacketizedBufferSend}. Be warned that the "Fast"
@@ -837,7 +843,7 @@ namespace ejfat {
       */
     static int sendBuffer(char *buffer, uint32_t bufLen, std::string & host, const std::string & interface,
                           int mtu, uint16_t port, uint64_t tick, int protocol, int entropy,
-                          int version, uint16_t dataId, uint32_t delay,
+                          int version, uint16_t dataId, uint32_t delay, uint32_t delayPrescale,
                           bool debug, bool fast, bool useIPv6) {
 
         if (host.empty()) {
@@ -953,7 +959,7 @@ namespace ejfat {
 
         if (fast) {
             err = sendPacketizedBufferFast(buffer, bufLen, maxUdpPayload, clientSocket,
-                                             tick, protocol, entropy, version, dataId, &offset, delay,
+                                             tick, protocol, entropy, version, dataId, &offset, delay, delayPrescale,
                                              true, true, debug, &packetsSent);
         }
         else {

@@ -257,7 +257,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 static volatile uint64_t totalBytes=0, totalPackets=0;
 
 
-// Thread to send to gather application
+// Thread to send to print out rates
 static void *thread(void *arg) {
 
     uint64_t packetCount, byteCount;

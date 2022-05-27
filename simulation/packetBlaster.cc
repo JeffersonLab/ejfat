@@ -48,7 +48,7 @@ static void printHelp(char *programName) {
             "        [-e <entropy>]",
             "        [-b <buffer size>]",
             "        [-s <UDP send buffer size>]",
-            "        [-spin <# of spins to delay between buffers>]",
+            "        [-dpre <delay prescale (2 skips every other delay)>]",
             "        [-d <delay in microsec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
@@ -63,7 +63,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
-                      uint32_t *bufsize, uint32_t *sendBufSize, int *spins,
+                      uint32_t *bufsize, uint32_t *sendBufSize, uint32_t *delayPrescale,
                       bool *debug, bool *sendto, bool *sendmsg, bool *sendnocp,
                       char* host, char *interface) {
 
@@ -85,7 +85,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"sendto",   0, NULL, 6},
              {"sendmsg",  0, NULL, 7},
              {"sendnocp",  0, NULL, 8},
-             {"spin",  1, NULL, 9},
+             {"dpre",  1, NULL, 9},
              {0,       0, 0,    0}
             };
 
@@ -259,13 +259,13 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 break;
 
             case 9:
-                // PORT
+                // Delay prescale
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 0) {
-                    *spins = i_tmp;
+                if (i_tmp >= 1) {
+                    *delayPrescale = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -spin, spin >= 0\n");
+                    fprintf(stderr, "Invalid argument to -dpre, pdre >= 1\n");
                     exit(-1);
                 }
                 break;
@@ -296,7 +296,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 static volatile uint64_t totalBytes=0, totalPackets=0;
 
 
-// Thread to send to gather application
+// Thread to send to print out rates
 static void *thread(void *arg) {
 
     uint64_t packetCount, byteCount;
@@ -382,7 +382,7 @@ static void *thread(void *arg) {
  */
 int main(int argc, char **argv) {
 
-    int spins = 0;
+    uint32_t delayPrescale = 1, delayPrescaleCounter = 0;
     uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
@@ -397,7 +397,7 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &sendBufSize, &spins, &debug, &sendto, &sendmsg, &sendnocp,
+              &delay, &bufsize, &sendBufSize, &delayPrescale, &debug, &sendto, &sendmsg, &sendnocp,
               host, interface);
 
     bool send = !(sendto || sendmsg || sendnocp);
@@ -493,11 +493,10 @@ int main(int argc, char **argv) {
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
-    int currentSpins = spins;
-    double x=0., y=0., t=0.;
+    delayPrescaleCounter = delayPrescale;
 
 
-    fprintf(stdout, "spins = %u, currentSpins = %u\n",spins, currentSpins);
+    fprintf(stdout, "delay prescale = %u\n", delayPrescale);
 
     // Statistics
     int64_t packetsSent=0;
@@ -506,7 +505,7 @@ int main(int argc, char **argv) {
         if (sendnocp) {
             err = sendPacketizedBufferFast(buf, bufsize,
                                            maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset, delay,
+                                           tick, protocol, entropy, version, dataId, &offset, delay, delayPrescale,
                                            firstBuffer, lastBuffer, debug, &packetsSent);
         }
         else if (send) {
@@ -525,16 +524,6 @@ int main(int argc, char **argv) {
                                               firstBuffer, lastBuffer, debug, &packetsSent);
         }
 
-        if (spins > 0) {
-            while (--currentSpins > 0) {
-                // do something that will chew up time
-                x += 3.14159 / 333. + 1234;
-                y += 3.14159 / 333. + 2345;
-                t += x/y + y/x + (x*y)/(x+y);
-            }
-            currentSpins = spins;
-        }
-
         if (err < 0) {
             // Should be more info in errno
             EDESTADDRREQ;
@@ -543,6 +532,14 @@ int main(int argc, char **argv) {
         }
 
         // spin delay
+
+//        // delay if any
+//        if (delay > 0) {
+//            if (--delayPrescaleCounter < 1) {
+//                std::this_thread::sleep_for(std::chrono::microseconds(delay));
+//                delayPrescaleCounter = delayPrescale;
+//            }
+//        }
 
         totalBytes   += bufsize;
         totalPackets += packetsSent;
