@@ -76,15 +76,19 @@ static inline uint64_t bswap_64(uint64_t x) {
             OUT_OF_ORDER = -4,
             BAD_FIRST_LAST_BIT = -5,
             OUT_OF_MEM = -6,
-            BAD_ARG = -7
+            BAD_ARG = -7,
+            INTERNAL_ERROR = -8
         };
 
 
-        /** Structure able to hold stats of packet-related quantities for receiving. */
+        /**
+         * Structure able to hold stats of packet-related quantities for receiving.
+         * The contained info relates to the reading/reassembly of a complete buffer.
+         */
         typedef struct packetRecvStats_t {
-            int64_t  endTime;         /**< Convenience variable to hold start time in nanosec from clock_gettime. */
-            int64_t  startTime;       /**< Convenience variable to hold end time in nanosec from clock_gettime. */
-            int64_t  readTime;        /**< Number of nanosec taken to read (all packets forming) one complete buffer. */
+            int64_t  endTime;         /**< Convenience variable to hold start time in microsec from clock_gettime. */
+            int64_t  startTime;       /**< Convenience variable to hold end time in microsec from clock_gettime. */
+            int64_t  readTime;        /**< Number of microsec taken to read (all packets forming) one complete buffer. */
             uint64_t droppedPackets;  /**< Number of dropped packets in reading one complete buffer. */
             uint64_t acceptedPackets; /**< Number of packets successfully read when reading one complete buffer. */
             uint32_t packetsPerTick;  /**< Number of UDP packets comprising one buffer/tick. */
@@ -102,22 +106,6 @@ static inline uint64_t bswap_64(uint64_t x) {
             stats->startTime = 0;
             stats->readTime = 0;
             stats->droppedPackets = 0;
-            stats->acceptedPackets = 0;
-            stats->packetsPerTick = 0;
-            stats->droppedTicks = 0;
-            stats->maxPacketBytes = 0;
-        }
-
-
-        /**
-         * Clear packetRecvStats structure members associated time & good packets.
-         * Retain the count of dropped packets.
-         * @param stats structure to be partially cleared.
-         */
-        static void startStatsAgain(packetRecvStats *stats) {
-            stats->endTime = 0;
-            stats->startTime = 0;
-            stats->readTime = 0;
             stats->acceptedPackets = 0;
             stats->packetsPerTick = 0;
             stats->droppedTicks = 0;
@@ -433,11 +421,14 @@ static inline uint64_t bswap_64(uint64_t x) {
         }
 
 
-        static void freeMap(std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
+        static void clearMap(std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
+            if (outOfOrderPackets.empty()) return;
+
             for (const auto& n : outOfOrderPackets) {
                 // Free allocated buffer holding packet
                 free(std::get<0>(n.second));
             }
+            outOfOrderPackets.clear();
         }
 
 
@@ -446,7 +437,20 @@ static inline uint64_t bswap_64(uint64_t x) {
          * <p>
          * Assemble incoming packets into the given buffer.
          * It will read entire buffer or return an error.
-         * This routine allows for out-of-order packets.</p>
+         * This routine allows for out-of-order packets.
+         * </p>
+         *
+         * <p>
+         * If the given tick value is <b>NOT</b> 0xffffffffffffffff, then it is the next expected tick.
+         * And in this case, this method makes a number of assumptions:
+         * <ul>
+         * <li>Each incoming buffer/tick is split up into the same # of packets.</li>
+         * <li>Each successive tick differs by tickPrescale.</li>
+         * <li>If the sequence changes by 2, then a dropped packet is assumed.
+         *     This results from the observation that for a simple network,
+         *     there are never out-of-order packets.</li>
+         * </ul>
+         * </p>
          *
          * This routine uses recvfrom to read in packets, but minimizes the copying of data
          * by copying as much data as possible, directly to dataBuf. This involves storing
@@ -457,8 +461,12 @@ static inline uint64_t bswap_64(uint64_t x) {
          * @param bufLen            byte length of dataBuf.
          * @param udpSocket         UDP socket to read.
          * @param debug             turn debug printout on & off.
-         * @param tick              to be filled with tick from RE header.
+         * @param tick              value-result parameter which gives the next expected tick
+         *                          and returns the tick that was built. If it's passed in as
+         *                          0xffff ffff ffff ffff, then ticks are coming in no particular order.
          * @param dataId            to be filled with data ID from RE header.
+         * @param stats             to be filled packet statistics.
+         * @param tickPrescale      add to current tick to get next expected tick.
          * @param outOfOrderPackets map for holding out-of-order packets between calls to this function.
          *
          * @return total bytes read.
@@ -471,19 +479,22 @@ static inline uint64_t bswap_64(uint64_t x) {
          */
         static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
                                                    bool debug, uint64_t *tick, uint16_t *dataId,
-                                                   packetRecvStats *stats,
+                                                   packetRecvStats *stats, uint32_t tickPrescale,
                                                    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
 
-            // TODO: build if sequence is file offset
-
-            int64_t prevTick = -1;
+            int64_t  prevTick = -1, firstTick = -1;
+            uint64_t expectedTick = *tick;
             uint64_t packetTick;
             uint32_t sequence, prevSequence = 0, expectedSequence = 0;
 
+            bool packetFirst, packetLast;
             bool dumpTick = false;
-            bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
+            bool firstReadForBuf = false;
+            bool tooLittleRoom = false;
             bool takeStats = stats != nullptr;
             bool veryFirstRead = true;
+
+            bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
 
             int  version, nBytes, bytesRead;
             uint16_t packetDataId;
@@ -496,6 +507,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             size_t remainingLen = bufLen;
             struct timespec now;
 
+
             if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
 
             while (true) {
@@ -507,13 +519,13 @@ static inline uint64_t bswap_64(uint64_t x) {
                                                 &packetFirst, &packetLast, debug);
                     // If error
                     if (nBytes < 0) {
+                        clearMap(outOfOrderPackets);
                         return nBytes;
                     }
 
                     if (takeStats) {
                         clock_gettime(CLOCK_MONOTONIC, &now);
-                        stats->startTime = 1000000000L * now.tv_sec + now.tv_nsec; // nanoseconds
-                        stats->acceptedPackets++;
+                        stats->startTime = 1000000L * now.tv_sec + now.tv_nsec/1000L; // microseconds
                     }
 
                     veryFirstRead = false;
@@ -527,6 +539,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     bytesRead = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
                     if (bytesRead < 0) {
                         fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
+                        clearMap(outOfOrderPackets);
                         return(RECV_MSG);
                     }
                     nBytes = bytesRead - HEADER_BYTES;
@@ -540,7 +553,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         // So, for now, just record time in interest of getting a good time value.
                         // This may be overwritten later if it turns out we had some dropped packets.
                         clock_gettime(CLOCK_MONOTONIC, &now);
-                        stats->endTime = 1000000000L * now.tv_sec + now.tv_nsec;
+                        stats->endTime = 1000000L * now.tv_sec + now.tv_nsec/1000L;
                     }
 
                     // Replace what was written over
@@ -555,36 +568,23 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // or we've dropped some packets and advanced to another tick in the process.
 
                     expectedSequence = 0;
-                    veryFirstRead = true;
 
                     if (sequence != 0) {
                         // Already have trouble, looks like we dropped the first packet of a tick,
                         // and possibly others after it.
                         // So go ahead and dump the rest of the tick in an effort to keep up.
-                        //printf("Skip id %hu, t %llu, s %u\n", packetDataId, packetTick, sequence);
+                        //printf("Skip %hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                        //printf("S %llu - %u\n", packetTick, sequence);
+                        veryFirstRead = true;
                         continue;
                     }
 
-                    // If here, new tic/buffer, sequence = 0.
+                    // If here, new tick/buffer, sequence = 0.
                     // There's a chance we can construct a full buffer.
-
-                    // If we've dropped packets & advanced to the beginning of another tick ...
-                    if (prevTick > -1) {
-                        // It's not possible to know how many ticks
-                        // have been dropped and therefore we cannot know how many packets were dropped.
-                        // But the dropping of multiple ticks is such a big failure, it should be readily
-                        // evident when comparing sending & receiving rates. Here we ASSUME that we've
-                        // dropped relatively few packets and have only moved to the next tick.
-                        // We still don't know how many packets are associated with one tick.
-                        // Once that's figured out we can update the number of dropped packets.
-                        if (takeStats) {
-                            stats->droppedTicks++;
-                        }
-                    }
 
                     // Dump everything we saved from previous tick.
                     // Delete all out-of-seq packets.
-                    outOfOrderPackets.clear();
+                    clearMap(outOfOrderPackets);
                     dumpTick = false;
                 }
                 // Same tick as last packet
@@ -599,7 +599,8 @@ static inline uint64_t bswap_64(uint64_t x) {
                         expectedSequence = 0;
                         dumpTick = true;
                         prevSequence = sequence;
-                        //printf("Dump id %hu, t %llu, s %u\n", packetDataId, packetTick, sequence);
+                        //printf("Dump %hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                        //printf("D %llu - %u\n", packetTick, sequence);
                         continue;
                     }
                 }
@@ -622,14 +623,14 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         fprintf(stderr, "    Already got seq %u, id %hu, t %llu\n", sequence, packetDataId, packetTick);
                         return OUT_OF_ORDER;
                     }
 
                     // Set a limit on how much we're going to store (200 packets) while we wait
                     if (outOfOrderPackets.size() >= 200 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         fprintf(stderr, "    Reached size limit of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
@@ -639,7 +640,8 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // overwritten with the correct packet data.
                     char *tempBuf = (char *) malloc(nBytes);
                     if (tempBuf == nullptr) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "    Ran out of memory storing packets!\n");
                         return OUT_OF_MEM;
                     }
                     memcpy(tempBuf, putDataAt, nBytes);
@@ -671,13 +673,13 @@ static inline uint64_t bswap_64(uint64_t x) {
                         // Error check
                         if (veryFirstRead && !packetFirst) {
                             fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
-                            freeMap(outOfOrderPackets);
+                            clearMap(outOfOrderPackets);
                             return BAD_FIRST_LAST_BIT;
                         }
                     }
                     else if (packetFirst) {
                         fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         return BAD_FIRST_LAST_BIT;
                     }
 
@@ -688,9 +690,25 @@ static inline uint64_t bswap_64(uint64_t x) {
                     if (outOfOrderPackets.empty()) {
                         // If very last packet, quit
                         if (packetLast) {
+
                             // Finish up some stats
                             if (takeStats) {
-                                // Total nanosec to read buffer
+                                if (knowExpectedTick) {
+                                    int64_t diff = packetTick - expectedTick;
+                                    if (diff % tickPrescale != 0) {
+                                        // Error in the way we set things up
+                                        // This should always be 0.
+                                        clearMap(outOfOrderPackets);
+                                        fprintf(stderr, "    Using wrong value for tick prescale, %u\n", tickPrescale);
+                                        return INTERNAL_ERROR;
+                                    }
+                                    else {
+                                        stats->droppedTicks = diff / tickPrescale;
+//printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
+                                    }
+                                }
+
+                                // Total microsec to read buffer
                                 stats->readTime = stats->endTime - stats->startTime;
                                 stats->acceptedPackets = sequence;
                                 stats->droppedPackets = stats->droppedTicks * sequence;
@@ -701,6 +719,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                         // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
                         if (remainingLen < maxPacketBytes) {
+                            clearMap(outOfOrderPackets);
                             return BUF_TOO_SMALL;
                         }
                     }
@@ -743,6 +762,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
             *tick   = packetTick;
             *dataId = packetDataId;
+            clearMap(outOfOrderPackets);
             return totalBytesRead;
         }
 
@@ -917,14 +937,14 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         fprintf(stderr, "    Already got seq %u, id %hu, t %llu\n", sequence, dataId, packetTick);
                         return OUT_OF_ORDER;
                     }
 
                     // Set a limit on how much we're going to store (1000 packets) while we wait
                     if (outOfOrderPackets.size() >= 1000 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         fprintf(stderr, "    Reached size limit of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
@@ -934,7 +954,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // overwritten with the correct packet data.
                     char *tempBuf = (char *) malloc(nBytes);
                     if (tempBuf == nullptr) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         return OUT_OF_MEM;
                     }
                     memcpy(tempBuf, putDataAt, nBytes);
@@ -968,13 +988,13 @@ static inline uint64_t bswap_64(uint64_t x) {
                         // Error check
                         if (veryFirstRead && !packetFirst) {
                             fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
-                            freeMap(outOfOrderPackets);
+                            clearMap(outOfOrderPackets);
                             return BAD_FIRST_LAST_BIT;
                         }
                     }
                     else if (packetFirst) {
                         fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         return BAD_FIRST_LAST_BIT;
                     }
 
@@ -1131,14 +1151,14 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         fprintf(stderr, "    Already got seq %u once before!\n", sequence);
                         return OUT_OF_ORDER;
                     }
 
                     // Set a limit on how much we're going to store (1000 packets) while we wait
                     if (outOfOrderPackets.size() >= 1000 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         fprintf(stderr, "    Reached size limit of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
@@ -1148,7 +1168,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // overwritten with the correct packet data.
                     char *tempBuf = (char *) malloc(nBytes);
                     if (tempBuf == nullptr) {
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         return OUT_OF_MEM;
                     }
                     memcpy(tempBuf, putDataAt, nBytes);
@@ -1182,13 +1202,13 @@ static inline uint64_t bswap_64(uint64_t x) {
                         // Error check
                         if (veryFirstRead && !packetFirst) {
                             fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
-                            freeMap(outOfOrderPackets);
+                            clearMap(outOfOrderPackets);
                             return BAD_FIRST_LAST_BIT;
                         }
                     }
                     else if (packetFirst) {
                         fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         return BAD_FIRST_LAST_BIT;
                     }
 
@@ -1435,13 +1455,13 @@ static inline uint64_t bswap_64(uint64_t x) {
                 if (totalBytes < 0) {
                     if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
                     // Return the error
-                    freeMap(outOfOrderPackets);
+                    clearMap(outOfOrderPackets);
                     return totalBytes;
                 }
 
                 if (!last) {
                     if (debug) fprintf(stderr, "Buffer full, but no last packet found, likely buffer is too small\n");
-                    freeMap(outOfOrderPackets);
+                    clearMap(outOfOrderPackets);
                     return BUF_TOO_SMALL;
                 }
 
@@ -1468,7 +1488,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     if (nBytes < 0) {
                         if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
                         // Return the error
-                        freeMap(outOfOrderPackets);
+                        clearMap(outOfOrderPackets);
                         return totalBytes;
                     }
 
@@ -1488,7 +1508,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     if (remaningBytes < bytesPerPacket) {
                         dataBuf = (char *)realloc(dataBuf, 2*dataBufLen);
                         if (dataBuf == nullptr) {
-                            freeMap(outOfOrderPackets);
+                            clearMap(outOfOrderPackets);
                             return OUT_OF_MEM;
                         }
                         getDataFrom = dataBuf + totalBytes;
@@ -1504,7 +1524,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 *userBufLen = totalBytes;
             }
 
-            freeMap(outOfOrderPackets);
+            clearMap(outOfOrderPackets);
 
             if (debug) fprintf(stderr, "Read %ld incoming data bytes\n", totalBytes);
 
