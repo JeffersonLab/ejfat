@@ -264,7 +264,7 @@ static void *thread(void *arg) {
     std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
 
     // Statistics
-    uint32_t packetCount=0;
+    uint32_t packetCount=0, tickPrescale = 1;
     int64_t packetsRead=0, byteCount=0, totalBytes=0, totalPackets=0;
     uint16_t dataId;
 
@@ -279,7 +279,8 @@ static void *thread(void *arg) {
 
         // Fill with data
         ssize_t nBytes = getCompletePacketizedBuffer((char *)buf->array(), bufSize, udpSocket,
-                                                      debug, &tick, &dataId, &stats, outOfOrderPackets);
+                                                      debug, &tick, &dataId, &stats, tickPrescale,
+                                                      outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) {
                 if (nBytes == BUF_TOO_SMALL) {
@@ -304,6 +305,10 @@ static void *thread(void *arg) {
 
 //        byteCount   += nBytes;
 //        packetsRead += stats.acceptedPackets;
+
+        // The tick returned is what was just built.
+        // Now give it the next expected tick.
+        tick += tickPrescale;
 
         if (!repeat) {
             break;
