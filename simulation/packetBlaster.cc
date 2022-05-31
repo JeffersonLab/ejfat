@@ -34,7 +34,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-sendto] [-sendmsg] [-sendnocp]",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -48,7 +48,8 @@ static void printHelp(char *programName) {
             "        [-e <entropy>]",
             "        [-b <buffer size>]",
             "        [-s <UDP send buffer size>]",
-            "        [-dpre <delay prescale (2 skips every other delay)>]",
+            "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
+            "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale packets)>]",
             "        [-d <delay in microsec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
@@ -63,7 +64,8 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
-                      uint32_t *bufsize, uint32_t *sendBufSize, uint32_t *delayPrescale,
+                      uint32_t *bufsize, uint32_t *sendBufSize,
+                      uint32_t *delayPrescale, uint32_t *tickPrescale,
                       bool *debug, bool *sendto, bool *sendmsg, bool *sendnocp,
                       char* host, char *interface) {
 
@@ -86,6 +88,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"sendmsg",  0, NULL, 7},
              {"sendnocp",  0, NULL, 8},
              {"dpre",  1, NULL, 9},
+             {"tpre",  1, NULL, 10},
              {0,       0, 0,    0}
             };
 
@@ -265,7 +268,19 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *delayPrescale = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -dpre, pdre >= 1\n");
+                    fprintf(stderr, "Invalid argument to -dpre, dpre >= 1\n");
+                    exit(-1);
+                }
+                break;
+
+            case 10:
+                // Tick prescale
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1) {
+                    *tickPrescale = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n");
                     exit(-1);
                 }
                 break;
@@ -382,10 +397,11 @@ static void *thread(void *arg) {
  */
 int main(int argc, char **argv) {
 
+    uint32_t tickPrescale = 1;
     uint32_t delayPrescale = 1, delayPrescaleCounter = 0;
     uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
-    uint64_t tick = 1;
+    uint64_t tick = 0;
     int mtu, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
     bool debug = false, sendto = false, sendmsg = false, sendnocp = false;
@@ -397,7 +413,7 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &sendBufSize, &delayPrescale, &debug, &sendto, &sendmsg, &sendnocp,
+              &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, &debug, &sendto, &sendmsg, &sendnocp,
               host, interface);
 
     bool send = !(sendto || sendmsg || sendnocp);
@@ -544,7 +560,7 @@ int main(int argc, char **argv) {
         totalBytes   += bufsize;
         totalPackets += packetsSent;
         offset = 0;
-        //tick++;
+        tick += tickPrescale;
     }
 
     return 0;
