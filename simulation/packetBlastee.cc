@@ -19,6 +19,7 @@
 #include <thread>
 #include <cmath>
 #include <chrono>
+#include <atomic>
 
 #include "ejfat_assemble_ersap.hpp"
 
@@ -39,45 +40,43 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-fast] [-recvmsg]",
+            "        [-h] [-v]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
-            "        [-b <internal buffer byte size]",
-            "        [-r <UDP receive buffer byte size]");
+            "        [-b <internal buffer byte sizez>]",
+            "        [-r <UDP receive buffer byte size>]",
+            "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
-    fprintf(stderr, "        This is an EJFAT UDP packet receiver.\n");
-    fprintf(stderr, "        The -fast option uses recvfrom & minimizes data copying by reading into final buf\n");
-    fprintf(stderr, "        The -recvmsg option uses recvmsg to read directly into final buf\n");
-    fprintf(stderr, "        Specifying neither flag uses recvfrom to read data, then copies into final buf\n");
+    fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
 }
 
 
 /**
  * Parse all command line options.
  *
- * @param argc        arg count from main().
- * @param argv        arg list from main().
- * @param bufSize     filled with buffer size.
- * @param recvBufSize filled with UDP receive buffer size.
- * @param port        filled with UDP port to listen on.
- * @param debug       filled with debug flag.
- * @param listenAddr  filled with IP address to listen on.
- * @param fast        filled with true if reading with recvfrom and minimizing data copy.
- * @param recvmsg     filled with true if reading with recvmsg.
+ * @param argc          arg count from main().
+ * @param argv          arg list from main().
+ * @param bufSize       filled with buffer size.
+ * @param recvBufSize   filled with UDP receive buffer size.
+ * @param tickPrescale  expected increase in tick with each incoming buffer.
+ * @param port          filled with UDP port to listen on.
+ * @param debug         filled with debug flag.
+ * @param listenAddr    filled with IP address to listen on.
  */
-static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uint16_t* port, bool *debug,
-                      char *listenAddr, bool *fast, bool *recvmsg) {
+static void parseArgs(int argc, char **argv,
+                      int* bufSize, int *recvBufSize, int *tickPrescale,
+                      uint16_t* port, bool *debug,
+                      char *listenAddr) {
 
     int c, i_tmp;
-    bool help = false, useFast = false, useRecvMsg = false;
+    bool help = false;
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {{"fast",  0, NULL, 1},
-             {"recvmsg",  0, NULL, 2},
-             {0,       0, 0,    0}
+            {             {"tpre",  1, NULL, 1},
+                          {0,       0, 0,    0}
             };
 
 
@@ -133,6 +132,18 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uin
                 strcpy(listenAddr, optarg);
                 break;
 
+            case 1:
+                // Tick prescale
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1) {
+                    *tickPrescale = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n");
+                    exit(-1);
+                }
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -140,28 +151,6 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uin
 
             case 'h':
                 help = true;
-                break;
-
-            case 1:
-                // use "recvfrom" to receive UDP packets and avoid data copying
-                if (useRecvMsg) {
-                    fprintf(stderr, "Can only have EITHER -recvmsg OR -fast\n");
-                    exit(-1);
-                }
-                fprintf(stdout, "Use \"recvfrom w/ minimal copy\"\n");
-                useFast = true;
-                *fast = true;
-                break;
-
-            case 2:
-                // use "recvmsg" to receive UDP packets
-                if (useFast) {
-                    fprintf(stderr, "Can only have EITHER -recvmsg OR -fast\n");
-                    exit(-1);
-                }
-                fprintf(stdout, "Use \"recvmsg\"\n");
-                useRecvMsg = true;
-                *recvmsg = true;
                 break;
 
             default:
@@ -181,6 +170,7 @@ static void parseArgs(int argc, char **argv, int* bufSize, int *recvBufSize, uin
 
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
+static std::atomic<uint32_t> dropped;
 
 
 // Thread to send to print out rates
@@ -240,7 +230,7 @@ static void *thread(void *arg) {
 
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %lld microsec\n", rate, avgRate, time);
+        printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %u, time = %lld microsec\n", rate, avgRate, dropped.load(), time);
 
         // Actual Data rates (no header info)
         rate = ((double) byteCount) / time;
@@ -248,9 +238,10 @@ static void *thread(void *arg) {
         // Must print out t to keep it from being optimized away
         printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
 
+        dropped.store(0);
+
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
-
 
     return (NULL);
 }
@@ -264,21 +255,14 @@ int main(int argc, char **argv) {
     // Set this to max expected data size
     int bufSize = 1020000;
     int recvBufSize = 0;
+    int tickPrescale = 1;
     uint16_t port = 7777;
-
     bool debug = false;
-    bool useFast = false;
-    bool useRecvmsg = false;
-    bool useRecvfrom = false;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &port, &debug, listeningAddr, &useFast, &useRecvmsg);
-
-    if (!(useFast || useRecvmsg)) {
-      useRecvfrom = true;
-    }
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &port, &debug, listeningAddr);
 
     // Create UDP socket
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -326,10 +310,10 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    bool last, firstRead = true;
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
-    uint32_t offset = 0;
+    uint16_t dataId;
+
     // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
 
     char *dataBuf = (char *) malloc(bufSize);
@@ -340,8 +324,6 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
 
-    uint32_t bytesPerPacket;
-
     /*
      * Map to hold out-of-order packets.
      * map key = sequence/offset from incoming packet
@@ -351,29 +333,41 @@ int main(int argc, char **argv) {
     std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
 
     // Statistics
-    uint32_t packetCount=0;
+    packetRecvStats stats;
+    dropped.store(0);
 
     while (true) {
-        if (useFast) {
-            if (debug) fprintf(stderr, "calling getPacketizerBufferFast\n");
-            nBytes = getPacketizedBufferFast(dataBuf, bufSize, udpSocket,
-                                             debug, firstRead, &last, &tick, &offset,
-                                             &bytesPerPacket, &packetCount, outOfOrderPackets);
-        }
-        else {
-            nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                         debug, firstRead, &last, useRecvfrom, &tick, &offset,
-                                         &bytesPerPacket, &packetCount, outOfOrderPackets);
+
+        clearStats(&stats);
+
+        // Fill with data
+        nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
+                                             debug, &tick, &dataId, &stats,
+                                             tickPrescale, outOfOrderPackets);
+        if (nBytes < 0) {
+            if (debug) {
+                if (nBytes == BUF_TOO_SMALL) {
+                    fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
+                }
+                else {
+                    fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
+                }
+            }
+            return (0);
         }
 
-        if (nBytes < 0) {
-            if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
-            break;
-        }
+//        if (stats.droppedPackets != 0) {
+//            fprintf(stderr, "Dropped %llu pkts\n", stats.droppedPackets);
+//        }
 
         totalBytes   += nBytes;
-        totalPackets += packetCount;
-        offset = 0;
+        totalPackets += stats.acceptedPackets;
+        // atomic
+        dropped += stats.droppedPackets;
+
+        // The tick returned is what was just built.
+        // Now give it the next expected tick.
+        tick += tickPrescale;
     }
 
     return 0;
