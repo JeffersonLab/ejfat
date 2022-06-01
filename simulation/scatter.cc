@@ -307,7 +307,7 @@ static void *thread(void *arg) {
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
-    uint32_t delayPrescaleCounter = delayPrescale;
+    uint32_t delayCounter = delayPrescale;
 
     //fprintf(stdout, "spins = %u, currentSpins = %u\n", spins, currentSpins);
     if (debug) fprintf(stderr, "new thread: id = %d, entropy = %d, delay = %d\n\n", id, entropy, delay);
@@ -326,7 +326,8 @@ static void *thread(void *arg) {
 //fprintf(stderr, "send buf: tick = %llu, id = %d, entropy = %d\n\n", tick, id, entropy);
         err = sendPacketizedBufferFast(buf, bufSize,
                                        maxUdpPayload, clientSocket,
-                                       tick, protocol, entropy, version, id, &offset, delay, delayPrescale,
+                                       tick, protocol, entropy, version, id, &offset,
+                                       delay, delayPrescale, &delayCounter,
                                        firstBuffer, lastBuffer, false, &packetsSent);
 
         if (err < 0) {
@@ -336,13 +337,13 @@ static void *thread(void *arg) {
             exit(1);
         }
 
-        // delay if any
-        if (delay > 0) {
-            if (--delayPrescaleCounter < 1) {
-                std::this_thread::sleep_for(std::chrono::microseconds(delay));
-                delayPrescaleCounter = delayPrescale;
-            }
-        }
+//        // delay if any
+//        if (delay > 0) {
+//            if (--delayPrescaleCounter < 1) {
+//                std::this_thread::sleep_for(std::chrono::microseconds(delay));
+//                delayPrescaleCounter = delayPrescale;
+//            }
+//        }
 
         // One and done
         if (!repeat) {

@@ -283,7 +283,8 @@ namespace ejfat {
       * @param offset         value-result parameter that passes in the sequence number of first packet
       *                       and returns the sequence to use for next packet to be sent.
       * @param delay          delay in microsec between each packet being sent.
-      * @param delayPrescale  delay only every Nth time.
+      * @param delayPrescale  prescale for delay (i.e. only delay every Nth time).
+      * @param delayCounter   value-result parameter tracking when delay was last run.
       * @param firstBuffer    if true, this is the first buffer to send in a sequence.
       * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
       * @param debug          turn debug printout on & off.
@@ -294,14 +295,14 @@ namespace ejfat {
     static int sendPacketizedBufferFast(char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                         int clientSocket, uint64_t tick, int protocol, int entropy,
                                         int version, uint16_t dataId,
-                                        uint32_t *offset, uint32_t delay, uint32_t delayPrescale,
+                                        uint32_t *offset, uint32_t delay,
+                                        uint32_t delayPrescale, uint32_t *delayCounter,
                                         bool firstBuffer, bool lastBuffer, bool debug,
                                         int64_t *packetsSent) {
 
         int err;
         int64_t sentPackets=0;
         size_t bytesToWrite;
-        uint32_t delayCounter = delayPrescale;
 
         // The very first packet goes in here
         char packetStorage[maxUdpPayload + HEADER_BYTES];
@@ -382,9 +383,9 @@ namespace ejfat {
 
             // delay if any
             if (delay > 0) {
-                if (--delayCounter < 1) {
+                if (--(*delayCounter) < 1) {
                     std::this_thread::sleep_for(std::chrono::microseconds(delay));
-                    delayCounter = delayPrescale;
+                    *delayCounter = delayPrescale;
                 }
             }
 
@@ -954,12 +955,14 @@ namespace ejfat {
         // Set the MTU, which is necessary for jumbo (> 1500, 9000 max) packets. Don't exceed this limit.
         // If trying to set Jumbo packet, set no-fragment flag on linux.
         mtu = setMTU(interface.c_str(), clientSocket, mtu, debug);
+        uint32_t delayCounter = delayPrescale;
 
         if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
         if (fast) {
             err = sendPacketizedBufferFast(buffer, bufLen, maxUdpPayload, clientSocket,
-                                             tick, protocol, entropy, version, dataId, &offset, delay, delayPrescale,
+                                             tick, protocol, entropy, version, dataId, &offset,
+                                             delay, delayPrescale, &delayCounter,
                                              true, true, debug, &packetsSent);
         }
         else {

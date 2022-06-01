@@ -357,6 +357,8 @@ int main(int argc, char **argv) {
     size_t nBytes, totalBytes = 0;
     bool firstBuffer = true;
     bool lastBuffer  = false;
+    uint32_t delayCounter = delayPrescale;
+
 
     while (true) {
         if (!testOutOfOrder) {
@@ -423,7 +425,8 @@ int main(int argc, char **argv) {
 
         fprintf(stderr, "Sending offset = %u, tick = %llu\n", offset, tick);
         err = sendPacketizedBufferFast(buf, nBytes, maxUdpPayload, clientSocket,
-                                       tick, protocol, entropy, version, dataId, &offset, delay, delayPrescale,
+                                       tick, protocol, entropy, version, dataId, &offset,
+                                       delay, delayPrescale, &delayCounter,
                                        firstBuffer, lastBuffer, debug, &packetsSent);
         if (err < 0) {
             // Should be more info in errno

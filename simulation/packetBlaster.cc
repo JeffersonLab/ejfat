@@ -398,7 +398,7 @@ static void *thread(void *arg) {
 int main(int argc, char **argv) {
 
     uint32_t tickPrescale = 1;
-    uint32_t delayPrescale = 1, delayPrescaleCounter = 0;
+    uint32_t delayPrescale = 1, delayCounter = 0;
     uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 0;
@@ -509,7 +509,7 @@ int main(int argc, char **argv) {
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
-    delayPrescaleCounter = delayPrescale;
+    delayCounter = delayPrescale;
 
 
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
@@ -521,7 +521,8 @@ int main(int argc, char **argv) {
         if (sendnocp) {
             err = sendPacketizedBufferFast(buf, bufsize,
                                            maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset, delay, delayPrescale,
+                                           tick, protocol, entropy, version, dataId, &offset,
+                                           delay, delayPrescale, &delayCounter,
                                            firstBuffer, lastBuffer, debug, &packetsSent);
         }
         else if (send) {
@@ -551,9 +552,9 @@ int main(int argc, char **argv) {
 
 //        // delay if any
 //        if (delay > 0) {
-//            if (--delayPrescaleCounter < 1) {
+//            if (--delayCounter < 1) {
 //                std::this_thread::sleep_for(std::chrono::microseconds(delay));
-//                delayPrescaleCounter = delayPrescale;
+//                delayCounter = delayPrescale;
 //            }
 //        }
 
