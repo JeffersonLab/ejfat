@@ -230,7 +230,7 @@ static void *thread(void *arg) {
 
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        if (dropped == 0) {
+        if (packetCount == 0 && dropped == 0) {
             printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?, time = %lld microsec\n", rate, avgRate, time);
         }
         else {
