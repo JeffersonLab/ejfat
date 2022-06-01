@@ -714,8 +714,8 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                                 // Total microsec to read buffer
                                 stats->readTime = stats->endTime - stats->startTime;
-                                stats->acceptedPackets = sequence;
-                                stats->droppedPackets = stats->droppedTicks * sequence;
+                                stats->acceptedPackets = sequence + 1;
+                                stats->droppedPackets = stats->droppedTicks * (sequence + 1);
                                 stats->maxPacketBytes = maxPacketBytes;
                             }
                             break;
