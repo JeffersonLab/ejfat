@@ -383,7 +383,7 @@ namespace ejfat {
             // delay if any
             if (delay > 0) {
                 if (--delayCounter < 1) {
-                    std::this_thread::sleep_for(std::chrono::microseconds(delay));
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(delay));
                     delayCounter = delayPrescale;
                 }
             }
