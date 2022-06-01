@@ -560,7 +560,7 @@ int main(int argc, char **argv) {
         totalBytes   += bufsize;
         totalPackets += packetsSent;
         offset = 0;
-       // tick += tickPrescale;
+        tick += tickPrescale;
     }
 
     return 0;
