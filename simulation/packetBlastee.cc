@@ -230,7 +230,12 @@ static void *thread(void *arg) {
 
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %u, time = %lld microsec\n", rate, avgRate, dropped.load(), time);
+        if (dropped == 0) {
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?, time = %lld microsec\n", rate, avgRate, time);
+        }
+        else {
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %u, time = %lld microsec\n", rate, avgRate, dropped.load(), time);
+        }
 
         // Actual Data rates (no header info)
         rate = ((double) byteCount) / time;
