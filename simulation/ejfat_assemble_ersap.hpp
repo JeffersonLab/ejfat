@@ -575,6 +575,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         // So go ahead and dump the rest of the tick in an effort to keep up.
                         //printf("Skip %hu, %llu - %u\n", packetDataId, packetTick, sequence);
                         //printf("S %llu - %u\n", packetTick, sequence);
+                        putDataAt = dataBuf;
                         veryFirstRead = true;
                         continue;
                     }
@@ -595,6 +596,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         // so drop rest of packets for record.
                         // This branch of the "if" will no longer
                         // be executed once the next record shows up.
+                        putDataAt = dataBuf;
                         veryFirstRead = true;
                         expectedSequence = 0;
                         dumpTick = true;
