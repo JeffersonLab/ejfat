@@ -9,8 +9,7 @@
 
 
 /**
- * @file Receive locally generated data sent by udp_send.c program.
- * This program handles sequentially numbered packets that may arrive out-of-order.
+ * @file Receive generated data sent by packetBlaster.c program.
  * This assumes there is an emulator or FPGA between this and the sending program.
  */
 
@@ -42,7 +41,7 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v]",
+            "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-b <internal buffer byte sizez>]",
@@ -67,7 +66,7 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
-                      uint16_t* port, bool *debug,
+                      uint16_t* port, bool *debug, bool *useIPv6,
                       char *listenAddr) {
 
     int c, i_tmp;
@@ -76,6 +75,7 @@ static void parseArgs(int argc, char **argv,
     /* 4 multiple character command-line options */
     static struct option long_options[] =
             {             {"tpre",  1, NULL, 1},
+                          {"ip6",  0, NULL, 2},
                           {0,       0, 0,    0}
             };
 
@@ -142,6 +142,11 @@ static void parseArgs(int argc, char **argv,
                     fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n");
                     exit(-1);
                 }
+                break;
+
+            case 2:
+                // use IP version 6
+                *useIPv6 = true;
                 break;
 
             case 'v':
@@ -263,14 +268,12 @@ int main(int argc, char **argv) {
     int tickPrescale = 1;
     uint16_t port = 7777;
     bool debug = false;
+    bool useIPv6 = false;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &port, &debug, listeningAddr);
-
-    // Create UDP socket
-    udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &port, &debug, &useIPv6, listeningAddr);
 
 #ifdef __APPLE__
     // By default set recv buf size to 7.4 MB which is the highest
@@ -280,31 +283,77 @@ int main(int argc, char **argv) {
     // By default set recv buf size to 25 MB
     recvBufSize = recvBufSize <= 0 ? 25000000 : recvBufSize;
 #endif
-    setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-    // Read back what we supposedly set
-    socklen_t size = sizeof(int);
-    int recvBufBytes = 0;
-    getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
-    fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
 
-    // Configure settings in address struct
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(port);
-    if (strlen(listeningAddr) > 0) {
-        serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
+    if (useIPv6) {
+        struct sockaddr_in6 serverAddr6{};
+
+        // Create IPv6 UDP socket
+        if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv6 client socket");
+            return -1;
+        }
+
+        // Set & read back UDP receive buffer size
+        socklen_t size = sizeof(int);
+        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+        recvBufSize = 0;
+        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
+        if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufSize);
+
+        // Configure settings in address struct
+        // Clear it out
+        memset(&serverAddr6, 0, sizeof(serverAddr6));
+        // it is an INET address
+        serverAddr6.sin6_family = AF_INET6;
+        // the port we are going to receiver from, in network byte order
+        serverAddr6.sin6_port = htons(port);
+        if (strlen(listeningAddr) > 0) {
+            inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
+        }
+        else {
+            serverAddr6.sin6_addr = in6addr_any;
+        }
+
+        // Bind socket with address struct
+        int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
+        if (err != 0) {
+            if (debug) fprintf(stderr, "bind socket error\n");
+            return -1;
+        }
     }
     else {
-        serverAddr.sin_addr.s_addr = INADDR_ANY;
-    }
-    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+        // Create UDP socket
+        if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv4 client socket");
+            return -1;
+        }
 
-    // Bind socket with address struct
-    int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-    if (err != 0) {
-        fprintf(stderr, "bind socket error\n");
-        return -1;
+        // Set & read back UDP receive buffer size
+        socklen_t size = sizeof(int);
+        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+        recvBufSize = 0;
+        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
+        fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufSize);
+
+        // Configure settings in address struct
+        struct sockaddr_in serverAddr{};
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(port);
+        if (strlen(listeningAddr) > 0) {
+            serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
+        }
+        else {
+            serverAddr.sin_addr.s_addr = INADDR_ANY;
+        }
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+        // Bind socket with address struct
+        int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+        if (err != 0) {
+            fprintf(stderr, "bind socket error\n");
+            return -1;
+        }
     }
 
     // Start thread to do rate printout
@@ -360,10 +409,6 @@ int main(int argc, char **argv) {
             }
             return (0);
         }
-
-//        if (stats.droppedPackets != 0) {
-//            fprintf(stderr, "Dropped %llu pkts\n", stats.droppedPackets);
-//        }
 
         totalBytes   += nBytes;
         totalPackets += stats.acceptedPackets;
