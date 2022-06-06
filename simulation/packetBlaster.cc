@@ -34,7 +34,7 @@ static void printHelp(char *programName) {
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-sendnocp]",
-            "        [-bufdelay] (delay between buffers, not packets)",
+            "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
@@ -47,7 +47,7 @@ static void printHelp(char *programName) {
             "        [-b <buffer size>]",
             "        [-s <UDP send buffer size>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
-            "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale packets)>]",
+            "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
             "        [-d <delay in microsec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
@@ -558,7 +558,8 @@ int main(int argc, char **argv) {
         }
         else {
             err = sendPacketizedBufferSend(buf, bufsize, maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset, packetDelay,
+                                           tick, protocol, entropy, version, dataId, &offset,
+                                           packetDelay, delayPrescale, &delayCounter,
                                            firstBuffer, lastBuffer, debug, &packetsSent);
         }
 
