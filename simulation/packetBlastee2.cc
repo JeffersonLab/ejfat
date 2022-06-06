@@ -9,8 +9,8 @@
 
 
 /**
- * @file Receive locally generated data sent by udp_send.c program.
- * This program handles sequentially numbered packets that may arrive out-of-order.
+ * @file Receive generated data sent by packetBlaster2.c program which
+ * sends each packet as a complete buffer (i.e. no assembly is required).
  * This assumes there is an emulator or FPGA between this and the sending program.
  */
 
