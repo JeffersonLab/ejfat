@@ -10,13 +10,13 @@
 
 /**
  * <p>
- * @file Send file (read or piped to) to an ejfat router (FPGA-based or simulated)
- * which then passes it to a program to reassemble (possibly packetBlastee.cc).
- * This sender, by default, prepends an LB header to the data in order
- * to test it with the receiver. This can be removed in the ejfat_packetize.hpp
- * file by commenting out:
+ * @file Send a single data buffer (full of random data) repeatedly
+ * to an ejfat router (FPGA-based or simulated) which then passes it
+ * to a receiving program (possibly packetBlastee.cc or packetBlastee2.cc).
+ * Because the buffer being sent has both first and last bit set in the
+ * reassembly header, it is not reassembled on the receiving end but is
+ * already complete.
  * </p>
- * <b>#define ADD_LB_HEADER 1</b>
  */
 
 
