@@ -10,13 +10,10 @@
 
 /**
  * <p>
- * @file Send file (read or piped to) to an ejfat router (FPGA-based or simulated)
- * which then passes it to a program to reassemble (possibly packetBlastee.cc).
- * This sender, by default, prepends an LB header to the data in order
- * to test it with the receiver. This can be removed in the ejfat_packetize.hpp
- * file by commenting out:
+ * @file Send a single data buffer (full of random data) repeatedly
+ * to an ejfat router (FPGA-based or simulated) which then passes it
+ * to the receiving program packetBlastee.cc.
  * </p>
- * <b>#define ADD_LB_HEADER 1</b>
  */
 
 
@@ -34,9 +31,10 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-sendto] [-sendmsg] [-sendnocp]",
+            "        [-h] [-v] [-ip6] [-sendnocp]",
+            "        [-bufdelay] (delay between buffers, not packets)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
@@ -54,8 +52,6 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
-    fprintf(stderr, "        Using -sendto flag, data is copied into buffer and \"sendto()\" is used (connect NOT called)\n");
-    fprintf(stderr, "        Using -sendmsg flag, data is sent using \"sendmsg()\" which allows the elimination of a data copy.\n");
     fprintf(stderr, "        Using -sendnocp flag, data is sent using \"send()\" (connect called) and data copy minimized, but original data buffer changed\n");
 }
 
@@ -66,16 +62,14 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t* tick, uint32_t* delay,
                       uint32_t *bufsize, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
-                      bool *debug, bool *sendto, bool *sendmsg, bool *sendnocp,
+                      bool *debug, bool *sendnocp,
+                      bool *useIPv6, bool *bufDelay,
                       char* host, char *interface) {
 
     *mtu = 0;
     int c, i_tmp;
     int64_t tmp;
     bool help = false;
-    bool useSendto  = false;
-    bool useSendmsg = false;
-    bool useSendnocp = false;
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
@@ -84,11 +78,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ver",   1, NULL, 3},
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
-             {"sendto",   0, NULL, 6},
-             {"sendmsg",  0, NULL, 7},
              {"sendnocp",  0, NULL, 8},
              {"dpre",  1, NULL, 9},
              {"tpre",  1, NULL, 10},
+             {"ipv6",  0, NULL, 11},
+             {"bufdelay",  0, NULL, 12},
              {0,       0, 0,    0}
             };
 
@@ -228,36 +222,9 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *protocol = i_tmp;
                 break;
 
-            case 6:
-                // use "sendto" to send UDP packets
-                if (useSendmsg || useSendnocp) {
-                    fprintf(stderr, "Can only have EITHER -sendto OR -sendmsg OR -sendnocp\n");
-                    exit(-1);
-                }
-                fprintf(stdout, "Use \"sendto\"\n");
-                useSendto = true;
-                *sendto = true;
-                break;
-
-            case 7:
-                // use "sendmsg" to send UDP packets
-                if (useSendto || useSendnocp) {
-                    fprintf(stderr, "Can only have EITHER -sendto OR -sendmsg OR -sendnocp\n");
-                    exit(-1);
-                }
-                fprintf(stdout, "Use \"sendmsg\"\n");
-                useSendmsg = true;
-                *sendmsg = true;
-                break;
-
             case 8:
                 // use "send" to send UDP packets and copy data as little as possible
-                if (useSendto || useSendmsg) {
-                    fprintf(stderr, "Can only have EITHER -sendto OR -sendmsg OR -sendnocp\n");
-                    exit(-1);
-                }
                 fprintf(stdout, "Use \"send\" with minimal copying data\n");
-                useSendnocp = true;
                 *sendnocp = true;
                 break;
 
@@ -283,6 +250,16 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n");
                     exit(-1);
                 }
+                break;
+
+            case 11:
+                // use IP version 6
+                *useIPv6 = true;
+                break;
+
+            case 12:
+                // delay is between buffers not packets
+                *bufDelay = true;
                 break;
 
             case 'v':
@@ -399,12 +376,14 @@ int main(int argc, char **argv) {
 
     uint32_t tickPrescale = 1;
     uint32_t delayPrescale = 1, delayCounter = 0;
-    uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
+    uint32_t offset = 0, bufsize = 0, sendBufSize = 0;
+    uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 0;
     int mtu, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
-    bool debug = false, sendto = false, sendmsg = false, sendnocp = false;
+    bool debug = false, sendnocp = false;
+    bool useIPv6 = false, bufDelay = false;
 
     char host[INPUT_LENGTH_MAX], interface[16];
     memset(host, 0, INPUT_LENGTH_MAX);
@@ -413,13 +392,19 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, &debug, &sendto, &sendmsg, &sendnocp,
-              host, interface);
+              &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, &debug, &sendnocp,
+              &useIPv6, &bufDelay, host, interface);
 
-    bool send = !(sendto || sendmsg || sendnocp);
+    fprintf(stderr, "send = %s, sendnocp = %s\n", btoa(send), btoa(sendnocp));
 
-    fprintf(stderr, "send = %s, sendto = %s, sendmsg = %s, sendnocp = %s\n",
-            btoa(send), btoa(sendto), btoa(sendmsg), btoa(sendnocp));
+    if (bufDelay) {
+        packetDelay = 0;
+        bufferDelay = delay;
+    }
+    else {
+        packetDelay = delay;
+        bufferDelay = 0;
+    }
 
     // Break data into multiple packets of max MTU size.
     // If the mtu was not set on the command line, get it progamatically
@@ -438,36 +423,75 @@ int main(int argc, char **argv) {
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
 
     // Create UDP socket
-    int clientSocket = socket(PF_INET, SOCK_DGRAM, 0);
+    int clientSocket;
 
+    if (useIPv6) {
+        struct sockaddr_in6 serverAddr6;
+
+        /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+        if ((clientSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv6 client socket");
+            return -1;
+        }
+
+        socklen_t size = sizeof(int);
+        int sendBufBytes = 0;
 #ifndef __APPLE__
-    // Try to increase send buf size - by default to 25 MB
-    sendBufSize = sendBufSize <= 0 ? 25000000 : sendBufSize;
-    setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufSize, sizeof(sendBufSize));
+        // Try to increase send buf size - by default to 25 MB
+            sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
+            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
 #endif
-    // Read back the UDP send buffer size in bytes
-    socklen_t size = sizeof(int);
-    uint32_t sendBufBytes = 0;
-    getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
-    fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+        sendBufBytes = 0; // clear it
+        getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+        if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-    // Configure settings in address struct
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(port);
-    serverAddr.sin_addr.s_addr = inet_addr(host);
-    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+        // Configure settings in address struct
+        // Clear it out
+        memset(&serverAddr6, 0, sizeof(serverAddr6));
+        // it is an INET address
+        serverAddr6.sin6_family = AF_INET6;
+        // the port we are going to send to, in network byte order
+        serverAddr6.sin6_port = htons(port);
+        // the server IP address, in network byte order
+        inet_pton(AF_INET6, host, &serverAddr6.sin6_addr);
 
-
-#ifdef __linux__
-    {
-        int val = IP_PMTUDISC_DO;
-        setsockopt(clientSocket, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+        int err = connect(clientSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+        if (err < 0) {
+            if (debug) perror("Error connecting UDP socket:");
+            close(clientSocket);
+            exit(1);
+        }
     }
-#endif
+    else {
+        struct sockaddr_in serverAddr;
 
-    if (send || sendnocp) {
+        // Create UDP socket
+        if ((clientSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv4 client socket");
+            return -1;
+        }
+
+        // Try to increase send buf size to 25 MB
+        socklen_t size = sizeof(int);
+        int sendBufBytes = 0;
+#ifndef __APPLE__
+        // Try to increase send buf size - by default to 25 MB
+            sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
+            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
+#endif
+        sendBufBytes = 0; // clear it
+        getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+        if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+
+        // Configure settings in address struct
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        //if (debug) fprintf(stderr, "Sending on UDP port %hu\n", lbPort);
+        serverAddr.sin_port = htons(port);
+        //if (debug) fprintf(stderr, "Connecting to host %s\n", lbHost);
+        serverAddr.sin_addr.s_addr = inet_addr(host);
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
         fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
         int err = connect(clientSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
         if (err < 0) {
@@ -476,6 +500,14 @@ int main(int argc, char **argv) {
             return err;
         }
     }
+
+    // set the don't fragment bit
+#ifdef __linux__
+    {
+            int val = IP_PMTUDISC_DO;
+            setsockopt(clientSocket, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+    }
+#endif
 
     // Start thread to do rate printout
     pthread_t thd;
@@ -511,7 +543,6 @@ int main(int argc, char **argv) {
     bool lastBuffer  = true;
     delayCounter = delayPrescale;
 
-
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
 
     // Statistics
@@ -522,23 +553,13 @@ int main(int argc, char **argv) {
             err = sendPacketizedBufferFast(buf, bufsize,
                                            maxUdpPayload, clientSocket,
                                            tick, protocol, entropy, version, dataId, &offset,
-                                           delay, delayPrescale, &delayCounter,
+                                           packetDelay, delayPrescale, &delayCounter,
                                            firstBuffer, lastBuffer, debug, &packetsSent);
-        }
-        else if (send) {
-            err = sendPacketizedBufferSend(buf, bufsize, maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset, delay,
-                                           firstBuffer, lastBuffer, debug, &packetsSent);
-        }
-        else if (sendto) {
-            err = sendPacketizedBufferSendto(buf, bufsize, maxUdpPayload, clientSocket, &serverAddr,
-                                             tick, protocol, entropy, version, dataId, &offset, delay,
-                                             firstBuffer, lastBuffer, debug, &packetsSent);
         }
         else {
-            err = sendPacketizedBufferSendmsg(buf, bufsize, maxUdpPayload, clientSocket, &serverAddr,
-                                              tick, protocol, entropy, version, dataId, &offset, delay,
-                                              firstBuffer, lastBuffer, debug, &packetsSent);
+            err = sendPacketizedBufferSend(buf, bufsize, maxUdpPayload, clientSocket,
+                                           tick, protocol, entropy, version, dataId, &offset, packetDelay,
+                                           firstBuffer, lastBuffer, debug, &packetsSent);
         }
 
         if (err < 0) {
@@ -550,13 +571,13 @@ int main(int argc, char **argv) {
 
         // spin delay
 
-//        // delay if any
-//        if (delay > 0) {
-//            if (--delayCounter < 1) {
-//                std::this_thread::sleep_for(std::chrono::microseconds(delay));
-//                delayCounter = delayPrescale;
-//            }
-//        }
+        // delay if any
+        if (bufDelay) {
+            if (--delayCounter < 1) {
+                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
+                delayCounter = delayPrescale;
+            }
+        }
 
         totalBytes   += bufsize;
         totalPackets += packetsSent;
