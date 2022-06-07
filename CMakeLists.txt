@@ -92,7 +92,7 @@ mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
 
 #add_compile_options(-Wall -Wextra)
-add_compile_options(-O3)
+add_compile_options(-O3 -D_GNU_SOURCE)
 
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
