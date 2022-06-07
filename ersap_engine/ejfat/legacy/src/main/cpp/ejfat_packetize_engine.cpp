@@ -28,6 +28,7 @@ namespace ejfat {
         protocol = 1;
         entropy = 0;
         delay = 0;
+        delayPrescale = 1;
         host = "127.0.0.1";
         interface = "eth0";
         debug = false;
@@ -102,6 +103,12 @@ namespace ejfat {
                     delay = 0;
                 }
             }
+            else if (key == "delayPrescale") {
+                delayPrescale = (uint32_t)strtol(val.c_str(), (char **)nullptr, 10);
+                if (delayPrescale == 0) {
+                    delayPrescale = 1;
+                }
+            }
             else if (key == "protocol") {
                 protocol = (int)strtol(val.c_str(), (char **)nullptr, 10);
                 if ((protocol == 0) && (errno == EINVAL || errno == ERANGE)) {
@@ -146,7 +153,7 @@ namespace ejfat {
 
         int err = ::ejfat::sendBuffer(buffer, bufLen, host, interface,
                                       mtu, port, tick, protocol, entropy,
-                                      version, dataId, delay, debug, true, useIPv6);
+                                      version, dataId, delay, delayPrescale, debug, true, useIPv6);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);
@@ -164,7 +171,7 @@ namespace ejfat {
 
         int err = ::ejfat::sendBuffer(buffer, bufLen, host, interface,
                                       mtu, port, tick, protocol, entropy,
-                                      version, dataId, delay, debug, true, useIPv6);
+                                      version, dataId, delay, delayPrescale, debug, true, useIPv6);
         if (err < 0) {
             fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
             exit (-1);
@@ -188,7 +195,7 @@ namespace ejfat {
         for (int i=0; i < bufCount; i++) {
             int err = ::ejfat::sendBuffer(buffers[i], bufLens[i], host, interface,
                                           mtu, port, tick, protocol, entropys[i],
-                                          version, entropys[i], delay, debug, true, useIPv6);
+                                          version, entropys[i], delay, delayPrescale, debug, true, useIPv6);
             if (err < 0) {
                 fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
                 exit(-1);
@@ -211,7 +218,8 @@ namespace ejfat {
      * @param tick
      * @param protocol
      * @param version this must = 2.
-     * @param delay
+     * @param delay microseconds between each packet
+     * @param delayPrescale delay every Nth packet
      * @param debug
      * @param useIPv6
      */
@@ -219,7 +227,7 @@ namespace ejfat {
                                        std::string & host, const std::string & interface,
                                        int mtu, uint16_t port, uint64_t tick,
                                        int protocol, int version,
-                                       uint32_t delay, bool debug, bool useIPv6)
+                                       uint32_t delay, uint32_t delayPrescale, bool debug, bool useIPv6)
     {
         //        std::cout << "EJFAT processing..." << std::endl;
         // for now set by hand
@@ -228,7 +236,7 @@ namespace ejfat {
         for (int i=0; i < bufCount; i++) {
             int err = ::ejfat::sendBuffer(buffers[i], bufLens[i], host, interface,
                                           mtu, port, tick, protocol, entropys[i],
-                                          version, entropys[i], delay, debug, true, useIPv6);
+                                          version, entropys[i], delay, delayPrescale, debug, true, useIPv6);
             if (err < 0) {
                 fprintf(stderr, "\nError in ejfat_packetize_engine.process(): %s\n", strerror(errno));
                 exit(-1);

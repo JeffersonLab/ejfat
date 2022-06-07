@@ -28,7 +28,7 @@ public:
                  std::string & host, const std::string & interface,
                  int mtu, uint16_t port, uint64_t tick,
                  int protocol, int version,
-                 uint32_t delay, bool debug, bool useIPv6);
+                 uint32_t delay, uint32_t delayPrescale, bool debug, bool useIPv6);
 
     void parseConfigFile();
 
@@ -42,7 +42,8 @@ private:
     int protocol;
     int entropy;
 
-    uint32_t delay; // milliseconds
+    uint32_t delay; // microseconds
+    uint32_t delayPrescale;
 
     uint16_t port;
     uint16_t dataId;
