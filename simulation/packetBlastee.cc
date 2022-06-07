@@ -17,7 +17,6 @@
 #include <iostream>
 #include <time.h>
 #include <thread>
-#include <pthread.h>
 #include <cmath>
 #include <chrono>
 #include <atomic>
@@ -25,10 +24,12 @@
 #include "ejfat_assemble_ersap.hpp"
 
 #ifdef __linux__
-#ifndef _GNU_SOURCE
+    #ifndef _GNU_SOURCE
         #define _GNU_SOURCE
     #endif
-#include <sched.h>
+
+    #include <sched.h>
+    #include <pthread.h>
 #endif
 
 
@@ -290,7 +291,8 @@ int main(int argc, char **argv) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(0, &cpuset);
-    int rc = pthread_setaffinity_np(0, sizeof(cpu_set_t), &cpuset);
+    pthread_t current_thread = pthread_self();
+    int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
     if (rc != 0) {
         std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
     }
