@@ -22,14 +22,15 @@
 #include <chrono>
 #include <atomic>
 
+#include "ejfat_assemble_ersap.hpp"
+
 #ifdef __linux__
-    #ifndef _GNU_SOURCE
+#ifndef _GNU_SOURCE
         #define _GNU_SOURCE
     #endif
 #include <sched.h>
 #endif
 
-#include "ejfat_assemble_ersap.hpp"
 
 using namespace ejfat;
 
