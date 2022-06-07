@@ -14,11 +14,18 @@
  */
 
 #include <cstdlib>
+#include <iostream>
 #include <time.h>
 #include <thread>
+#include <pthread.h>
 #include <cmath>
 #include <chrono>
 #include <atomic>
+
+#ifdef __linux__
+#define _GNU_SOURCE
+#include <sched.h>
+#endif
 
 #include "ejfat_assemble_ersap.hpp"
 
@@ -272,6 +279,20 @@ int main(int argc, char **argv) {
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
+
+#ifdef __linux__
+
+    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
+    // only CPU i as set.
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(0, &cpuset);
+    int rc = pthread_setaffinity_np(0, sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+        std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+    }
+
+#endif
 
     parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &port, &debug, &useIPv6, listeningAddr);
 
