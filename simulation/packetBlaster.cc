@@ -20,19 +20,8 @@
 #include <cstdlib>
 #include <time.h>
 #include <cmath>
-#include <iostream>
 #include <thread>
 #include "ejfat_packetize.hpp"
-
-#ifdef __linux__
-    #ifndef _GNU_SOURCE
-        #define _GNU_SOURCE
-    #endif
-
-    #include <sched.h>
-    #include <pthread.h>
-#endif
-
 
 using namespace ejfat;
 
@@ -401,24 +390,6 @@ int main(int argc, char **argv) {
     memset(interface, 0, 16);
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
-
-
-#ifdef __linux__
-
-    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
-    // only CPU i as set.
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(0, &cpuset);
-    CPU_SET(1, &cpuset);
-    pthread_t current_thread = pthread_self();
-    int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-    if (rc != 0) {
-        std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-    }
-
-#endif
-
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, &debug, &sendnocp,
