@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <time.h>
 #include <cmath>
+#include <iostream>
 #include <thread>
 #include "ejfat_packetize.hpp"
 
@@ -401,7 +402,7 @@ int main(int argc, char **argv) {
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
 
-    
+
 #ifdef __linux__
 
     // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
