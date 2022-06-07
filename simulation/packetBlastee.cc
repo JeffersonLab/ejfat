@@ -23,7 +23,6 @@
 #include <atomic>
 
 #ifdef __linux__
-#define _GNU_SOURCE
 #include <sched.h>
 #endif
 
