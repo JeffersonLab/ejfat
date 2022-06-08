@@ -22,6 +22,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cstring>
+#include <errno.h>
 
 #include "ejfat_assemble_ersap.hpp"
 
@@ -181,8 +182,9 @@ static void parseArgs(int argc, char **argv,
                     int index = 0;
                     while ((pos = s.find(delimiter)) != std::string::npos) {
                         token = s.substr(0, pos);
+                        errno = 0;
                         cores[index] = (int) strtol(token.c_str(), nullptr, 0);
-                        if (cores[index] < 0) {
+                        if (errno == EINVAL || errno == ERANGE) {
                             fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
                             exit(-1);
                         }
@@ -190,16 +192,20 @@ static void parseArgs(int argc, char **argv,
                         std::cout << token << std::endl;
                         s.erase(0, pos + delimiter.length());
                     }
-                    cores[index] = (int) strtol(s.c_str(), nullptr, 0);
-                    if (cores[index] < 0) {
-                        fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
-                        exit(-1);
+
+                    if (!s.empty()) {
+                        errno = 0;
+                        cores[index] = (int) strtol(s.c_str(), nullptr, 0);
+                        if (errno == EINVAL || errno == ERANGE) {
+                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                            exit(-1);
+                        }
                     }
 
                     index++;
                     // clear rest
                     for (int i=index; i < 10; i++) {
-                        cores[index] = -1;
+                        cores[i] = -1;
                     }
                 }
                 break;
