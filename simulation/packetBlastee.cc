@@ -175,12 +175,17 @@ static void parseArgs(int argc, char **argv,
                 {
                     // split into ints
                     std::string s = optarg;
+                    size_t strLen = s.length();
                     std::string delimiter = ",";
 
                     size_t pos = 0;
                     std::string token;
                     int index = 0;
                     while ((pos = s.find(delimiter)) != std::string::npos) {
+                        if (pos == strLen-1) {
+                            fprintf(stderr, "String ends with a comma!\n");
+                            break;
+                        }
                         token = s.substr(0, pos);
                         errno = 0;
                         cores[index] = (int) strtol(token.c_str(), nullptr, 0);
@@ -193,7 +198,7 @@ static void parseArgs(int argc, char **argv,
                         s.erase(0, pos + delimiter.length());
                     }
 
-                    if (!s.empty()) {
+                    if (!s.empty() && s != ",") {
                         errno = 0;
                         cores[index] = (int) strtol(s.c_str(), nullptr, 0);
                         if (errno == EINVAL || errno == ERANGE) {
