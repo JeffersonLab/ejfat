@@ -190,7 +190,13 @@ static void parseArgs(int argc, char **argv,
                         std::cout << token << std::endl;
                         s.erase(0, pos + delimiter.length());
                     }
+                    cores[index] = (int) strtol(s.c_str(), nullptr, 0);
+                    if (cores[index] < 0) {
+                        fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                        exit(-1);
+                    }
 
+                    index++;
                     // clear rest
                     for (int i=index; i < 10; i++) {
                         cores[index] = -1;
