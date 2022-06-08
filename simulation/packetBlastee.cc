@@ -20,6 +20,8 @@
 #include <cmath>
 #include <chrono>
 #include <atomic>
+#include <algorithm>
+#include <cstring>
 
 #include "ejfat_assemble_ersap.hpp"
 
@@ -50,13 +52,14 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-b <internal buffer byte sizez>]",
             "        [-r <UDP receive buffer byte size>]",
+            "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
@@ -76,7 +79,7 @@ static void printHelp(char *programName) {
  * @param listenAddr    filled with IP address to listen on.
  */
 static void parseArgs(int argc, char **argv,
-                      int* bufSize, int *recvBufSize, int *tickPrescale,
+                      int* bufSize, int *recvBufSize, int *tickPrescale, int *cores,
                       uint16_t* port, bool *debug, bool *useIPv6,
                       char *listenAddr) {
 
@@ -87,6 +90,7 @@ static void parseArgs(int argc, char **argv,
     static struct option long_options[] =
             {             {"tpre",  1, NULL, 1},
                           {"ip6",  0, NULL, 2},
+                          {"cores",  1, NULL, 3},
                           {0,       0, 0,    0}
             };
 
@@ -158,6 +162,40 @@ static void parseArgs(int argc, char **argv,
             case 2:
                 // use IP version 6
                 *useIPv6 = true;
+                break;
+
+            case 3:
+                // Cores to run on
+                if (strlen(optarg) < 1) {
+                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                    exit(-1);
+                }
+
+                {
+                    // split into ints
+                    std::string s = optarg;
+                    std::string delimiter = ",";
+
+                    size_t pos = 0;
+                    std::string token;
+                    int index = 0;
+                    while ((pos = s.find(delimiter)) != std::string::npos) {
+                        token = s.substr(0, pos);
+                        cores[index] = (int) strtol(token.c_str(), nullptr, 0);
+                        if (cores[index] < 0) {
+                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                            exit(-1);
+                        }
+                        index++;
+                        std::cout << token << std::endl;
+                        s.erase(0, pos + delimiter.length());
+                    }
+
+                    // clear rest
+                    for (int i=index; i < 10; i++) {
+                        cores[index] = -1;
+                    }
+                }
                 break;
 
             case 'v':
@@ -278,19 +316,29 @@ int main(int argc, char **argv) {
     int recvBufSize = 0;
     int tickPrescale = 1;
     uint16_t port = 7777;
+    int cores[10];
     bool debug = false;
     bool useIPv6 = false;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
 
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, &port, &debug, &useIPv6, listeningAddr);
+
 #ifdef __linux__
 
-    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
-    // only CPU i as set.
+    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(0, &cpuset);
+    for (int i=0; i < 10; i++) {
+        if (cores[i] > = 0) {
+            CPU_SET(cores[i], &cpuset);
+            std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
+        }
+        else {
+            break;
+        }
+    }
     pthread_t current_thread = pthread_self();
     int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
     if (rc != 0) {
@@ -299,7 +347,7 @@ int main(int argc, char **argv) {
 
 #endif
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &port, &debug, &useIPv6, listeningAddr);
+
 
 #ifdef __APPLE__
     // By default set recv buf size to 7.4 MB which is the highest
