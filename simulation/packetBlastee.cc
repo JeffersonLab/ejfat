@@ -200,6 +200,7 @@ static void parseArgs(int argc, char **argv,
                             fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
                             exit(-1);
                         }
+                        std::cout << s << std::endl;
                     }
 
                     index++;
