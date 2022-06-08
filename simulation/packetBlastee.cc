@@ -331,7 +331,7 @@ int main(int argc, char **argv) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     for (int i=0; i < 10; i++) {
-        if (cores[i] > = 0) {
+        if (cores[i] >= 0) {
             CPU_SET(cores[i], &cpuset);
             std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
         }
