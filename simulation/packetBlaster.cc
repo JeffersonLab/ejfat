@@ -327,11 +327,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                         index++;
                         //std::cout << s << std::endl;
                     }
-
-                    // clear rest
-                    for (int i=index; i < 10; i++) {
-                        cores[i] = -1;
-                    }
                 }
                 break;
 
@@ -464,6 +459,9 @@ int main(int argc, char **argv) {
     memset(interface, 0, 16);
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
+    for (int i=0; i < 10; i++) {
+        cores[i] = -1;
+    }
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, cores, &debug, &sendnocp,
