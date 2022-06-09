@@ -172,43 +172,50 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
 
+
                 {
                     // split into ints
                     std::string s = optarg;
-                    size_t strLen = s.length();
                     std::string delimiter = ",";
 
                     size_t pos = 0;
                     std::string token;
+                    char *endptr;
                     int index = 0;
+                    bool oneMore = true;
+
                     while ((pos = s.find(delimiter)) != std::string::npos) {
-                        if (pos == strLen-1) {
-                            fprintf(stderr, "String ends with a comma!\n");
-                            break;
-                        }
+                        //fprintf(stderr, "pos = %llu\n", pos);
                         token = s.substr(0, pos);
                         errno = 0;
-                        cores[index] = (int) strtol(token.c_str(), nullptr, 0);
-                        if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
-                            exit(-1);
+                        cores[index] = (int) strtol(token.c_str(), &endptr, 0);
+
+                        if ((token.c_str() - endptr) == 0) {
+                            //fprintf(stderr, "two commas next to eachother\n");
+                            oneMore = false;
+                            break;
                         }
                         index++;
-                        std::cout << token << std::endl;
+                        //std::cout << token << std::endl;
                         s.erase(0, pos + delimiter.length());
+                        if (s.length() == 0) {
+                            //fprintf(stderr, "break on zero len string\n");
+                            oneMore = false;
+                            break;
+                        }
                     }
 
-                    if (!s.empty() && s != ",") {
+                    if (oneMore) {
                         errno = 0;
                         cores[index] = (int) strtol(s.c_str(), nullptr, 0);
                         if (errno == EINVAL || errno == ERANGE) {
                             fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
                             exit(-1);
                         }
-                        std::cout << s << std::endl;
+                        index++;
+                        //std::cout << s << std::endl;
                     }
 
-                    index++;
                     // clear rest
                     for (int i=index; i < 10; i++) {
                         cores[i] = -1;
