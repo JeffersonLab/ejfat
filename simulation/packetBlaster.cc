@@ -21,6 +21,8 @@
 #include <time.h>
 #include <cmath>
 #include <thread>
+#include <pthread.h>
+#include <iostream>
 #include "ejfat_packetize.hpp"
 
 #ifdef __linux__
