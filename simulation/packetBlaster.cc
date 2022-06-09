@@ -23,6 +23,16 @@
 #include <thread>
 #include "ejfat_packetize.hpp"
 
+#ifdef __linux__
+#ifndef _GNU_SOURCE
+        #define _GNU_SOURCE
+    #endif
+
+    #include <sched.h>
+    #include <pthread.h>
+#endif
+
+
 using namespace ejfat;
 
 #define INPUT_LENGTH_MAX 256
@@ -31,7 +41,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-sendnocp]",
             "        [-bufdelay] (delay between each buffer, not packet)",
@@ -46,6 +56,7 @@ static void printHelp(char *programName) {
             "        [-e <entropy>]",
             "        [-b <buffer size>]",
             "        [-s <UDP send buffer size>]",
+            "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
             "        [-d <delay in microsec between packets>]");
@@ -62,6 +73,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t* tick, uint32_t* delay,
                       uint32_t *bufsize, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
+                      int *cores,
                       bool *debug, bool *sendnocp,
                       bool *useIPv6, bool *bufDelay,
                       char* host, char *interface) {
@@ -83,6 +95,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"tpre",  1, NULL, 10},
              {"ipv6",  0, NULL, 11},
              {"bufdelay",  0, NULL, 12},
+             {"cores",  1, NULL, 13},
              {0,       0, 0,    0}
             };
 
@@ -262,6 +275,64 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *bufDelay = true;
                 break;
 
+            case 13:
+                // Cores to run on
+                if (strlen(optarg) < 1) {
+                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                    exit(-1);
+                }
+
+
+                {
+                    // split into ints
+                    std::string s = optarg;
+                    std::string delimiter = ",";
+
+                    size_t pos = 0;
+                    std::string token;
+                    char *endptr;
+                    int index = 0;
+                    bool oneMore = true;
+
+                    while ((pos = s.find(delimiter)) != std::string::npos) {
+                        //fprintf(stderr, "pos = %llu\n", pos);
+                        token = s.substr(0, pos);
+                        errno = 0;
+                        cores[index] = (int) strtol(token.c_str(), &endptr, 0);
+
+                        if ((token.c_str() - endptr) == 0) {
+                            //fprintf(stderr, "two commas next to eachother\n");
+                            oneMore = false;
+                            break;
+                        }
+                        index++;
+                        //std::cout << token << std::endl;
+                        s.erase(0, pos + delimiter.length());
+                        if (s.length() == 0) {
+                            //fprintf(stderr, "break on zero len string\n");
+                            oneMore = false;
+                            break;
+                        }
+                    }
+
+                    if (oneMore) {
+                        errno = 0;
+                        cores[index] = (int) strtol(s.c_str(), nullptr, 0);
+                        if (errno == EINVAL || errno == ERANGE) {
+                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                            exit(-1);
+                        }
+                        index++;
+                        //std::cout << s << std::endl;
+                    }
+
+                    // clear rest
+                    for (int i=index; i < 10; i++) {
+                        cores[i] = -1;
+                    }
+                }
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -380,6 +451,7 @@ int main(int argc, char **argv) {
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 0;
+    int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
     bool debug = false, sendnocp = false;
@@ -392,8 +464,37 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, &debug, &sendnocp,
+              &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, cores, &debug, &sendnocp,
               &useIPv6, &bufDelay, host, interface);
+
+#ifdef __linux__
+
+    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+
+    if (debug) {
+        for (int i=0; i < 10; i++) {
+                 std::cerr << "core[" << i << "] = " << cores[i] << "\n";
+        }
+    }
+
+    for (int i=0; i < 10; i++) {
+        if (cores[i] >= 0) {
+            std::cerr << "Run sending thread on core " << cores[i] << "\n";
+            CPU_SET(cores[i], &cpuset);
+        }
+        else {
+            break;
+        }
+    }
+    pthread_t current_thread = pthread_self();
+    int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+        std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+    }
+
+#endif
 
     fprintf(stderr, "send = %s, sendnocp = %s\n", btoa(send), btoa(sendnocp));
 

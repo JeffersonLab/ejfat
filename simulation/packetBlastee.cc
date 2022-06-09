@@ -355,9 +355,13 @@ int main(int argc, char **argv) {
     // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    for (int i=0; i < 10; i++) {
-             std::cerr << "core[" << i << "] = " << cores[i] << "\n";
-   }
+    
+    if (debug) {
+        for (int i=0; i < 10; i++) {
+                 std::cerr << "core[" << i << "] = " << cores[i] << "\n";
+        }
+    }
+
     for (int i=0; i < 10; i++) {
         if (cores[i] >= 0) {
             std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
