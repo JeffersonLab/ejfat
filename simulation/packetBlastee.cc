@@ -258,6 +258,7 @@ static void parseArgs(int argc, char **argv,
 
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
+static volatile int cpu=-1;
 static std::atomic<uint32_t> dropped;
 typedef struct threadStruct_t {
     char filename[101];
@@ -290,7 +291,7 @@ static void *thread(void *arg) {
         }
 
         // Write column headers
-        fprintf(fp, "Sec,PacketRate(kHz),DataRate(MB/s),Dropped,TotalDropped\n");
+        fprintf(fp, "Sec,PacketRate(kHz),DataRate(MB/s),Dropped,TotalDropped,CPU\n");
     }
 
 
@@ -356,11 +357,11 @@ static void *thread(void *arg) {
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        // Must print out t to keep it from being optimized away
-        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", dataRate, dataAvgRate);
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg, cpu %d\n\n", dataRate, dataAvgRate, cpu);
 
         if (writeToFile) {
-            fprintf(fp, "%lld,%d,%d,%lld,%lld\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate), droppedPkts, totalDroppedPkts);
+            fprintf(fp, "%lld,%d,%d,%lld,%lld,%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
+                    droppedPkts, totalDroppedPkts, cpu);
             fflush(fp);
         }
 
@@ -535,7 +536,6 @@ int main(int argc, char **argv) {
     uint16_t dataId;
 
     // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
-
     char *dataBuf = (char *) malloc(bufSize);
     if (dataBuf == NULL) {
         fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
@@ -551,6 +551,10 @@ int main(int argc, char **argv) {
      * (is last packet), (is first packet).
      */
     std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
+
+    // Track cpu by calling sched_getcpu roughly once per sec
+    int cpuLoops = 50000;
+    int loopCount = cpuLoops;
 
     // Statistics
     packetRecvStats stats;
@@ -584,6 +588,14 @@ int main(int argc, char **argv) {
         // The tick returned is what was just built.
         // Now give it the next expected tick.
         tick += tickPrescale;
+
+#ifdef __linux__
+        if (loopCount-- < 1) {
+            cpu = sched_getcpu();
+            loopCount = cpuLoops;
+        }
+#endif
+
     }
 
     return 0;
