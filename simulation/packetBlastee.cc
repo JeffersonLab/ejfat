@@ -53,13 +53,14 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-b <internal buffer byte sizez>]",
             "        [-r <UDP receive buffer byte size>]",
+            "        [-f <file for stats>]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
@@ -75,14 +76,17 @@ static void printHelp(char *programName) {
  * @param bufSize       filled with buffer size.
  * @param recvBufSize   filled with UDP receive buffer size.
  * @param tickPrescale  expected increase in tick with each incoming buffer.
+ * @param cores         array of core ids on which to run assembly thread.
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
+ * @param useIPv6       filled with use IP version 6 flag.
  * @param listenAddr    filled with IP address to listen on.
+ * @param filename      filled with name of file in which to write stats.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale, int *cores,
                       uint16_t* port, bool *debug, bool *useIPv6,
-                      char *listenAddr) {
+                      char *listenAddr, char *filename) {
 
     int c, i_tmp;
     bool help = false;
@@ -96,7 +100,7 @@ static void parseArgs(int argc, char **argv,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -146,6 +150,15 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
                 strcpy(listenAddr, optarg);
+                break;
+
+            case 'f':
+                // output stat file
+                if (strlen(optarg) > 100 || strlen(optarg) < 1) {
+                    fprintf(stderr, "Output file name too long/short, %s\n", optarg);
+                    exit(-1);
+                }
+                strcpy(filename, optarg);
                 break;
 
             case 1:
@@ -242,9 +255,13 @@ static void parseArgs(int argc, char **argv,
 
 
 
+
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
 static std::atomic<uint32_t> dropped;
+typedef struct threadStruct_t {
+    char filename[101];
+} threadStruct;
 
 
 // Thread to send to print out rates
@@ -256,8 +273,29 @@ static void *thread(void *arg) {
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
-    double rate, avgRate;
-    int64_t totalT = 0, time;
+
+    // File writing stuff
+    bool writeToFile = false;
+    threadStruct *targ = static_cast<threadStruct *>(arg);
+    char *filename = targ->filename;
+    FILE *fp;
+    if (strlen(filename) > 0) {
+        // open file
+        writeToFile = true;
+        fp = fopen (filename, "w");
+        // validate file open for writing
+        if (!fp) {
+            fprintf(stderr, "file open failed: %s\n", strerror(errno));
+            return (NULL);
+        }
+
+        // Write column headers
+        fprintf(fp, "Sec,PacketRate(kHz),DataRate(MB/s),Dropped,TotalDropped\n");
+    }
+
+
+    double pktRate, pktAvgRate, dataRate, dataAvgRate;
+    int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0;
     struct timespec t1, t2;
 
     // Get the current time
@@ -302,26 +340,35 @@ static void *thread(void *arg) {
         time = 1000000L * (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec)/1000L;
         totalT += time;
 
-        rate = 1000000.0 * ((double) packetCount) / time;
-        avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        if (packetCount == 0 && dropped == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?, time = %lld microsec\n", rate, avgRate, time);
+        droppedPkts = dropped;
+        dropped.store(0);
+        totalDroppedPkts += droppedPkts;
+
+        pktRate = 1000000.0 * ((double) packetCount) / time;
+        pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
+        if (packetCount == 0 && droppedPkts == 0) {
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?, time = %lld microsec\n", pktRate, pktAvgRate, time);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %u, time = %lld microsec\n", rate, avgRate, dropped.load(), time);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %llu, time = %lld microsec\n", pktRate, pktAvgRate, droppedPkts, time);
         }
 
         // Actual Data rates (no header info)
-        rate = ((double) byteCount) / time;
-        avgRate = ((double) currTotalBytes) / totalT;
+        dataRate = ((double) byteCount) / time;
+        dataAvgRate = ((double) currTotalBytes) / totalT;
         // Must print out t to keep it from being optimized away
-        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", dataRate, dataAvgRate);
 
-        dropped.store(0);
+        if (writeToFile) {
+            fprintf(fp, "%lld,%2.3g,%2.3g,%lld,%lld\n", totalT/1000000, pktRate/1000, dataRate, droppedPkts, totalDroppedPkts);
+            fflush(fp);
+        }
+
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
+    fclose(fp);
     return (NULL);
 }
 
@@ -342,11 +389,15 @@ int main(int argc, char **argv) {
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
+    char filename[101];
+    memset(filename, 0, 101);
+
     for (int i=0; i < 10; i++) {
         cores[i] = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, &port, &debug, &useIPv6, listeningAddr);
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, &port, &debug, &useIPv6,
+              listeningAddr, filename);
 
 #ifdef __linux__
 
@@ -378,7 +429,6 @@ int main(int argc, char **argv) {
     }
 
 #endif
-
 
 
 #ifdef __APPLE__
@@ -463,8 +513,18 @@ int main(int argc, char **argv) {
     }
 
     // Start thread to do rate printout
+    threadStruct *targ = (threadStruct *)malloc(sizeof(threadStruct));
+    if (targ == nullptr) {
+        fprintf(stderr, "out of mem\n");
+        return -1;
+    }
+    std::memset(targ, 0, sizeof(threadStruct));
+    if (strlen(filename) > 0) {
+        std::memcpy(targ->filename, filename, sizeof(filename));
+    }
+
     pthread_t thd;
-    int status = pthread_create(&thd, NULL, thread, (void *) nullptr);
+    int status = pthread_create(&thd, NULL, thread, (void *) targ);
     if (status != 0) {
         fprintf(stderr, "\n ******* error creating thread\n\n");
         return -1;
