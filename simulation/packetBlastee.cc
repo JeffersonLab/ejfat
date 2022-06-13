@@ -360,7 +360,7 @@ static void *thread(void *arg) {
         printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", dataRate, dataAvgRate);
 
         if (writeToFile) {
-            fprintf(fp, "%lld,%2.3g,%2.3g,%lld,%lld\n", totalT/1000000, pktRate/1000, dataRate, droppedPkts, totalDroppedPkts);
+            fprintf(fp, "%lld,%d,%d,%lld,%lld\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate), droppedPkts, totalDroppedPkts);
             fflush(fp);
         }
 
