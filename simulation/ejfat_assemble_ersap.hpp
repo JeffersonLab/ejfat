@@ -281,6 +281,39 @@ static inline uint64_t bswap_64(uint64_t x) {
         }
 
 
+        /**
+         * Parse the reassembly header at the start of the given buffer.
+         * Return parsed values in pointer args.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |Version|        Rsvd       |F|L|            Data-ID            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                  UDP Packet Offset                            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                              Tick                             +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
+         *
+         * @param buffer   buffer to parse.
+         * @param sequence returned packet sequence number.
+         * @param tick     returned tick value, also in LB meta data.
+         */
+        static void parseReHeader(char* buffer, uint32_t* sequence, uint64_t *tick)
+        {
+            *sequence = ntohl(*((uint32_t *) (buffer + 4)));
+            *tick     = ntohll(*((uint64_t *) (buffer + 8)));
+        }
+
+
+
+
         //-----------------------------------------------------------------------
         // Be sure to print to stderr as programs may pipe data to stdout!!!
         //-----------------------------------------------------------------------
