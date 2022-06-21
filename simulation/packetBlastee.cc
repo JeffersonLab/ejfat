@@ -425,10 +425,32 @@ int main(int argc, char **argv) {
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
         if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+            std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
         }
     }
 
+    // Using the actual pid will set priority of main thd.
+    // Using 0 will set priority of calling thd.
+    pid_t myPid = getpid();
+    // myPid = 0;
+
+    struct sched_param param;
+    int policy = SCHED_RR;
+
+    // Set process to max priority for given scheduler
+    param.sched_priority = sched_get_priority_max(policy);
+
+    // Set new scheduler policy
+    std::cerr << "Current Scheduling Policy: " << sched_getscheduler(myPid) <<
+                 " (RR = " << SCHED_RR << ", FIFO = " << SCHED_FIFO ")" << std::endl;
+    std::cerr << "Setting Scheduling Policy to: " << policy << ", pri = " << param.sched_priority << std::endl;
+    if (sched_setscheduler(myPid, policy, &param)) {
+        perror("Error setting scheduler policy");
+        exit(EXIT_FAILURE);
+    }
+    int myPri = sched_getparam(myPid, &param);
+    std::cerr << "New Scheduling Policy: " << sched_getscheduler(myPid) << ", pri = " <<  param.sched_priority <<std::endl;
+    
 #endif
 
 
