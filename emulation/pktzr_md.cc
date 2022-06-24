@@ -14,6 +14,8 @@
 #include <iostream>
 #include <inttypes.h>
 #include <time.h>
+#include <chrono>
+#include <ctime>
 
 using namespace std;
 
@@ -30,28 +32,35 @@ void   Usage(void)
         -t lb_tick  \n\
         -d re_data_id  \n\
         -e Use LB port entropy  \n\
+        -n num repeats  \n\
         -v verbose mode (default is quiet)  \n\
         -s max packet size (default 9000)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i\n";
 }
-
-int main (int argc, char *argv[])
-{
     const size_t max_pckt_sz = 9000-20-8;  // = MTU - IP header - UDP header
     const size_t lblen       = 16;
     const size_t relen       = 8;
     const size_t mdlen       = lblen + relen;
+    const size_t max_pkts    = 1200;           // support up to 10MB event size (Jumbo frames = 9kB)
+
+    uint8_t pckt_cache[max_pkts][max_pckt_sz];
+    uint16_t pckt_szs[max_pkts];
+
+int main (int argc, char *argv[])
+{
 
     int optc;
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedI=false, passedP=false, passed6=false, passedV=false, passedE=false;
+    bool passedI=false, passedP=false, passed6=false;
+    bool passedV=false, passedE=false, passedN=false;
 
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
+    uint32_t num_rpts = 1;              // number of repeat sends
 
     const uint8_t lb_vrsn    = 2;
     const uint8_t lb_prtcl   = 1;
@@ -59,10 +68,7 @@ int main (int argc, char *argv[])
     uint64_t lb_tick         = 1;      // LB tick
     const uint8_t re_vrsn    = 1;
     const uint16_t re_rsrvd  = 0;
-    uint8_t re_frst          = 1;
-    uint8_t re_lst           = 0;
     uint16_t re_data_id      = 1;      // RE data_id
-    uint32_t re_seq          = 0;
 
     size_t pckt_sz = max_pckt_sz;
 
@@ -104,6 +110,11 @@ int main (int argc, char *argv[])
             passedE = true;
             fprintf(stdout, "-e ");
             break;
+        case 'n':
+            num_rpts = (uint32_t) atoi((const char *) optarg) ;
+            passedN = true;
+            fprintf(stdout, "-n %d ", num_rpts);
+            break;
         case 'v':
             passedV = true;
             fprintf(stdout, "-v ");
@@ -118,7 +129,7 @@ int main (int argc, char *argv[])
     if(!(passedI && passedP)) { Usage(); exit(1); }
 
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
-    size_t num_to_read = pckt_sz-mdlen; // max bytes to read reserving space for metadata
+    const size_t num_to_read = pckt_sz-mdlen; // max bytes to read reserving space for metadata
 
 //===================== data destination setup ===================================
     int dst_sckt;
@@ -168,39 +179,74 @@ int main (int argc, char *argv[])
 
     uint8_t buffer[pckt_sz];
 
-    // meta-data in network order
-	// LB metadata
-    uint8_t*  pBufLb =  buffer;
-    pBufLb[0] = 'L'; // 0x4c
-    pBufLb[1] = 'B'; //0x42
-    pBufLb[2] = lb_vrsn;   //version
-    pBufLb[3] = lb_prtcl;  //protocol
-    pBufLb[4] = 0;   //reserved
-    pBufLb[5] = 0;   //reserved
-    uint16_t* pEntrp  = (uint16_t*) &pBufLb[6];
-    uint64_t* pTick   = (uint64_t*) &pBufLb[8];
-    *pTick    = HTONLL(lb_tick);
-	// RE metadata
-    uint8_t*  pBufRe = &buffer[lblen];
-    pBufRe[0] = 0x10; //(re_vrsn & 0xf) + (re_rsrvd & 0x3f0) >> 4;
-    pBufRe[1] = 0x2; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
-    uint16_t* pDid   = (uint16_t*) &pBufRe[2];
-    uint32_t* pSeq   = (uint32_t*) &pBufRe[4];
-    *pDid     = htons(re_data_id);
-    *pSeq     = htonl(re_seq);
 
+    bool frst_rd = true;  //first read of input
+    uint8_t re_frst = 1;
+    uint8_t re_lst  = 0;
+
+    auto t_start = std::chrono::high_resolution_clock::now();
+    auto t_end   = std::chrono::high_resolution_clock::now();
+
+    uint32_t re_seq = 0;
+        uint8_t*  pBufLb =  pckt_cache[re_seq];
+        uint8_t*  pBufRe = &pckt_cache[re_seq][lblen];
+        uint16_t* pEntrp = (uint16_t*) &pBufLb[6];
+        uint64_t* pTick  = (uint64_t*) &pBufLb[8];
+        uint16_t* pDid   = (uint16_t*) &pBufRe[2];
+        uint32_t* pSeq   = (uint32_t*) &pBufRe[4];
     do {
-        f1.read((char*)&buffer[mdlen], num_to_read);
-        streamsize nr = f1.gcount();
+        pBufLb =  pckt_cache[re_seq];
+        pBufRe = &pckt_cache[re_seq][lblen];
+        pEntrp = (uint16_t*) &pBufLb[6];
+        pTick  = (uint64_t*) &pBufLb[8];
+        pDid   = (uint16_t*) &pBufRe[2];
+        pSeq   = (uint32_t*) &pBufRe[4];
+        streamsize nr;
+        if(re_frst) 
+        {
+            t_start = std::chrono::high_resolution_clock::now();
+            std::cout << "Interval: "
+                      << std::chrono::duration<double, std::micro>(t_start-t_end).count()
+                      << " us" << std::endl;
+            re_lst  = 0;
+        } 
+        if(frst_rd) 
+        {
+            // meta-data in network order
+	        // LB metadata
+            pBufLb[0] = 'L'; // 0x4c
+            pBufLb[1] = 'B'; //0x42
+            pBufLb[2] = lb_vrsn;   //version
+            pBufLb[3] = lb_prtcl;  //protocol
+            pBufLb[4] = 0;   //reserved
+            pBufLb[5] = 0;   //reserved
+            if(passedE) *pEntrp = htons(re_data_id); else *pEntrp = 0;
+            *pTick    = HTONLL(lb_tick);
+	        // RE metadata
+            pBufRe[0] = 0x10; //(re_vrsn & 0xf) + (re_rsrvd & 0x3f0) >> 4;
+            if(re_frst) {
+                pBufRe[1] = 0x2; // first
+            } else {
+                pBufRe[1] = 0x0;  // neither first nor last
+            }
+            *pDid     = htons(re_data_id);
+            *pSeq     = htonl(re_seq);
+            f1.read((char*)&pckt_cache[re_seq][mdlen], num_to_read);
+            nr = f1.gcount();
+            pckt_szs[re_seq] = nr+mdlen;
+cout << "pckt_szs["<<re_seq<<"] = "<<nr+mdlen<<endl;
+        } else {
+            nr = pckt_szs[re_seq];
+        }
         if(passedV) cout  << "\nNum read from stdin: " << nr << endl;
-        if(nr != num_to_read) {
+cout << "nr = "<<nr<<" num_to_read "<<(frst_rd? num_to_read : num_to_read + mdlen)<<" for seq = "<<re_seq<<endl;
+        if(nr != (frst_rd? num_to_read : num_to_read + mdlen)) {
             re_lst  = 1;
-            pBufRe[1] = 0x1; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
+            if(frst_rd) pBufRe[1] = 0x1; //last
         }
 
         // forward data to LB
 
-        if(passedE) *pEntrp = htons(re_data_id); else *pEntrp = 0;
 
         if(passedV) {
             fprintf ( stdout, "\nLB Meta-data:\n");
@@ -226,15 +272,14 @@ int main (int argc, char *argv[])
 
         ssize_t rtCd = 0;
         /* now send a datagram */
-        size_t num_to_send = nr+mdlen; // max bytes to send including metadata
         if (passed6) {
-            if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
+            if ((rtCd = sendto(dst_sckt, pckt_cache[re_seq], pckt_szs[re_seq], 0, 
                     (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
                 perror("sendto failed");
                 exit(4);
             }
         } else {
-            if ((rtCd = sendto(dst_sckt, buffer, num_to_send, 0, 
+            if ((rtCd = sendto(dst_sckt, pckt_cache[re_seq], pckt_szs[re_seq], 0, 
                     (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
                 perror("sendto failed");
                 exit(4);
@@ -242,17 +287,24 @@ int main (int argc, char *argv[])
         }
         if(passedV) fprintf ( stdout, "\nSending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
         re_frst = 0;
-        pBufRe[1] = 0x0; //(re_rsrvd  & 0x3f) << 2 + (re_frst << 1) + re_lst;
-        *pSeq = htonl(++re_seq);
-    } while(!re_lst);
-            // `time_t` is an arithmetic time type
-            time_t now;
+        ++re_seq;
+        if(re_lst) //reset
+        {
+            frst_rd = false;
+            --num_rpts;
+            re_frst = 1;
+            re_seq  = 0;
+            t_end = std::chrono::high_resolution_clock::now();
+        }
+    } while(!(num_rpts == 0 && re_lst));
+    // `time_t` is an arithmetic time type
+    time_t now;
          
-            // Obtain current time
-            // `time()` returns the current time of the system as a `time_t` value
-            time(&now);
+    // Obtain current time
+    // `time()` returns the current time of the system as a `time_t` value
+    time(&now);
          
-            // Convert to local time format and print to stdout
-            fprintf ( stdout, "Today is %s", ctime(&now));
+    // Convert to local time format and print to stdout
+    fprintf ( stdout, "Today is %s", ctime(&now));
     return 0;
 }
