@@ -16,6 +16,7 @@
 #include <time.h>
 #include <chrono>
 #include <ctime>
+#include <unistd.h>
 
 using namespace std;
 
@@ -32,6 +33,7 @@ void   Usage(void)
         -t lb_tick  \n\
         -d re_data_id  \n\
         -e Use LB port entropy  \n\
+        -l event delay in usec  \n\
         -n num repeats  \n\
         -v verbose mode (default is quiet)  \n\
         -s max packet size (default 9000)  \n\
@@ -57,6 +59,7 @@ int main (int argc, char *argv[])
 
     bool passedI=false, passedP=false, passed6=false;
     bool passedV=false, passedE=false, passedN=false;
+    bool passedL=false;
 
     char     dst_ip[INET6_ADDRSTRLEN];  // target ip
     uint16_t dst_prt = 0x4c42;          // target port
@@ -69,10 +72,10 @@ int main (int argc, char *argv[])
     const uint8_t re_vrsn    = 1;
     const uint16_t re_rsrvd  = 0;
     uint16_t re_data_id      = 1;      // RE data_id
-
+    useconds_t lb_dly = 0;
     size_t pckt_sz = max_pckt_sz;
 
-    while ((optc = getopt(argc, argv, "i:p:t:d:n:e6vs:")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:t:d:n:e6vs:l:")) != -1)
     {
         switch (optc)
         {
@@ -109,6 +112,11 @@ int main (int argc, char *argv[])
         case 'e':
             passedE = true;
             fprintf(stdout, "-e ");
+            break;
+        case 'l':
+            lb_dly = (uint32_t) atoi((const char *) optarg) ;
+            passedL = true;
+            fprintf(stdout, "-l %d ", lb_dly);
             break;
         case 'n':
             num_rpts = (uint32_t) atoi((const char *) optarg) ;
@@ -295,6 +303,7 @@ cout << "nr = "<<nr<<" num_to_read "<<(frst_rd? num_to_read : num_to_read + mdle
             re_frst = 1;
             re_seq  = 0;
             t_end = std::chrono::high_resolution_clock::now();
+            usleep(lb_dly);
         }
     } while(!(num_rpts == 0 && re_lst));
     // `time_t` is an arithmetic time type
