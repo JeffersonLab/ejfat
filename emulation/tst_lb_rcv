@@ -9,14 +9,17 @@ wait $pid
 grep 'lst = 1' /tmp/rs_17750_0_log|wc -l
 t=$(mktemp) 
 grep Latency $tx|sed 's/Latency: //'|sed 's/ us$//' > $t
-gnuplot -p -e "set title 'Latency';p '$t' u 1 w l" &
-hstgrm $t 500 50 'Latency usec' 2300 &
+#gnuplot -p -e "set title 'Latency';p '$t' u 1 w l" &
+#hstgrm $t 2000 100 'Latency usec' 4500 &
 echo "Latency:"
 get_moments < $t
 t1=$(mktemp) 
 grep Interval $tx|sed 's/Interval: //'|sed 's/ us$//'|sed '1d' > $t1
-gnuplot -p -e "set title 'Interval';p '$t1' u 1 w l" &
-hstgrm $t1 1000 50 'Interval usec' 3000 &
+#gnuplot -p -e "set title 'Interval';p '$t1' u 1 w l" &
+#hstgrm $t1 2000 100 'Interval usec' 19500 &
 echo "Interval:"
 get_moments < $t1
 echo $tx $t $t1
+#for i in $(seq 0 117); do grep "seq = $i " /tmp/rs_17750_0_log|wc -l; done| grep $1|wc -l
+echo $(($1 * 1024 * 1024))
+ls /tmp/rs_17750_0 -l
