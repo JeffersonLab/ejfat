@@ -1,0 +1,11 @@
+#!/bin/bash
+# x2 <file> <tick> <num_data_ids> <mtu> <loops> <event_gap usec>
+#set -x
+#loops through ticks (hosts) and data_id streams in parallel
+n=$[$3-1]
+for i in $(seq $5); do 
+	for d in $(seq 0 $n); do 
+		time nice -20  ./bin/pktzr_md -l $6 -i 129.57.109.254 -p 19522 -e -t $2 -d $d  -s $4  < $1 &
+	done
+	wait
+done

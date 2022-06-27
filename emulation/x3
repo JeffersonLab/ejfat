@@ -1,0 +1,12 @@
+#!/bin/bash
+# x3 <file> <num_data_ids> <mtu> <loops>
+#set -x
+#loops through ticks (hosts) and data_id streams in parallel
+t=$[$4-1]
+n=$[$2-1]
+for i in $(seq 0 $t); do 
+	for d in $(seq 0 $n); do 
+		time nice -20  ./bin/pktzr_md -i 129.57.109.254 -p 19522 -e -t $i -d $d  -s $3  < $1 &
+	done
+	wait
+done
