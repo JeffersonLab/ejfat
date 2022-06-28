@@ -1,0 +1,136 @@
+#!/bin/bash
+#set -x
+#taskset -c 23 bin/lb_rcv -v -i 129.57.109.231 -p 17750 -n $1  > $tx &
+t0=$(mktemp); t0x=$(mktemp); taskset -c 0 ./bin/lb_rcv -v -i 129.57.109.231 -p 17750  -n $1 > $t0 2> $t0x &
+pid=$!
+sudo sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t1=$(mktemp); t1x=$(mktemp); taskset -c 1 ./bin/lb_rcv -v -i 129.57.109.231 -p 17751  -n $1 > $t1 2> $t1x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t2=$(mktemp); t2x=$(mktemp); taskset -c 2 ./bin/lb_rcv -v -i 129.57.109.231 -p 17752  -n $1 > $t2 2> $t2x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t3=$(mktemp); t3x=$(mktemp); taskset -c 3 ./bin/lb_rcv -v -i 129.57.109.231 -p 17753  -n $1 > $t3 2> $t3x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t4=$(mktemp); t4x=$(mktemp); taskset -c 4 ./bin/lb_rcv -v -i 129.57.109.231 -p 17754  -n $1 > $t4 2> $t4x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t5=$(mktemp); t5x=$(mktemp); taskset -c 5 ./bin/lb_rcv -v -i 129.57.109.231 -p 17755  -n $1 > $t5 2> $t5x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t6=$(mktemp); t6x=$(mktemp); taskset -c 6 ./bin/lb_rcv -v -i 129.57.109.231 -p 17756  -n $1 > $t6 2> $t6x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t7=$(mktemp); t7x=$(mktemp); taskset -c 7 ./bin/lb_rcv -v -i 129.57.109.231 -p 17757  -n $1 > $t7 2> $t7x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t8=$(mktemp); t8x=$(mktemp); taskset -c 16 ./bin/lb_rcv -v -i 129.57.109.231 -p 17758  -n $1 > $t8 2> $t8x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t9=$(mktemp); t9x=$(mktemp); taskset -c 17 ./bin/lb_rcv -v -i 129.57.109.231 -p 17759  -n $1 > $t9 2> $t9x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t10=$(mktemp); t10x=$(mktemp); taskset -c 18 ./bin/lb_rcv -v -i 129.57.109.231 -p 17760  -n $1 > $t10 2> $t10x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t11=$(mktemp); t11x=$(mktemp); taskset -c 19 ./bin/lb_rcv -v -i 129.57.109.231 -p 17761  -n $1 > $t11 2> $t11x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t12=$(mktemp); t12x=$(mktemp); taskset -c 20 ./bin/lb_rcv -v -i 129.57.109.231 -p 17762  -n $1 > $t12 2> $t12x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t13=$(mktemp); t13x=$(mktemp); taskset -c 21 ./bin/lb_rcv -v -i 129.57.109.231 -p 17763  -n $1 > $t13 2> $t13x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t14=$(mktemp); t14x=$(mktemp); taskset -c 22 ./bin/lb_rcv -v -i 129.57.109.231 -p 17764  -n $1 > $t14 2> $t14x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+t15=$(mktemp); t15x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17765  -n $1 > $t15 2> $t15x &
+pid=$!
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t16=$(mktemp); t16x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17766  -n $1 > $t16 2> $t16x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t17=$(mktemp); t17x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17767  -n $1 > $t17 2> $t17x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t18=$(mktemp); t18x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17768  -n $1 > $t18 2> $t18x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t19=$(mktemp); t19x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17769  -n $1 > $t19 2> $t19x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t20=$(mktemp); t20x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17770  -n $1 > $t20 2> $t20x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t21=$(mktemp); t21x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17771  -n $1 > $t21 2> $t21x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t22=$(mktemp); t22x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17772  -n $1 > $t22 2> $t22x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t23=$(mktemp); t23x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17773  -n $1 > $t23 2> $t23x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t24=$(mktemp); t24x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17774  -n $1 > $t24 2> $t24x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t25=$(mktemp); t25x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17775  -n $1 > $t25 2> $t25x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t26=$(mktemp); t26x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17776  -n $1 > $t26 2> $t26x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t27=$(mktemp); t27x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17777  -n $1 > $t27 2> $t27x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t28=$(mktemp); t28x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17778  -n $1 > $t28 2> $t28x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t29=$(mktemp); t29x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17779  -n $1 > $t29 2> $t29x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t30=$(mktemp); t30x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17780  -n $1 > $t30 2> $t30x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+#t31=$(mktemp); t31x=$(mktemp); taskset -c 23 ./bin/lb_rcv -v -i 129.57.109.231 -p 17781  -n $1 > $t31 2> $t31x &
+#pid=$!
+#sudo chrt -f -p 99 $pid  #SCHED_FIFO
+wait
+#tail -1 $t0x
+#tail -1 $t0
+#tail -1 $t1
+#tail -1 $t2
+#tail -1 $t3
+#tail -1 $t4
+#tail -1 $t5
+#tail -1 $t6
+#tail -1 $t7
+#tail -1 $t8
+#tail -1 $t9
+#tail -1 $t10
+#tail -1 $t11
+#tail -1 $t12
+#tail -1 $t13
+#tail -1 $t14
+#tail -1 $t15
+#tail -1 $t16
+#tail -1 $t17
+#tail -1 $t18
+#tail -1 $t19
+#tail -1 $t20
+#tail -1 $t21
+#tail -1 $t22
+#tail -1 $t23
+#tail -1 $t24
+#tail -1 $t25
+#tail -1 $t26
+#tail -1 $t27
+#tail -1 $t28
+#tail -1 $t29
+#tail -1 $t30
+#tail -1 $t31
+#rm /tmp/tmp.*
+#sed 's/ /,/g' $t0 | cut -w25 -d','   # for seq #s
+

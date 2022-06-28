@@ -47,6 +47,7 @@ void   Usage(void)
         -i listen address  \n\
         -p listen port  \n\
         -n num events  \n\
+        -v verbose mode (default is quiet)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i -p\n";
@@ -59,12 +60,13 @@ int main (int argc, char *argv[])
     extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false, passedN=false;
+    bool passedV=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;                  // listening port
     uint32_t num_evnts;                 // number of events to recv
 
-    while ((optc = getopt(argc, argv, "i:p:6n:")) != -1)
+    while ((optc = getopt(argc, argv, "i:p:6n:v")) != -1)
     {
         switch (optc)
         {
@@ -90,6 +92,10 @@ int main (int argc, char *argv[])
             passedN = true;
             fprintf(stdout, "-n %d ", num_evnts);
             break;
+        case 'v':
+            passedV = true;
+            fprintf(stdout, "-v ");
+            break;
         case '?':
             fprintf (stdout, "Unrecognised option: %d\n", optopt);
             Usage();
@@ -99,17 +105,15 @@ int main (int argc, char *argv[])
     fprintf(stdout, "\n");
     if(!(passedI && passedP && passedN)) { Usage(); exit(1); }
 
-    // pre-open all data_id streams for tick
-    ofstream rs[max_data_ids];
-    ofstream rslg[max_data_ids];
-    for(uint16_t s = 0; s < max_data_ids; s++) {
-        char x[64];
-        sprintf(x,"/tmp/rs_%d_%d",lstn_prt,s);
-        rs[s].open(x,std::ios::binary | std::ios::out);
-        char xlg[64];
-        sprintf(xlg,"/tmp/rs_%d_%d_log",lstn_prt,s);
-        rslg[s].open(xlg,std::ios::out);
-    }
+    // pre-open stream for port
+    ofstream rs;
+    ofstream rslg;
+    char x[64];
+    sprintf(x,"/tmp/rs_%d",lstn_prt);
+    rs.open(x,std::ios::binary | std::ios::out);
+    char xlg[64];
+    sprintf(xlg,"/tmp/rs_%d_log",lstn_prt);
+    rslg.open(xlg,std::ios::out);
 
 //===================== data reception setup ===================================
     int lstn_sckt, nBytes;
@@ -204,24 +208,28 @@ int main (int argc, char *argv[])
                       << " us" << std::endl;
         }
 
-        rs[data_id].write((char*)&in_buff[mdlen], nBytes-mdlen);
+        rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
+        if(passedV)
         {
             char s[1024];
             sprintf ( s, "Received %d bytes: ", nBytes);
-            rslg[data_id].write((char*)s, strlen(s));
+            rslg.write((char*)s, strlen(s));
             sprintf ( s, "frst = %d / lst = %d ", frst, lst);
-            rslg[data_id].write((char*)s, strlen(s));
+            rslg.write((char*)s, strlen(s));
             sprintf ( s, " / data_id = %d / seq = %d \n", data_id, seq);
-            rslg[data_id].write((char*)s, strlen(s));
+            rslg.write((char*)s, strlen(s));
         }
 
         if(lst) 
         {
             ++evnt_num;
             t_end = std::chrono::high_resolution_clock::now();
-            std::cout << "Latency: "
-                      << std::chrono::duration<double, std::micro>(t_end-t_start).count()
-                      << " us" << std::endl;
+            if(passedV)
+            {
+                std::cout << "Latency: "
+                          << std::chrono::duration<double, std::micro>(t_end-t_start).count()
+                          << " us" << std::endl;
+            }
         }
 
 
