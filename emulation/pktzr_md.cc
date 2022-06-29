@@ -45,10 +45,6 @@ void   Usage(void)
     const size_t lblen       = 16;
     const size_t relen       = 8;
     const size_t mdlen       = lblen + relen;
-    const size_t max_pkts    = 1200;           // support up to 10MB event size (Jumbo frames = 9kB)
-
-    uint8_t pckt_cache[max_pkts][max_pckt_sz];
-    uint16_t pckt_szs[max_pkts];
 
 int main (int argc, char *argv[])
 {
@@ -73,7 +69,7 @@ int main (int argc, char *argv[])
     const uint16_t re_rsrvd  = 0;
     uint16_t re_data_id      = 1;      // RE data_id
     useconds_t lb_dly = 0;
-    size_t pckt_sz = max_pckt_sz;
+    size_t mtu_pyld_sz = max_pckt_sz;
 
     while ((optc = getopt(argc, argv, "i:p:t:d:n:e6vs:l:")) != -1)
     {
@@ -105,9 +101,9 @@ int main (int argc, char *argv[])
             fprintf(stdout, "-d %d ", re_data_id);
             break;
         case 's':
-            pckt_sz = (size_t) atoi((const char *) optarg) -20-8;  // = MTU - IP header - UDP header
-            pckt_sz = min(pckt_sz,max_pckt_sz);
-            fprintf(stdout, "-s %lu ", pckt_sz);
+            mtu_pyld_sz = (size_t) atoi((const char *) optarg) -20-8;  // = MTU - IP header - UDP header
+            mtu_pyld_sz = min(mtu_pyld_sz,max_pckt_sz);
+            fprintf(stdout, "-s %lu ", mtu_pyld_sz);
             break;
         case 'e':
             passedE = true;
@@ -137,7 +133,7 @@ int main (int argc, char *argv[])
     if(!(passedI && passedP)) { Usage(); exit(1); }
 
     ifstream f1("/dev/stdin", std::ios::binary | std::ios::in);
-    const size_t num_to_read = pckt_sz-mdlen; // max bytes to read reserving space for metadata
+    const size_t num_to_read = mtu_pyld_sz-mdlen; // max bytes to read reserving space for metadata
 
 //===================== data destination setup ===================================
     int dst_sckt;
@@ -185,7 +181,8 @@ int main (int argc, char *argv[])
 //=======================================================================
     inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
 
-    uint8_t buffer[pckt_sz];
+    uint8_t buffer[mtu_pyld_sz];
+    uint16_t pckt_sz;
 
 
     bool frst_rd = true;  //first read of input
@@ -196,19 +193,14 @@ int main (int argc, char *argv[])
     auto t_end   = std::chrono::high_resolution_clock::now();
 
     uint32_t re_seq = 0;
-        uint8_t*  pBufLb =  pckt_cache[re_seq];
-        uint8_t*  pBufRe = &pckt_cache[re_seq][lblen];
-        uint16_t* pEntrp = (uint16_t*) &pBufLb[6];
-        uint64_t* pTick  = (uint64_t*) &pBufLb[8];
-        uint16_t* pDid   = (uint16_t*) &pBufRe[2];
-        uint32_t* pSeq   = (uint32_t*) &pBufRe[4];
+    uint8_t*  pBufLb =  buffer;
+    uint8_t*  pBufRe =  &buffer[lblen];
+    uint16_t* pEntrp = (uint16_t*) &pBufLb[6];
+    uint64_t* pTick  = (uint64_t*) &pBufLb[8];
+    uint16_t* pDid   = (uint16_t*) &pBufRe[2];
+    uint32_t* pSeq   = (uint32_t*) &pBufRe[4];
+
     do {
-        pBufLb =  pckt_cache[re_seq];
-        pBufRe = &pckt_cache[re_seq][lblen];
-        pEntrp = (uint16_t*) &pBufLb[6];
-        pTick  = (uint64_t*) &pBufLb[8];
-        pDid   = (uint16_t*) &pBufRe[2];
-        pSeq   = (uint32_t*) &pBufRe[4];
         streamsize nr;
         if(re_frst) 
         {
@@ -239,12 +231,12 @@ int main (int argc, char *argv[])
             }
             *pDid     = htons(re_data_id);
             *pSeq     = htonl(re_seq);
-            f1.read((char*)&pckt_cache[re_seq][mdlen], num_to_read);
+            f1.read((char*) &buffer[mdlen], num_to_read);
             nr = f1.gcount();
-            pckt_szs[re_seq] = nr+mdlen;
+            pckt_sz = nr+mdlen;
 cout << "pckt_szs["<<re_seq<<"] = "<<nr+mdlen<<endl;
         } else {
-            nr = pckt_szs[re_seq];
+            nr = pckt_sz;
         }
         if(passedV) cout  << "\nNum read from stdin: " << nr << endl;
 cout << "nr = "<<nr<<" num_to_read "<<(frst_rd? num_to_read : num_to_read + mdlen)<<" for seq = "<<re_seq<<endl;
@@ -281,13 +273,13 @@ cout << "nr = "<<nr<<" num_to_read "<<(frst_rd? num_to_read : num_to_read + mdle
         ssize_t rtCd = 0;
         /* now send a datagram */
         if (passed6) {
-            if ((rtCd = sendto(dst_sckt, pckt_cache[re_seq], pckt_szs[re_seq], 0, 
+            if ((rtCd = sendto(dst_sckt, buffer, pckt_sz, 0, 
                     (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
                 perror("sendto failed");
                 exit(4);
             }
         } else {
-            if ((rtCd = sendto(dst_sckt, pckt_cache[re_seq], pckt_szs[re_seq], 0, 
+            if ((rtCd = sendto(dst_sckt, buffer, pckt_sz, 0, 
                     (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
                 perror("sendto failed");
                 exit(4);
