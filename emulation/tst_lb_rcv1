@@ -98,6 +98,14 @@ sudo chrt -f -p 99 $pid  #SCHED_FIFO
 #pid=$!
 #sudo chrt -f -p 99 $pid  #SCHED_FIFO
 wait
+echo "Mean Interval across threads, mean, stdev:"
+for f in /tmp/tmp.*; do grep Interval $f  |sed 's/Interval: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f1|get_moments
+echo "Stdev Interval across threads, mean, stdev:"
+for f in /tmp/tmp.*; do grep Interval $f  |sed 's/Interval: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f3|get_moments
+echo "Mean Latency across threads, mean, stdev:"
+for f in /tmp/tmp.*; do grep Latency $f  |sed 's/Latency: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f1|get_moments
+echo "Stdev Latency across threads, mean, stdev:"
+for f in /tmp/tmp.*; do grep Latency $f  |sed 's/Latency: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f3|get_moments
 #tail -1 $t0x
 #tail -1 $t0
 #tail -1 $t1
