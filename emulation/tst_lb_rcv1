@@ -106,39 +106,12 @@ echo "Mean Latency across threads, mean, stdev:"
 for f in /tmp/tmp.*; do grep Latency $f  |sed 's/Latency: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f1|get_moments
 echo "Stdev Latency across threads, mean, stdev:"
 for f in /tmp/tmp.*; do grep Latency $f  |sed 's/Latency: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f3|get_moments
-#tail -1 $t0x
-#tail -1 $t0
-#tail -1 $t1
-#tail -1 $t2
-#tail -1 $t3
-#tail -1 $t4
-#tail -1 $t5
-#tail -1 $t6
-#tail -1 $t7
-#tail -1 $t8
-#tail -1 $t9
-#tail -1 $t10
-#tail -1 $t11
-#tail -1 $t12
-#tail -1 $t13
-#tail -1 $t14
-#tail -1 $t15
-#tail -1 $t16
-#tail -1 $t17
-#tail -1 $t18
-#tail -1 $t19
-#tail -1 $t20
-#tail -1 $t21
-#tail -1 $t22
-#tail -1 $t23
-#tail -1 $t24
-#tail -1 $t25
-#tail -1 $t26
-#tail -1 $t27
-#tail -1 $t28
-#tail -1 $t29
-#tail -1 $t30
-#tail -1 $t31
-#rm /tmp/tmp.*
-#sed 's/ /,/g' $t0 | cut -w25 -d','   # for seq #s
+echo "Processor utilization pattern:"
+for f in  /tmp/rs_*_log ; do grep cpu $f|cut -f2|sort|uniq|wc -l; done|sort -n|uniq
+echo "Reassembly size Moments accross IDs:"
+ls -tl /tmp/rs_?????|cut -f5 -d' '|get_moments
+echo "Number of unique reassembled sizes accross IDs:"
+ls -tl /tmp/rs_?????|cut -f5 -d' '|sort -n|uniq|wc -l
+#Sender:
+#t=$(mktemp); tx=$(mktemp); f=/pm0/test/goodrich/urndm_100M.dat;mxid=15;mtu=9000;mxtck=6;mxlpi=19;time ./x4 $f $mxid $mtu $mxtck $mxlpi  >$t 2>$tx; sz=$(ls -l $f|cut -f5 -d' '); echo $(($sz*($mxlpi+1)))
 
