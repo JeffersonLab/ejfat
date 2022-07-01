@@ -53,6 +53,8 @@ void   Usage(void)
         cout<<"Required: -i -p\n";
 }
 
+static volatile int cpu=-1;
+
 int main (int argc, char *argv[])
 {
     int optc;
@@ -190,6 +192,10 @@ int main (int argc, char *argv[])
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
 
+#ifdef __linux__
+        cpu = sched_getcpu();
+#endif
+
         nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
 
         // decode to host encoding
@@ -203,9 +209,12 @@ int main (int argc, char *argv[])
         if(frst) 
         {
             t_start = std::chrono::high_resolution_clock::now();
-            std::cout << "Interval: "
-                      << std::chrono::duration<double, std::micro>(t_start-t_end).count()
-                      << " us" << std::endl;
+            if(passedV)
+            {
+                std::cout << "Interval: "
+                          << std::chrono::duration<double, std::micro>(t_start-t_end).count()
+                          << " us" << std::endl;
+            }
         }
 
         rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
@@ -217,6 +226,8 @@ int main (int argc, char *argv[])
             sprintf ( s, "frst = %d / lst = %d ", frst, lst);
             rslg.write((char*)s, strlen(s));
             sprintf ( s, " / data_id = %d / seq = %d \n", data_id, seq);
+            rslg.write((char*)s, strlen(s));
+            sprintf( s, "cpu\t%d\n", cpu);
             rslg.write((char*)s, strlen(s));
         }
 
