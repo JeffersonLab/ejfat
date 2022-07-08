@@ -1,0 +1,16 @@
+#!/bin/bash
+set -x
+# x5 <event size> <num_data_ids> <mtu> <num_ticks> <loops>
+#loops through ticks (hosts) and data_id streams in parallel 
+fs=$1
+mxdid=$(($2 - 1))
+mtu=$3
+numtcks=$4
+loops=$5
+
+for d in $(seq 0 $mxdid); do 
+	./bin/lb_pkt_fld -i 129.57.109.254 -p 19522    -t $numtcks -d $d -l 0 -m $mtu -n $loops -v -s $fs &  # >/dev/null 2>/dev/null &
+	pid=$!
+	chrt -f -p 99 $pid  #SCHED_FIFO
+done
+wait

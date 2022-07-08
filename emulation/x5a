@@ -1,0 +1,28 @@
+#!/bin/bash
+#set -x
+# x5a num_bytes num_dids mtu hosts reps
+b=$1;d=$2;h=$3;r=$4
+t=$(mktemp); tx=$(mktemp);
+echo "./x5 $b $d 9000 $h $r >$t 2>$tx"
+./x5 $b $d 9000 $h $r >$t 2>$tx
+txx=$(mktemp)
+grep Interval $t|sed 's/Interval://'|sed 's/us//'|sort -n > $txx
+./bin/get_moments < $txx
+head -1 $txx
+tail -1 $txx
+txxx=$(mktemp); grep Sending $t > $txxx
+ns=$(wc -l $txxx | cut -f1 -d' ')
+echo -n "packets sent to single host: ";echo $(($ns / $h))
+echo "Packets sizes: "
+cat $txxx|cut -f2 -d ' '|sort -n|uniq
+echo $t $tx $txx
+echo "unique seq # sends: "
+max_mtu=9000
+iphdr_sz=20
+udphdr_sz=8
+lbhdr_sz=16
+rehdr_sz=8
+pyld_sz=$(($max_mtu-$iphdr_sz-$udphdr_sz-$lbhdr_sz-$rehdr_sz))
+max_seq=$(($(($b-1)) / $pyld_sz))
+for i in $(seq 0 $max_seq); do grep "re_seq = ${i}$" $t|wc -l; done|sort -n|uniq
+echo $t
