@@ -3,7 +3,7 @@
 #taskset -c 23 bin/lb_rcv -v -i 129.57.109.231 -p 17750 -n $1  > $tx &
 t0=$(mktemp); t0x=$(mktemp); taskset -c 0 ./bin/lb_rcv -v -i 129.57.109.231 -p 17750  -n $1 > $t0 2> $t0x &
 pid=$!
-sudo sudo chrt -f -p 99 $pid  #SCHED_FIFO
+sudo chrt -f -p 99 $pid  #SCHED_FIFO
 t1=$(mktemp); t1x=$(mktemp); taskset -c 1 ./bin/lb_rcv -v -i 129.57.109.231 -p 17751  -n $1 > $t1 2> $t1x &
 pid=$!
 sudo chrt -f -p 99 $pid  #SCHED_FIFO
@@ -98,20 +98,25 @@ sudo chrt -f -p 99 $pid  #SCHED_FIFO
 #pid=$!
 #sudo chrt -f -p 99 $pid  #SCHED_FIFO
 wait
-echo "Mean Interval across threads, mean, stdev:"
-for f in /tmp/tmp.*; do grep Interval $f  |sed 's/Interval: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f1|get_moments
-echo "Stdev Interval across threads, mean, stdev:"
-for f in /tmp/tmp.*; do grep Interval $f  |sed 's/Interval: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f3|get_moments
+t=$(mktemp); for f in /tmp/tmp.*; do grep Interval $f  |sed 's/Interval: //'|sed 's/ us$//'|sed '1d' >> $t; done
+echo "Interval moments across threads; mean (ignore) stdev var skew kurt:"
+get_moments < $t
 echo "Mean Latency across threads, mean, stdev:"
-for f in /tmp/tmp.*; do grep Latency $f  |sed 's/Latency: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f1|get_moments
-echo "Stdev Latency across threads, mean, stdev:"
-for f in /tmp/tmp.*; do grep Latency $f  |sed 's/Latency: //'|sed 's/ us$//'|sed '1d'|get_moments; done|grep -v nan|cut -f3|get_moments
+t1=$(mktemp); for f in /tmp/tmp.*; do grep Latency $f  |sed 's/Latency: //'|sed 's/ us$//'|sed '1d' >> $t1; done
+echo "Latency moments across threads; mean (ignore) stdev var skew kurt:"
+get_moments < $t1
 echo "Processor utilization pattern:"
 for f in  /tmp/rs_*_log ; do grep cpu $f|cut -f2|sort|uniq|wc -l; done|sort -n|uniq
 echo "Reassembly size Moments accross IDs:"
 ls -tl /tmp/rs_?????|cut -f5 -d' '|get_moments
 echo "Number of unique reassembled sizes accross IDs:"
 ls -tl /tmp/rs_?????|cut -f5 -d' '|sort -n|uniq|wc -l
+echo "number of packets rec'd:"
+for f in /tmp/rs_?????_log; do grep Received $f;done|wc -l
 #Sender:
 #t=$(mktemp); tx=$(mktemp); f=/pm0/test/goodrich/urndm_100M.dat;mxid=15;mtu=9000;mxtck=6;mxlpi=19;time ./x4 $f $mxid $mtu $mxtck $mxlpi  >$t 2>$tx; sz=$(ls -l $f|cut -f5 -d' '); echo $(($sz*($mxlpi+1)))
 
+echo "Unique seq # replicates:"
+for i in $(seq 0 116); do grep "seq = ${i} $" /tmp/rs_?????_log|wc -l; done|sort -n|uniq
+echo "Unique rcvd sizes:"
+ls -lt /tmp/rs_?????|cut -f5 -d' '|sort -n|uniq
