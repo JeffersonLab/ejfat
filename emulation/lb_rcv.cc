@@ -203,8 +203,8 @@ int main (int argc, char *argv[])
         uint16_t data_id = ntohs(*pDid);
 
         uint8_t vrsn = pBufRe[0] & 0xf;
-        uint8_t frst = pBufRe[1] == 0x2; //(pBufRe[1] & 0x02) >> 1;
-        uint8_t lst  = pBufRe[1] == 0x1; // pBufRe[1] & 0x01;
+        uint8_t frst = (pBufRe[1] & 0x02) >> 1;
+        uint8_t lst  =  pBufRe[1] & 0x01;
 
         if(frst) 
         {
@@ -222,6 +222,7 @@ int main (int argc, char *argv[])
         {
             char s[1024];
             sprintf ( s, "Received %d bytes: ", nBytes);
+            sprintf ( s, "Writing %d bytes: ", nBytes-mdlen);
             rslg.write((char*)s, strlen(s));
             sprintf ( s, "frst = %d / lst = %d ", frst, lst);
             rslg.write((char*)s, strlen(s));
