@@ -2,15 +2,35 @@
 set -x
 # x4 <file> <max_data_id> <mtu> <max_tick> <loops>
 #loops through ticks (hosts) and data_id streams in parallel 
-t=$4
-n=$2
-l=$5
-for k in $(seq 0 $l); do 
-	for i in $(seq 0 $t); do 
-		for d in $(seq 0 $n); do 
-			#echo "./bin/pktzr_md -i 129.57.109.254 -p 19522 -e -t $i -d $d  -s $3  < $1"
-			time nice -20  ./bin/pktzr_md -i 129.57.109.254 -p 19522 -e -t $i -d $d  -s $3  < $1 &
+f=$1
+mxdid=(($2 - 1))
+mtu=$3
+mxtck=(($4 - 1))
+loops=$5
+
+#Usage: 
+#        -6 Use IPV6 
+#        -i destination address  
+#        -p destination port  
+#        -t lb_tick  
+#        -d re_data_id  
+#        -e Use LB port entropy  
+#        -l event delay in usec  
+#        -n num repeats  
+#        -v verbose mode (default is quiet)  
+#        -s max packet size (default 9000)  
+#        -h help 
+#
+#Required: -i
+
+for k in $(seq 1 $loops); do 
+	for i in $(seq 0 $mxtck); do 
+		for d in $(seq 0 $mxdid); do 
+			#echo "./bin/pktzr_md -i 129.57.109.254 -p 19522 -e -t $i -d $d  -s $mtu  < $1"
+			./bin/pktzr_md -i 129.57.109.254 -p 19522 -e -t $i -d $d  -s $mtu  < $1 &
+			pid=$!
+			sudo chrt -f -p 99 $pid  #SCHED_FIFO
 		done
 	done
 done
-# t=$(mktemp); tx=$(mktemp); time ./x4 /pm0/test/goodrich/urndm_1M.dat 15 9000 100 10  >$t 2>$tx
+wait
