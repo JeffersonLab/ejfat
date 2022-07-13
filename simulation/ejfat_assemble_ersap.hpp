@@ -86,20 +86,23 @@ static inline uint64_t bswap_64(uint64_t x) {
          * The contained info relates to the reading/reassembly of a complete buffer.
          */
         typedef struct packetRecvStats_t {
-            int64_t  endTime;         /**< Convenience variable to hold start time in microsec from clock_gettime. */
-            int64_t  startTime;       /**< Convenience variable to hold end time in microsec from clock_gettime. */
-            int64_t  readTime;        /**< Number of microsec taken to read (all packets forming) one complete buffer. */
-            uint64_t droppedPackets;  /**< Number of dropped packets in reading one complete buffer. */
-            uint64_t acceptedPackets; /**< Number of packets successfully read when reading one complete buffer. */
-            uint32_t packetsPerTick;  /**< Number of UDP packets comprising one buffer/tick. */
-            uint32_t droppedTicks;    /**< Convenience variable to hold number of ticks dropped. */
-            uint32_t maxPacketBytes;  /**< Largest packet received in bytes. */
+            volatile int64_t  endTime;         /**< Convenience variable to hold start time in microsec from clock_gettime. */
+            volatile int64_t  startTime;       /**< Convenience variable to hold end time in microsec from clock_gettime. */
+            volatile int64_t  readTime;        /**< Number of microsec taken to read (all packets forming) one complete buffer. */
+            volatile uint64_t droppedPackets;  /**< Number of dropped packets. */
+            volatile uint64_t acceptedPackets; /**< Number of packets successfully read. */
+            volatile uint64_t acceptedBytes;   /**< Number of bytes successfully read, NOT including RE header. */
+            volatile uint32_t droppedTicks;    /**< Number of ticks dropped. */
+            volatile uint32_t builtBuffers;    /**< Number of buffers fully built from packets. */
+
+            volatile int cpuPkt;               /**< CPU that thread to read pkts is running on. */
+            volatile int cpuBuf;               /**< CPU that thread to read build buffers is running on. */
         } packetRecvStats;
 
 
         /**
          * Clear packetRecvStats structure.
-         * @param stats structure to be cleared.
+         * @param stats pointer to structure to be cleared.
          */
         static void clearStats(packetRecvStats *stats) {
             stats->endTime = 0;
@@ -107,10 +110,44 @@ static inline uint64_t bswap_64(uint64_t x) {
             stats->readTime = 0;
             stats->droppedPackets = 0;
             stats->acceptedPackets = 0;
-            stats->packetsPerTick = 0;
+            stats->acceptedBytes = 0;
             stats->droppedTicks = 0;
-            stats->maxPacketBytes = 0;
+            stats->builtBuffers = 0;
+
+            stats->cpuPkt = -1;
+            stats->cpuBuf = -1;
         }
+
+        /**
+         * Clear packetRecvStats structure.
+         * @param stats shared pointer to structure to be cleared.
+         */
+        static void clearStats(std::shared_ptr<packetRecvStats> stats) {
+            stats->endTime = 0;
+            stats->startTime = 0;
+            stats->readTime = 0;
+            stats->droppedPackets = 0;
+            stats->acceptedPackets = 0;
+            stats->acceptedBytes = 0;
+            stats->droppedTicks = 0;
+            stats->builtBuffers = 0;
+
+            stats->cpuPkt = -1;
+            stats->cpuBuf = -1;
+        }
+
+
+        /**
+         * Print some of the given packetRecvStats structure.
+         * @param stats shared pointer to structure to be printed.
+         */
+        static void printStats(std::shared_ptr<packetRecvStats> stats, std::string prefix) {
+            if (!prefix.empty()) {
+                fprintf(stderr, "%s: ", prefix.c_str());
+            }
+            fprintf(stderr,  "bytes = %llu, pkts = %llu, dropped pkts = %llu, dropped ticks = %u\n",
+                         stats->acceptedBytes, stats->acceptedPackets, stats->droppedPackets, stats->droppedTicks);
+         }
 
 
         /**
@@ -278,6 +315,46 @@ static inline uint64_t bswap_64(uint64_t x) {
             *dataId   = ntohs(*((uint16_t *) (buffer + 2)));
             *sequence = ntohl(*((uint32_t *) (buffer + 4)));
             *tick     = ntohll(*((uint64_t *) (buffer + 8)));
+        }
+
+
+        /**
+         * Parse the reassembly header at the start of the given buffer.
+         * Return parsed values in pointer args.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |Version|        Rsvd       |F|L|            Data-ID            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                  UDP Packet Offset                            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                              Tick                             +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
+         *
+         * @param buffer    buffer to parse.
+         * @param intArray  array of ints in which version, first, last, dataId
+         *                  and sequence are returned, in that order.
+         * @param arraySize number of elements in intArray
+         * @param tick      returned tick value, also in LB meta data.
+         */
+        static void parseReHeader(char* buffer, uint32_t* intArray, int arraySize, uint64_t *tick)
+        {
+            if (intArray != nullptr && arraySize > 4) {
+                intArray[0] = (buffer[0] & 0xf0) >> 4; // version
+                intArray[1] = (buffer[1] & 0x02) >> 1; // first
+                intArray[2] =  buffer[1] & 0x01;       // last
+
+                intArray[3] = ntohs(*((uint16_t *) (buffer + 2))); // data ID
+                intArray[4] = ntohl(*((uint32_t *) (buffer + 4))); // sequence
+            }
+            *tick = ntohll(*((uint64_t *) (buffer + 8)));
         }
 
 
@@ -749,7 +826,6 @@ static inline uint64_t bswap_64(uint64_t x) {
                                 stats->readTime = stats->endTime - stats->startTime;
                                 stats->acceptedPackets = sequence + 1;
                                 stats->droppedPackets = stats->droppedTicks * (sequence + 1);
-                                stats->maxPacketBytes = maxPacketBytes;
                             }
                             break;
                         }
