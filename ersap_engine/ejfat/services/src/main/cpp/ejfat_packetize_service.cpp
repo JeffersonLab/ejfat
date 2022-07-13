@@ -129,8 +129,33 @@ ersap::EngineData EjfatPacketizeService::execute(ersap::EngineData& input)
     return input;
 }
 
-ersap::EngineData EjfatPacketizeService::execute_group(const std::vector<ersap::EngineData>&)
+ersap::EngineData EjfatPacketizeService::execute_group(const std::vector<ersap::EngineData>& input)
 {
+//    // Pull out needed items from data.
+//    // Remove const
+//    auto & inputVec = const_cast<std::vector<ersap::EngineData>&> (input);
+//
+//    uint64_t   tick;
+//
+//    int        bufCount = input.size();
+//    int        entropys[bufCount];
+//    uint32_t   bufLens[bufCount];
+//    char*      buffers[bufCount];
+//
+//    for (int i=0; i < bufCount; i++) {
+//        auto & vec = data_cast<std::vector<uint8_t>>(inputVec[i]);
+//
+//        tick       = ntohl(*reinterpret_cast<const uint32_t*>(&vec[0]));
+//        bufLens[i] = ntohl(*reinterpret_cast<const uint32_t*>(&vec[4]));
+//        buffers[i] = reinterpret_cast<char*>(&vec[8]);
+//        entropys[i] = i;
+//    }
+//
+//        // This always loads the shared_pointer into a new shared_ptr
+//    std::atomic_load(&engine_)->process(buffers, bufLens, entropys, bufCount,
+//                                        host, interface,
+//                                        mtu, port, tick, protocol, ver,
+//                                        delay, debug, useIPv6);
     return {};
 }
 
