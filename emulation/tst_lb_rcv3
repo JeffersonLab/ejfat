@@ -1,0 +1,23 @@
+#!/bin/bash
+#set -x
+evnt_num=$1
+evnt_sz=$2 
+t=$(mktemp) 
+../emulation/tst_lb_rcv1 $evnt_num > $t
+t1=$(mktemp) 
+for i in $(seq 17750 17765) 
+    do 
+        grep $i $t|grep  Event_size: >> $t1
+    done
+echo "Port count deficient of events: "
+for i in $(seq 17750 17765) 
+    do 
+        grep $i $t1|wc -l
+    done|grep -v $evnt_num|wc -l
+echo "Port count for incorrect event size: " 
+for i in $(seq 17750 17765) 
+    do 
+        grep $i $t1|grep "Event_size: $evnt_sz "|wc -l 
+    done|grep -v $evnt_num|wc -l
+echo $t $t1
+grep perror $t|sort|uniq
