@@ -188,6 +188,12 @@ int main (int argc, char *argv[])
 
     uint32_t evnt_num = 0;  // event number
 
+    double ltncy_mn = 0, ltncy_sd = 0;
+
+    int64_t evnt_sz = 0;  // event size
+
+    uint32_t xseq   = 0; //expected seq #
+
     do {
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
@@ -196,7 +202,15 @@ int main (int argc, char *argv[])
         cpu = sched_getcpu();
 #endif
 
-        nBytes = recvfrom(lstn_sckt, in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
+//        nBytes = recvfrom(lstn_sckt, (void*)in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
+        nBytes = recv(lstn_sckt, (void*)in_buff, sizeof(in_buff), 0);
+        if(nBytes == -1)
+        {
+            perror("perror: recvfrom() == -1");
+            std::cerr<<"perror: recvfrom() == -1: evnt_num = "<<evnt_num<<" seq = "<<xseq<<'\n';
+        }
+//std::cout<<"nBytes: "<<nBytes<<'\n';
+        evnt_sz += std::max(0,nBytes-int(mdlen)); //////////////  why is this necessary ?
 
         // decode to host encoding
         uint32_t seq     = ntohl(*pSeq);
@@ -208,21 +222,21 @@ int main (int argc, char *argv[])
 
         if(frst) 
         {
-            t_start = std::chrono::high_resolution_clock::now();
             if(passedV)
             {
+                t_start = std::chrono::high_resolution_clock::now();
                 std::cout << "Interval: "
                           << std::chrono::duration<double, std::micro>(t_start-t_end).count()
                           << " us" << std::endl;
             }
         }
 
-        rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
+        //rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
         if(passedV)
         {
             char s[1024];
             sprintf ( s, "Received %d bytes: ", nBytes);
-            sprintf ( s, "Writing %d bytes: ", nBytes-mdlen);
+            sprintf ( s, "Writing %d bytes: ", int(nBytes-mdlen));
             rslg.write((char*)s, strlen(s));
             sprintf ( s, "frst = %d / lst = %d ", frst, lst);
             rslg.write((char*)s, strlen(s));
@@ -231,11 +245,17 @@ int main (int argc, char *argv[])
             sprintf( s, "cpu\t%d\n", cpu);
             rslg.write((char*)s, strlen(s));
         }
-
+        xseq++;
         if(lst) 
         {
+            std:cout << "Event_size: "<<evnt_sz<<" data_id: "<<lstn_prt<<'\n';
+            xseq = 0;
+            evnt_sz = 0;
             ++evnt_num;
-            t_end = std::chrono::high_resolution_clock::now();
+//            t_end = std::chrono::high_resolution_clock::now();
+//            ltncy_mn *= (evnt_num-1)/evnt_num; //incremental formula
+//            ltncy_mn += std::chrono::duration<double, std::micro>(t_end-t_start).count()/evnt_num; //incremental formula
+
             if(passedV)
             {
                 std::cout << "Latency: "
@@ -246,5 +266,6 @@ int main (int argc, char *argv[])
 
 
     } while(evnt_num < num_evnts);
+//    std::cout << "Mean Latency: " << ltncy_mn << '\n';
     return 0;
 }
