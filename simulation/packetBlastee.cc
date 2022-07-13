@@ -486,7 +486,7 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
 
-        if (rtPriority < 1 || rtPriority > PriMax) {
+        if (rtPriority < 1 || rtPriority > priMax) {
             rtPriority = priMax;
         }
         else if (rtPriority < priMin) {
