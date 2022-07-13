@@ -222,14 +222,14 @@ int main (int argc, char *argv[])
         uint32_t seq_num = 0;
 	while(bytes_to_send > 0) {
             *pSeq = htonl(seq_num);
-cout<<"bytes_to_send: "<<bytes_to_send<<" evnt_sz: "<<evnt_sz<<" data_pyld_sz: "<<data_pyld_sz<<endl;
+//cout<<"bytes_to_send: "<<bytes_to_send<<" evnt_sz: "<<evnt_sz<<" data_pyld_sz: "<<data_pyld_sz<<endl;
             if(evnt_sz <= data_pyld_sz)   //first and last
             {
                 pBufRe[1] = 0x3; //first and last
             } else if(bytes_to_send == evnt_sz)   //first
             {
                 t_start = std::chrono::high_resolution_clock::now();
-                std::cout << "Interval: "
+                if(passedV) std::cout << "Interval: "
                           << std::chrono::duration<double, std::micro>(t_start-t_end).count()
                           << " us" << std::endl;
                 pBufRe[1] = 0x2;  // neither first nor last
@@ -302,6 +302,6 @@ cout<<"bytes_to_send: "<<bytes_to_send<<" evnt_sz: "<<evnt_sz<<" data_pyld_sz: "
     time(&now);
          
     // Convert to local time format and print to stdout
-    fprintf ( stdout, "Today is %s", ctime(&now));
+    if(passedV) fprintf ( stdout, "Today is %s", ctime(&now));
     return 0;
 }
