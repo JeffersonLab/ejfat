@@ -86,9 +86,13 @@ namespace ejfat {
          */
         bool fromConsumerGet = false;
 
-        /** Extra integer for user's convenience.
+        /** Extra integer array for user's convenience. Array has 10 members.
+         *  Each int gets reset to 0 each time supply.get() is called. */
+        int32_t userInt[10];
+
+        /** Extra long for user's convenience.
          *  Gets reset to 0 each time supply.get() is called. */
-        int userInt = 0;
+        int64_t userLong = 0L;
 
         /** Extra boolean for user's convenience.
          *  Gets reset to false each time supply.get() is called. */
@@ -126,16 +130,19 @@ namespace ejfat {
         bool isFromConsumerGet() const;
         void setFromConsumerGet(bool fromConsumerGet);
 
-        int  getUserInt() const;
-        void setUserInt(int i);
-        bool getUserBoolean() const;
-        void setUserBoolean(bool usrBool);
+        int32_t* getUserInts();
+        int      getUserIntCount();
+        int64_t  getUserLong() const;
+        void     setUserLong(int64_t i);
+        bool     getUserBoolean() const;
+        void     setUserBoolean(bool usrBool);
 
         uint32_t  getBufferSize() const;
         void setBuffer(std::shared_ptr<ByteBuffer> buf);
         std::shared_ptr<ByteBuffer> getClearedBuffer();
         std::shared_ptr<ByteBuffer> getBuffer() const;
         std::shared_ptr<ByteBuffer> ensureCapacity(uint32_t capacity);
+        std::shared_ptr<ByteBuffer> expandBuffer(uint32_t capacity);
 
         void setUsers(int users);
         int  getUsers() const;

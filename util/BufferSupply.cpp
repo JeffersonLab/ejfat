@@ -160,6 +160,31 @@ namespace ejfat {
 
 
     /**
+     * Get the next "n" available item in ring buffer for writing/reading data.
+     * This may only be used in conjunction with:
+     * {@link #publish()} or preferably {@link #publish(std::shared_ptr<BufferSupplyItem>[]}.
+     * Not sure if this method is thread-safe.
+     *
+     * @param n number of ring buffer items to get.
+     * @param items array big enough to hold an array of n items.
+     * @throws InterruptedException if thread interrupted.
+     */
+    void BufferSupply::get(int32_t n, std::shared_ptr<BufferSupplyItem> items[]) {
+        // Next available n items claimed by data producer
+        long hi = ringBuffer->next(n);
+        long lo = hi - (n - 1);
+
+        for (long seq = lo; seq <= hi; seq++) {
+            // Get object in that position (sequence) of ring buffer
+            std::shared_ptr<BufferSupplyItem> &bufItem = (*ringBuffer.get())[seq];
+            bufItem->reset();
+            items[seq - lo] = bufItem;
+            bufItem->setProducerSequence(seq);
+        }
+    }
+
+
+    /**
      * Get the next available item in ring buffer for writing/reading data.
      * Does not set the ByteBuffer to position = 0 and limit = capacity.
      * In other words, it facilitates reading existing data from the buffer.
@@ -283,9 +308,21 @@ namespace ejfat {
      * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
      * @param bufferSupplyItem item available for consumer's use.
      */
-     void BufferSupply::publish(std::shared_ptr<BufferSupplyItem> & bufferSupplyItem) {
+    void BufferSupply::publish(std::shared_ptr<BufferSupplyItem> & bufferSupplyItem) {
         if (bufferSupplyItem == nullptr) return;
         ringBuffer->publish(bufferSupplyItem->getProducerSequence());
+    }
+
+
+    /**
+     * Used to tell that the consumer that the ring buffer item is ready for consumption.
+     * This may only be used in conjunction with {@link #get(int)}.
+     * Not sure if this method is thread-safe.
+     * @param items array of items available for consumer's use.
+     */
+    void BufferSupply::publish(int32_t n, std::shared_ptr<BufferSupplyItem> items[]) {
+        if (items == nullptr) return;
+        ringBuffer->publish(items[0]->getProducerSequence(), items[n-1]->getProducerSequence());
     }
 
 

@@ -159,6 +159,8 @@ namespace ejfat {
         void release(std::shared_ptr<BufferSupplyItem> & item);
         void publish(std::shared_ptr<BufferSupplyItem> & item);
 
+        void get(int32_t n, std::shared_ptr<BufferSupplyItem> items[]);
+        void publish(int32_t n, std::shared_ptr<BufferSupplyItem> items[]);
     };
 
 }

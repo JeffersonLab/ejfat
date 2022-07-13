@@ -501,21 +501,21 @@ namespace ejfat {
      * Returns the total available bytes in this buffer.
      * @return the total available bytes in this buffer.
      */
-    size_t ByteBuffer::capacity() const {return cap;};
+    size_t ByteBuffer::capacity() const {return cap;}
 
 
     /**
      * Returns the limit, the position of the last valid data byte.
      * @return the position of the last valid data byte.
      */
-    size_t ByteBuffer::limit() const {return lim;};
+    size_t ByteBuffer::limit() const {return lim;}
 
 
     /**
      * Returns the position of the buffer.
      * @return the position of the buffer.
      */
-    size_t ByteBuffer::position() const {return pos;};
+    size_t ByteBuffer::position() const {return pos;}
 
 
     /**
@@ -525,7 +525,7 @@ namespace ejfat {
     ByteBuffer & ByteBuffer::mark() {
         mrk = pos;
         return *this;
-    };
+    }
 
 
     /**

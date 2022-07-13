@@ -117,7 +117,10 @@ namespace ejfat {
             multipleUsers    = item.multipleUsers;
             force            = item.force;
             fromConsumerGet  = item.fromConsumerGet;
-            userInt          = item.userInt;
+            for (int i=0; i < getUserIntCount(); i++) {
+                userInt[i] = item.userInt[i];
+            }
+            userLong         = item.userLong;
             userBoolean      = item.userBoolean;
             myId             = item.myId;
         }
@@ -129,7 +132,10 @@ namespace ejfat {
      */
     void BufferSupplyItem::reset() {
         buffer->clear();
-        userInt = 0;
+        for (int i=0; i < getUserIntCount(); i++) {
+            userInt[i] = 0;
+        }
+        userLong = 0L;
         force = false;
         userBoolean = false;
         multipleUsers = false;
@@ -184,18 +190,33 @@ namespace ejfat {
 
 
     /**
-     * Get the user integer.
-     * User int gets reset to 0 each time supply.get() is called.
-     * @return user integer.
+     * Get the user long.
+     * User long gets reset to 0 each time supply.get() is called.
+     * @return user long.
      */
-    int BufferSupplyItem::getUserInt() const {return userInt;}
+    int64_t BufferSupplyItem::getUserLong() const {return userLong;}
 
 
     /**
-     * Set the user integer.
-     * @param i user integer.
+     * Set the user long.
+     * @param i user long.
      */
-    void BufferSupplyItem::setUserInt(int i) {userInt = i;}
+    void BufferSupplyItem::setUserLong(int64_t i) {userLong = i;}
+
+
+    /**
+    * Get the user integer array.
+    * Each int in array gets reset to 0 each time supply.get() is called.
+    * @return user integer array.
+    */
+    int32_t* BufferSupplyItem::getUserInts() {return userInt;}
+
+
+    /**
+     * Get the number of elements in user int array.
+     * @return number of elements in user int array.
+     */
+    int BufferSupplyItem::getUserIntCount() {return 10;}
 
 
     /**
@@ -294,6 +315,22 @@ namespace ejfat {
         if (bufferSize < capacity) {
             buffer = std::make_shared<ByteBuffer>(capacity);
             buffer->order(order);
+            bufferSize = capacity;
+        }
+        return buffer;
+    }
+
+
+    /**
+     * Make sure the buffer is the size needed.
+     * If expanded, all data up to the limit is copied.
+     * Position, limit, and mark are unchanged.
+     * @param capacity new, larger, desired capacity buffer in bytes.
+     * @return current buffer with new capacity.
+     */
+    std::shared_ptr<ByteBuffer> BufferSupplyItem::expandBuffer(uint32_t capacity) {
+        if (bufferSize < capacity) {
+            buffer->expand(capacity);
             bufferSize = capacity;
         }
         return buffer;
