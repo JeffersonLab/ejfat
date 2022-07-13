@@ -300,7 +300,8 @@ static void *thread(void *arg) {
         // Send it to consumer
         buf->limit(nBytes);
         // Store number of bytes in user int (not including headers)
-        item->setUserInt(nBytes);
+        int32_t* userInts = item->getUserInts();
+        userInts[0] = nBytes;
         supply->publish(item);
 
 //        byteCount   += nBytes;
@@ -562,7 +563,7 @@ int main(int argc, char **argv) {
             auto byteBuf = item->getBuffer();
 //std::cout << "       client got " << (item->getUserInt()) << " bytes" << ", should be same as lim "
 //          << byteBuf->limit() << std::endl;
-            totalBytes += item->getUserInt();
+            totalBytes += item->getUserInts()[0];
 
             // Write out what was received
             if (fp != nullptr) {
