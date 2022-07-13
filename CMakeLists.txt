@@ -114,6 +114,7 @@ set(DIS_EXEC_FILES
         simulation/scatter.cc
         simulation/gather.cc
         simulation/testBufSupply.cc
+        simulation/packetBlasteeBuf.cc
         )
 
 set(UTIL_FILES
