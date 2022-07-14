@@ -9,8 +9,12 @@
 
 
 /**
- * @file Receive generated data sent by packetBlaster.c program.
+ * @file Receive generated data sent by packetBlaster.c program(s).
  * This assumes there is an emulator or FPGA between this and the sending program.
+ * In order to get a handle on dropped packets, it's necessary to know exactly how
+ * many packets were sent. This is done by sending the exact same size buffer over
+ * and over. It's also necessary to have the tick # changed in set increments.
+ * Otherwise, it's impossible to know what was lost.
  */
 
 #include <cstdlib>
@@ -346,13 +350,11 @@ static void *rateThread(void *arg) {
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
-
     // Parse arg
     threadStruct *targ = static_cast<threadStruct *>(arg);
     int sourceCount = targ->sourceCount;
     int *sourceIds  = targ->sourceIds;
     std::shared_ptr<packetRecvStats> *stats = targ->stats;
-
 
     uint64_t prevTotalPackets[sourceCount];
     uint64_t prevTotalBytes[sourceCount];
@@ -361,8 +363,6 @@ static void *rateThread(void *arg) {
     uint64_t currTotalPackets[sourceCount];
     uint64_t currTotalBytes[sourceCount];
     uint64_t currDroppedPackets[sourceCount];
-
-    fprintf(stderr, "rateThd: size of prevTotalPackets array: %lu\n", sizeof(prevTotalPackets));
 
     // File writing stuff
     bool writeToFile = false;
@@ -420,9 +420,10 @@ static void *rateThread(void *arg) {
 
         // Don't calculate rates until data is coming in
         if (skipFirst) {
+            bool allSources = true;
             for (int i=0; i < sourceCount; i++) {
-                if (currTotalPackets[i] > 0) {
-                    skipFirst = false;
+                if (currTotalPackets[i] < 1) {
+                    allSources = false;
                 }
                 currTotalBytes[i]     = stats[i]->acceptedBytes   = 0;
                 currTotalPackets[i]   = stats[i]->acceptedPackets = 0;
@@ -430,6 +431,7 @@ static void *rateThread(void *arg) {
                 currDroppedPackets[i] = stats[i]->droppedTicks    = 0;
                 currDroppedPackets[i] = stats[i]->builtBuffers    = 0;
             }
+            if (allSources) skipFirst = false;
             firstT = t1 = t2;
             rollOver = false;
             continue;
@@ -459,14 +461,15 @@ static void *rateThread(void *arg) {
                 printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
             }
             else {
-                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, dropped = %llu\n", sourceIds[i], pktRate, pktAvgRate, droppedCount);
+                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %llu\n",
+                       sourceIds[i], pktRate, pktAvgRate, droppedCount);
             }
 
             // Actual Data rates (no header info)
             dataRate    = ((double) byteCount) / microSec;
             dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSec;
-            printf("     Data:    %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d\n",
-                   dataRate, dataAvgRate, stats[i]->cpuPkt, stats[i]->cpuBuf);
+            printf("     Data:    %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n",
+                   dataRate, dataAvgRate, stats[i]->cpuPkt, stats[i]->cpuBuf, stats[i]->builtBuffers);
 
             if (writeToFile) {
                 fprintf(fp, "%lld,%d,%d,%d,%lld,%lld,%d,%d\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
@@ -475,7 +478,7 @@ static void *rateThread(void *arg) {
             }
 
         }
-        printf("\n");
+        printf("     Combined Bufs:    %u\n\n", stats[0]->combinedBuffers);
 
         t1 = t2;
     }
@@ -538,13 +541,12 @@ typedef struct threadArg_t {
 // Thread to parse stored packets for 1 SOURCE ID / ENTROPY VALUE
 static void *threadAssemble(void *arg) {
 
-//    fprintf(stderr, "threadAssemble: 1\n");
     threadArg *tArg = (threadArg *) arg;
     std::shared_ptr<ejfat::BufferSupply> supply = tArg->supply;
     std::shared_ptr<ejfat::BufferSupply> pktSupply = tArg->pktSupply;
-    bool debug  = tArg->debug;
-    auto stats  = tArg->stats;
-//    fprintf(stderr, "threadAssemble: 2\n");
+    bool debug   = tArg->debug;
+    auto stats   = tArg->stats;
+    int sourceId = tArg->sourceId;
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 5000;
@@ -561,7 +563,6 @@ static void *threadAssemble(void *arg) {
     ssize_t totalBytesRead = 0;
     char *putDataAt;
     size_t remainingLen;
-//    fprintf(stderr, "threadAssemble: 4\n");
 
     std::shared_ptr<BufferSupplyItem> item;
     std::shared_ptr<BufferSupplyItem> pktItem;
@@ -571,7 +572,6 @@ static void *threadAssemble(void *arg) {
     char *pktBuffer;
 
     if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
-//    fprintf(stderr, "threadAssemble: 5\n");
 
     while (true) {
 
@@ -582,9 +582,7 @@ static void *threadAssemble(void *arg) {
         //------------------------------------------------------
         // Get item (new buf) from supply for reassembled bufs
         //------------------------------------------------------
-//        fprintf(stderr, "threadAssemble: 6\n");
         item = supply->get();
-//        fprintf(stderr, "threadAssemble: 6.1\n");
         // Get reference to item's ByteBuffer object
         itemBuf = item->getClearedBuffer();
         // Get reference to item's byte array (underlying itemBuf)
@@ -715,9 +713,193 @@ static void *threadReadPackets(void *arg) {
     auto stats            = tArg->stats;
     uint64_t expectedTick = tArg->expectedTick;
     uint32_t tickPrescale = tArg->tickPrescale;
+    int sourceId          = tArg->sourceId;
     bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
 
-//    printStats(stats, "read pkts thd");
+
+    // Track cpu by calling sched_getcpu roughly once per sec or 2
+    int cpuLoops = 50000;
+    int loopCount = cpuLoops;
+
+    // Statistics
+    int64_t  prevTick = -1;
+    uint64_t packetTick;
+    uint32_t sequence, prevSequence = 0, expectedSequence = 0;
+    bool dumpTick = false;
+    bool takeStats = stats == nullptr ? false : true;
+    bool packetFirst, packetLast;
+    int  bytesRead;
+    char *buffer;
+    ssize_t nBytes;
+
+    bool getAnotherBuf = true;
+    int32_t chunk = 100;
+    int bufIndex = chunk;
+
+    std::shared_ptr<BufferSupplyItem> item;
+    std::shared_ptr<BufferSupplyItem> items[chunk];
+
+
+    while (true) {
+
+        // We need to get another buffer to read valid data into.
+        // However, we don't need another buffer if we're just dumping the
+        // rest of the packets in the tick.
+        if (getAnotherBuf) {
+            if (bufIndex == chunk) {
+                // Grab "chunk" empty buffers from ByteBufferSupply at once for efficiency
+                pktSupply->get(chunk, items);
+                // Start with first buffer retrieved
+                bufIndex = 0;
+            }
+
+            item = items[bufIndex++];
+            // Get reference to item's byte array
+            buffer = reinterpret_cast<char *>(item->getClearedBuffer()->array()); // uint8_t * -> char *
+        }
+        getAnotherBuf = true;
+
+        // Read packet into buffer
+        bytesRead = recvfrom(udpSocket, buffer, 9000, 0, NULL, NULL);
+        if (bytesRead < 0) {
+            if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
+            exit(-1);
+        }
+        nBytes = bytesRead - HEADER_BYTES;
+
+        // TODO: What if we get a zero-length packet???
+
+        // Parse header, storing everything for later convenience
+        uint32_t *intArray = (uint32_t *) (item->getUserInts());
+        parseReHeader(buffer, intArray, item->getUserIntCount(), &packetTick);
+
+        item->setUserLong(packetTick);
+        // store extra info in item's int array
+        intArray[5] = nBytes;
+        sequence    = item->getUserInts()[4];
+        packetFirst = intArray[1] ? true : false;
+        packetLast  = intArray[2] ? true : false;
+
+        // This if-else statement is what enables the packet reading/parsing to keep
+        // up an input rate that is too high (causing dropped packets) and still salvage
+        // some of what is coming in.
+        if (packetTick != prevTick) {
+            // If we're here, either we've just read the very first legitimate packet,
+            // or we've dropped some packets and advanced to another tick in the process.
+            expectedSequence = 0;
+
+            if (sequence != 0) {
+                // Already have trouble, looks like we dropped the first packet of a tick,
+                // and possibly others after it.
+                // So go ahead and dump the rest of the tick in an effort to keep up.
+                //printf("Skip %hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                //printf("S %llu - %u\n", packetTick, sequence);
+                getAnotherBuf = false;
+                continue;
+            }
+
+            // Dump everything we saved from previous tick.
+            dumpTick = false;
+        }
+        // Same tick as last packet
+        else {
+            if (dumpTick || (std::abs((int) (sequence - prevSequence)) > 1)) {
+                // If here, the sequence hopped by at least 2,
+                // probably dropped at least 1,
+                // so drop rest of packets for record.
+                // This branch of the "if" will no longer
+                // be executed once the next record shows up.
+                expectedSequence = 0;
+                dumpTick = true;
+                prevSequence = sequence;
+                //printf("Dump %hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                //printf("D %llu - %u\n", packetTick, sequence);
+                getAnotherBuf = false;
+                continue;
+            }
+        }
+
+        // This Check is done in reassembly threads? or here? Whichever is faster ...
+        //        // Check RE header consistency
+        //        if (sequence == 0) {
+        //            if (!packetFirst) {
+        //                fprintf(stderr, "Bad RE header, first bit was NOT set on seq = 0\n");
+        //                exit(-1);
+        //            }
+        //        }
+        //        else if (packetFirst) {
+        //            fprintf(stderr, "Bad RE header, first bit was set but seq > 0\n");
+        //            exit(-1);
+        //        }
+
+        if (packetLast) {
+
+            // Send packet to collecting thread
+            pktSupply->publish(item);
+
+            if (takeStats) {
+                if (knowExpectedTick) {
+                    int64_t diff = packetTick - expectedTick;
+                    if (diff % tickPrescale != 0) {
+                        // Error in the way we set things up
+                        // This should always be 0.
+                        fprintf(stderr, "    Using wrong value for tick prescale, %u\n", tickPrescale);
+                        exit(-1);
+                    }
+                    else {
+                        stats->droppedTicks += diff / tickPrescale;
+                        //    printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
+                    }
+                }
+
+                // Total microsec to read buffer
+                stats->acceptedPackets += sequence + 1;
+                stats->droppedPackets  = stats->droppedTicks * (sequence + 1);
+                //      printf("Pkts %llu, dropP %llu, dropT %u, t %llu x %llu \n",
+                //             stats->acceptedPackets, stats->droppedPackets, stats->droppedTicks, packetTick, expectedTick);
+
+#ifdef __linux__
+                if (loopCount-- < 1) {
+                    stats->cpuPkt = sched_getcpu();
+                    loopCount = cpuLoops;
+                }
+#endif
+            }
+
+            expectedTick = packetTick + tickPrescale;
+
+        }
+
+        if (takeStats) {
+            //stats->acceptedBytes += bytesRead;
+            stats->acceptedBytes += nBytes;
+        }
+
+
+        prevTick = packetTick;
+        prevSequence = sequence;
+    }
+}
+
+
+
+
+/**
+ * Thread to read packets from 1 data ID.
+ * @param arg
+ * @return
+ */
+static void *threadReadOnePackets(void *arg) {
+
+    threadArg *tArg = (threadArg *) arg;
+    std::shared_ptr<ejfat::BufferSupply> pktSupply = tArg->pktSupply;
+    int udpSocket         = tArg->udpSocket;
+    bool debug            = tArg->debug;
+    auto stats            = tArg->stats;
+    uint64_t expectedTick = tArg->expectedTick;
+    uint32_t tickPrescale = tArg->tickPrescale;
+    int sourceId          = tArg->sourceId;
+    bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
 
     std::shared_ptr<BufferSupplyItem> item;
 
@@ -760,6 +942,7 @@ static void *threadReadPackets(void *arg) {
         // Parse header, storing everything for later convenience
         uint32_t *intArray = (uint32_t *) (item->getUserInts());
         parseReHeader(buffer, intArray, item->getUserIntCount(), &packetTick);
+
         item->setUserLong(packetTick);
         // store extra info in item's int array
         intArray[5] = nBytes;
@@ -788,7 +971,7 @@ static void *threadReadPackets(void *arg) {
             // Dump everything we saved from previous tick.
             dumpTick = false;
         }
-        // Same tick as last packet
+            // Same tick as last packet
         else {
             if (dumpTick || (std::abs((int) (sequence - prevSequence)) > 1)) {
                 // If here, the sequence hopped by at least 2,
@@ -835,7 +1018,7 @@ static void *threadReadPackets(void *arg) {
                     }
                     else {
                         stats->droppedTicks += diff / tickPrescale;
-                        //printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
+                        //    printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
                     }
                 }
 
@@ -853,7 +1036,7 @@ static void *threadReadPackets(void *arg) {
 #endif
             }
 
-            expectedTick += tickPrescale;
+            expectedTick = packetTick + tickPrescale;
 
         }
 
@@ -886,6 +1069,7 @@ int main(int argc, char **argv) {
     bool useIPv6 = false;
     bool keepStats = false;
 
+
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
     char filename[101];
@@ -902,12 +1086,6 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, sourceIds,
               &startingPort, &debug, &useIPv6, &keepStats, listeningAddr, filename);
 
-    // For this supply: each buf will hold reconstructed buffer.
-    // Make these buffers sized as given on command line (100kB default) and expand as necessary.
-    // There is one (1) of these supplies shared between all incoming sources.
-    int ringSize = 64;
-    std::shared_ptr<ejfat::BufferSupply> supply = std::make_shared<ejfat::BufferSupply>(ringSize, bufSize);
-
     for (int i=0; i < 128; i++) {
         if (sourceIds[i] > -1) {
             sourceCount++;
@@ -917,6 +1095,16 @@ int main(int argc, char **argv) {
             break;
         }
     }
+
+    if (sourceCount < 1) {
+        sourceIds[0] = 0;
+        sourceCount  = 1;
+        std::cerr << "Defaulting to (single) source id = 0" << std::endl;
+    }
+
+    // Place to store all supplies (of which each contained item is a reassembled buffer from 1 source)
+    std::shared_ptr<ejfat::BufferSupply> supplies[sourceCount];
+
 
 #ifdef __linux__
 
@@ -1067,7 +1255,17 @@ int main(int argc, char **argv) {
         //---------------------------------------------------
         int pktRingSize = 2048;
         int pktRingBufSize = 9000;
-        std::shared_ptr<ejfat::BufferSupply> pktSupply = std::make_shared<ejfat::BufferSupply>(pktRingSize, pktRingBufSize);
+        std::shared_ptr<ejfat::BufferSupply> pktSupply =
+                std::make_shared<ejfat::BufferSupply>(pktRingSize, pktRingBufSize, ByteOrder::ENDIAN_LOCAL, true);
+
+        //---------------------------------------------------
+        // Supply in which each buf will hold reconstructed buffer.
+        // Make these buffers sized as given on command line (100kB default) and expand as necessary.
+        //---------------------------------------------------
+        int ringSize = 64;
+        std::shared_ptr<ejfat::BufferSupply> supply =
+                std::make_shared<ejfat::BufferSupply>(ringSize, bufSize, ByteOrder::ENDIAN_LOCAL, true);
+        supplies[i] = supply;
 
         //---------------------------------------------------
         // Start thread to assemble buffers of packets from this source
@@ -1081,6 +1279,7 @@ int main(int argc, char **argv) {
         tArg2->supply     = supply;
         tArg2->pktSupply  = pktSupply;
         tArg2->stats      = stats[i];
+        tArg2->sourceId   = sourceIds[i];
         tArg2->debug      = debug;
 
         pthread_t thd1;
@@ -1102,7 +1301,7 @@ int main(int argc, char **argv) {
         tArg->udpSocket    = udpSocket;
         tArg->pktSupply    = pktSupply;
         tArg->stats        = stats[i];
-        tArg->debug        = debug;
+        tArg->sourceId     = sourceIds[i];
         tArg->expectedTick = 0;
         tArg->tickPrescale = 1;
 
@@ -1140,24 +1339,35 @@ int main(int argc, char **argv) {
     // Time Delay Here???
 
     std::shared_ptr<BufferSupplyItem> item;
-    std::shared_ptr<BufferSupplyItem> pktItem;
     std::shared_ptr<ByteBuffer> itemBuf;
     char *buffer;
 
     while (true) {
 
-        //------------------------------------------------------
-        // Get reassembled buffer
-        //------------------------------------------------------
-        item = supply->consumerGet();
-        // Get reference to item's ByteBuffer object
-        itemBuf = item->getBuffer();
-        // Get reference to item's byte array (underlying itemBuf)
-        buffer = reinterpret_cast<char *>(itemBuf->array());
-        size_t bufCapacity = itemBuf->capacity();
+        // How to combine all sub buffers into one big one?
+        // How do we know what size to make it?
+        //    -  Start with an educated guess and allow for expansion
 
-        // Release buffer back to supply for reuse
-        supply->release(item);
+        for (int i=0; i < sourceCount; i++) {
+
+            auto supply = supplies[i];
+
+            //------------------------------------------------------
+            // Get reassembled buffer
+            //------------------------------------------------------
+            item = supply->consumerGet();
+            // Get reference to item's ByteBuffer object
+            itemBuf = item->getBuffer();
+            // Get reference to item's byte array (underlying itemBuf)
+            buffer = reinterpret_cast<char *>(itemBuf->array());
+            size_t bufCapacity = itemBuf->capacity();
+
+            // ETC, ETC
+
+            // Release buffer back to supply for reuse
+            supply->release(item);
+        }
+        stats[0]->combinedBuffers++;
     }
 
     return 0;
