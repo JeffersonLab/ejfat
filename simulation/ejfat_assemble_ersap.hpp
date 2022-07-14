@@ -27,6 +27,7 @@
 #include <cerrno>
 #include <map>
 #include <cmath>
+#include <memory>
 #include <getopt.h>
 #include <cinttypes>
 
