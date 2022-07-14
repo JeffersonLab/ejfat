@@ -710,7 +710,7 @@ static void *threadReadPackets(void *arg) {
         CPU_ZERO(&cpuset);
 
         std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << core << "\n";
-        CPU_SET(cores[i], &cpuset);
+        CPU_SET(core, &cpuset);
 
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
@@ -911,7 +911,7 @@ static void *threadReadOnePackets(void *arg) {
         CPU_ZERO(&cpuset);
 
         std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << core << "\n";
-        CPU_SET(cores[i], &cpuset);
+        CPU_SET(core, &cpuset);
 
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
