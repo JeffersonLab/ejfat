@@ -94,6 +94,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             volatile uint64_t acceptedBytes;   /**< Number of bytes successfully read, NOT including RE header. */
             volatile uint32_t droppedTicks;    /**< Number of ticks dropped. */
             volatile uint32_t builtBuffers;    /**< Number of buffers fully built from packets. */
+            volatile uint32_t combinedBuffers;    /**< Number of buffers fully built from packets. */
 
             volatile int cpuPkt;               /**< CPU that thread to read pkts is running on. */
             volatile int cpuBuf;               /**< CPU that thread to read build buffers is running on. */
@@ -113,6 +114,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             stats->acceptedBytes = 0;
             stats->droppedTicks = 0;
             stats->builtBuffers = 0;
+            stats->combinedBuffers = 0;
 
             stats->cpuPkt = -1;
             stats->cpuBuf = -1;
@@ -131,6 +133,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             stats->acceptedBytes = 0;
             stats->droppedTicks = 0;
             stats->builtBuffers = 0;
+            stats->combinedBuffers = 0;
 
             stats->cpuPkt = -1;
             stats->cpuBuf = -1;
