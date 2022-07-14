@@ -72,7 +72,7 @@ static void printHelp(char *programName) {
             "        [-f <file for stats>]",
             "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]",
-            "        [-cores <comma-separated list of cores to run on>]",
+            "        [-pinRead <starting core #, 1 for each read thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
@@ -87,7 +87,7 @@ static void printHelp(char *programName) {
  * @param bufSize       filled with buffer size.
  * @param recvBufSize   filled with UDP receive buffer size.
  * @param tickPrescale  expected increase in tick with each incoming buffer.
- * @param cores         array of core ids on which to run assembly thread.
+ * @param core          starting core id on which to run pkt reading threads.
  * @param sourceIds     array of incoming source ids.
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
@@ -97,7 +97,7 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *cores, int *sourceIds, uint16_t* port,
+                      int *core, int *sourceIds, uint16_t* port,
                       bool *debug, bool *useIPv6, bool *keepStats,
                       char *listenAddr, char *filename) {
 
@@ -108,7 +108,7 @@ static void parseArgs(int argc, char **argv,
     static struct option long_options[] =
             {             {"tpre",  1, NULL, 1},
                           {"ip6",  0, NULL, 2},
-                          {"cores",  1, NULL, 3},
+                          {"pinRead",  1, NULL, 3},
                           {"ids",  1, NULL, 4},
                           {"stats",  0, NULL, 5},
                           {0,       0, 0,    0}
@@ -196,55 +196,15 @@ static void parseArgs(int argc, char **argv,
 
             case 3:
                 // Cores to run on
-                if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0) {
+                    *core = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -pinRead, need starting core #\n");
                     exit(-1);
                 }
 
-
-                {
-                    // split into ints
-                    std::string s = optarg;
-                    std::string delimiter = ",";
-
-                    size_t pos = 0;
-                    std::string token;
-                    char *endptr;
-                    int index = 0;
-                    bool oneMore = true;
-
-                    while ((pos = s.find(delimiter)) != std::string::npos) {
-                        //fprintf(stderr, "pos = %llu\n", pos);
-                        token = s.substr(0, pos);
-                        errno = 0;
-                        cores[index] = (int) strtol(token.c_str(), &endptr, 0);
-
-                        if ((token.c_str() - endptr) == 0) {
-                            //fprintf(stderr, "two commas next to eachother\n");
-                            oneMore = false;
-                            break;
-                        }
-                        index++;
-                        //std::cout << token << std::endl;
-                        s.erase(0, pos + delimiter.length());
-                        if (s.length() == 0) {
-                            //fprintf(stderr, "break on zero len string\n");
-                            oneMore = false;
-                            break;
-                        }
-                    }
-
-                    if (oneMore) {
-                        errno = 0;
-                        cores[index] = (int) strtol(s.c_str(), nullptr, 0);
-                        if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
-                            exit(-1);
-                        }
-                        index++;
-                        //std::cout << s << std::endl;
-                    }
-                }
                 break;
 
             case 4:
@@ -510,6 +470,7 @@ typedef struct threadArg_t {
 
     uint64_t expectedTick;
     uint32_t tickPrescale;
+    int core;
 
 } threadArg;
 
@@ -714,6 +675,7 @@ static void *threadReadPackets(void *arg) {
     uint64_t expectedTick = tArg->expectedTick;
     uint32_t tickPrescale = tArg->tickPrescale;
     int sourceId          = tArg->sourceId;
+    int core              = tArg->core;
     bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
 
 
@@ -738,6 +700,26 @@ static void *threadReadPackets(void *arg) {
 
     std::shared_ptr<BufferSupplyItem> item;
     std::shared_ptr<BufferSupplyItem> items[chunk];
+
+
+#ifdef __linux__
+
+    if (core > -1) {
+        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+
+        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << cores << "\n";
+        CPU_SET(cores[i], &cpuset);
+
+        pthread_t current_thread = pthread_self();
+        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+        if (rc != 0) {
+            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+        }
+    }
+
+#endif
 
 
     while (true) {
@@ -899,6 +881,7 @@ static void *threadReadOnePackets(void *arg) {
     uint64_t expectedTick = tArg->expectedTick;
     uint32_t tickPrescale = tArg->tickPrescale;
     int sourceId          = tArg->sourceId;
+    int core              = tArg->core;
     bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
 
     std::shared_ptr<BufferSupplyItem> item;
@@ -918,6 +901,27 @@ static void *threadReadOnePackets(void *arg) {
     int  bytesRead;
     char *buffer;
     ssize_t nBytes;
+
+
+#ifdef __linux__
+
+    if (core > -1) {
+        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+
+        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << cores << "\n";
+        CPU_SET(cores[i], &cpuset);
+
+        pthread_t current_thread = pthread_self();
+        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+        if (rc != 0) {
+            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+        }
+    }
+
+#endif
+
 
     while (true) {
 
@@ -1062,12 +1066,13 @@ int main(int argc, char **argv) {
     int recvBufSize = 0;
     int tickPrescale = 1;
     uint16_t startingPort = 7777;
-    int cores[10];
+    int startingCore = -1;
     int sourceIds[128];
     int sourceCount = 0;
     bool debug = false;
     bool useIPv6 = false;
     bool keepStats = false;
+    bool pinCores = false;
 
 
     char listeningAddr[16];
@@ -1075,16 +1080,14 @@ int main(int argc, char **argv) {
     char filename[101];
     memset(filename, 0, 101);
 
-    for (int i=0; i < 10; i++) {
-        cores[i] = -1;
-    }
-
     for (int i=0; i < 128; i++) {
         sourceIds[i] = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, sourceIds,
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, sourceIds,
               &startingPort, &debug, &useIPv6, &keepStats, listeningAddr, filename);
+
+    pinCores = startingCore >= 0 ? true : false;
 
     for (int i=0; i < 128; i++) {
         if (sourceIds[i] > -1) {
@@ -1104,38 +1107,6 @@ int main(int argc, char **argv) {
 
     // Place to store all supplies (of which each contained item is a reassembled buffer from 1 source)
     std::shared_ptr<ejfat::BufferSupply> supplies[sourceCount];
-
-
-#ifdef __linux__
-
-    if (cores[0] > -1) {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        if (debug) {
-            for (int i=0; i < 10; i++) {
-                     std::cerr << "core[" << i << "] = " << cores[i] << "\n";
-            }
-        }
-
-        for (int i=0; i < 10; i++) {
-            if (cores[i] >= 0) {
-                std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
-                CPU_SET(cores[i], &cpuset);
-            }
-            else {
-                break;
-            }
-        }
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-    }
-
-#endif
 
 
 #ifdef __APPLE__
@@ -1304,6 +1275,12 @@ int main(int argc, char **argv) {
         tArg->sourceId     = sourceIds[i];
         tArg->expectedTick = 0;
         tArg->tickPrescale = 1;
+        if (pinCores) {
+            tArg->core = startingCore + i;
+        }
+        else {
+            tArg->core = -1;
+        }
 
         pthread_t thd;
         status = pthread_create(&thd, NULL, threadReadPackets, (void *) tArg);
