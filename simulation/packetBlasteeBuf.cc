@@ -709,7 +709,7 @@ static void *threadReadPackets(void *arg) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << cores << "\n";
+        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << core << "\n";
         CPU_SET(cores[i], &cpuset);
 
         pthread_t current_thread = pthread_self();
@@ -910,7 +910,7 @@ static void *threadReadOnePackets(void *arg) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << cores << "\n";
+        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << core << "\n";
         CPU_SET(cores[i], &cpuset);
 
         pthread_t current_thread = pthread_self();
