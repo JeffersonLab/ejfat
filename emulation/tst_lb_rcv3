@@ -9,15 +9,32 @@ for i in $(seq 17750 17765)
     do 
         grep $i $t|grep  Event_size: >> $t1
     done
-echo "Port count deficient of events: "
+echo -n "Port count deficient of events: "
 for i in $(seq 17750 17765) 
     do 
         grep $i $t1|wc -l
     done|grep -v $evnt_num|wc -l
-echo "Port count for incorrect event size: " 
+echo -n "Port count for incorrect event size: " 
 for i in $(seq 17750 17765) 
     do 
         grep $i $t1|grep "Event_size: $evnt_sz "|wc -l 
     done|grep -v $evnt_num|wc -l
 echo $t $t1
+echo "reported perrors:"
 grep perror $t|sort|uniq
+echo -n "Num ports with incorrect iteration counts: "
+for i in $(seq 17750 17765) 
+    do 
+        echo -n "Num events for $i :"
+        grep $i $t1|wc -l
+    done|grep -v $evnt_num|wc -l
+echo -n "Num events with incorrect event sizes: "
+for i in $(seq 17750 17765) 
+    do 
+        echo -n  "Num event sizes for $i :"
+        grep $i $t1
+    done|grep -v $evnt_sz|wc -l
+echo ' '
+echo -n "Num disc dids with incorrect size counts: "
+ls -lt  /tmp/rs*|grep -v log|cut -f5 -d ' '|grep -v  $(($evnt_sz*$evnt_num))|wc -l
+
