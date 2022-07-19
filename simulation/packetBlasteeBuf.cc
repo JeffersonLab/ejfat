@@ -510,7 +510,7 @@ static void *threadAssemble(void *arg) {
     int sourceId = tArg->sourceId;
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
-    int cpuLoops = 5000;
+    int cpuLoops = 2000;
     int loopCount = cpuLoops;
 
     uint64_t packetTick;
@@ -680,7 +680,7 @@ static void *threadReadPackets(void *arg) {
 
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
-    int cpuLoops = 50000;
+    int cpuLoops = 10000;
     int loopCount = cpuLoops;
 
     // Statistics
@@ -716,6 +716,10 @@ static void *threadReadPackets(void *arg) {
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
         if (rc != 0) {
             std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+        }
+
+        if (takeStats) {
+            stats->cpuPkt = sched_getcpu();
         }
     }
 
@@ -841,7 +845,8 @@ static void *threadReadPackets(void *arg) {
                 //             stats->acceptedPackets, stats->droppedPackets, stats->droppedTicks, packetTick, expectedTick);
 
 #ifdef __linux__
-                if (loopCount-- < 1) {
+                // If core hasn't been pinned, track it
+                if ((core < 0) && (loopCount-- < 1)) {
                     stats->cpuPkt = sched_getcpu();
                     loopCount = cpuLoops;
                 }
