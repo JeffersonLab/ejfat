@@ -508,6 +508,7 @@ static void *threadAssemble(void *arg) {
     bool debug   = tArg->debug;
     auto stats   = tArg->stats;
     int sourceId = tArg->sourceId;
+    int core     = tArg->core;
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 2000;
@@ -531,6 +532,31 @@ static void *threadAssemble(void *arg) {
 
     char *buffer;
     char *pktBuffer;
+
+
+#ifdef __linux__
+
+    if (core > -1) {
+        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+
+        std::cerr << "Run assemble reading thd for source " <<  sourceId << " on core " << core << "\n";
+        CPU_SET(core, &cpuset);
+
+        pthread_t current_thread = pthread_self();
+        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+        if (rc != 0) {
+            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+        }
+
+        if (takeStats) {
+            stats->cpuBuf = sched_getcpu();
+        }
+    }
+
+#endif
+
 
     if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
 
@@ -644,9 +670,11 @@ static void *threadAssemble(void *arg) {
                 if (takeStats) {
                     stats->builtBuffers++;
 #ifdef __linux__
-                    if (loopCount-- < 1) {
+                    // If core hasn't been pinned, track it
+                    if ((core < 0) && (loopCount-- < 1)) {
                         stats->cpuBuf = sched_getcpu();
                         loopCount = cpuLoops;
+    printf("Read pkt thd: get CPU\n");
                     }
 #endif
                 }
@@ -849,6 +877,7 @@ static void *threadReadPackets(void *arg) {
                 if ((core < 0) && (loopCount-- < 1)) {
                     stats->cpuPkt = sched_getcpu();
                     loopCount = cpuLoops;
+printf("Read pkt thd: get CPU\n");
                 }
 #endif
             }
@@ -1238,7 +1267,7 @@ int main(int argc, char **argv) {
         // Supply in which each buf will hold reconstructed buffer.
         // Make these buffers sized as given on command line (100kB default) and expand as necessary.
         //---------------------------------------------------
-        int ringSize = 64;
+        int ringSize = 1024;
         std::shared_ptr<ejfat::BufferSupply> supply =
                 std::make_shared<ejfat::BufferSupply>(ringSize, bufSize, ByteOrder::ENDIAN_LOCAL, true);
         supplies[i] = supply;
@@ -1257,6 +1286,7 @@ int main(int argc, char **argv) {
         tArg2->stats      = stats[i];
         tArg2->sourceId   = sourceIds[i];
         tArg2->debug      = debug;
+        tArg2->core       = -1;
 
         pthread_t thd1;
         status = pthread_create(&thd1, NULL, threadAssemble, (void *) tArg2);
