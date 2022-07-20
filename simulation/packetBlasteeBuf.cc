@@ -674,7 +674,7 @@ static void *threadAssemble(void *arg) {
                     if ((core < 0) && (loopCount-- < 1)) {
                         stats->cpuBuf = sched_getcpu();
                         loopCount = cpuLoops;
-    printf("Read pkt thd: get CPU\n");
+    //printf("Read pkt thd: get CPU\n");
                     }
 #endif
                 }
@@ -877,7 +877,7 @@ static void *threadReadPackets(void *arg) {
                 if ((core < 0) && (loopCount-- < 1)) {
                     stats->cpuPkt = sched_getcpu();
                     loopCount = cpuLoops;
-printf("Read pkt thd: get CPU\n");
+//printf("Read pkt thd: get CPU\n");
                 }
 #endif
             }
