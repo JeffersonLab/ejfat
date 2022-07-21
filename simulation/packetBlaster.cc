@@ -43,7 +43,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-sendnocp]",
             "        [-bufdelay] (delay between each buffer, not packet)",
@@ -57,6 +57,7 @@ static void printHelp(char *programName) {
             "        [-pro <protocol>]",
             "        [-e <entropy>]",
             "        [-b <buffer size>]",
+            "        [-brate <buffers sent per sec>]",
             "        [-s <UDP send buffer size>]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
@@ -73,7 +74,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
-                      uint32_t *bufsize, uint32_t *sendBufSize,
+                      uint32_t *bufsize, uint32_t *bufRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       int *cores,
                       bool *debug, bool *sendnocp,
@@ -98,6 +99,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ipv6",  0, NULL, 11},
              {"bufdelay",  0, NULL, 12},
              {"cores",  1, NULL, 13},
+             {"brate",  1, NULL, 14},
              {0,       0, 0,    0}
             };
 
@@ -277,6 +279,18 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *bufDelay = true;
                 break;
 
+            case 14:
+                // Buffers to be sent per second
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *bufRate = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -brate, brate > 0\n");
+                    exit(-1);
+                }
+                break;
+
             case 13:
                 // Cores to run on
                 if (strlen(optarg) < 1) {
@@ -343,6 +357,14 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 printHelp(argv[0]);
                 exit(2);
         }
+    }
+
+    // If we specify the buffer send rate, then all delays are removed
+    if (*bufRate > 0) {
+        fprintf(stderr, "Buffer rate set to %u buffers/sec, all delays removed!\n", *bufRate);
+        *bufDelay = false;
+        *delayPrescale = 1;
+        *delay = 0;
     }
 
     if (help) {
@@ -446,13 +468,14 @@ int main(int argc, char **argv) {
     uint32_t delayPrescale = 1, delayCounter = 0;
     uint32_t offset = 0, bufsize = 0, sendBufSize = 0;
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
+    uint32_t bufRate = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 0;
     int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
     bool debug = false, sendnocp = false;
-    bool useIPv6 = false, bufDelay = false;
+    bool useIPv6 = false, bufDelay = false, setBufRate = false;
 
     char host[INPUT_LENGTH_MAX], interface[16];
     memset(host, 0, INPUT_LENGTH_MAX);
@@ -464,7 +487,7 @@ int main(int argc, char **argv) {
     }
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &sendBufSize, &delayPrescale, &tickPrescale, cores, &debug, &sendnocp,
+              &delay, &bufsize, &bufRate, &sendBufSize, &delayPrescale, &tickPrescale, cores, &debug, &sendnocp,
               &useIPv6, &bufDelay, host, interface);
 
 #ifdef __linux__
@@ -507,6 +530,10 @@ int main(int argc, char **argv) {
     else {
         packetDelay = delay;
         bufferDelay = 0;
+    }
+
+    if (bufRate > 0) {
+        setBufRate = true;
     }
 
     // Break data into multiple packets of max MTU size.
@@ -652,10 +679,67 @@ int main(int argc, char **argv) {
 
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
 
-    // Statistics
+    // Statistics & rate setting
     int64_t packetsSent=0;
+    int64_t elapsed, microSecItShouldTake;
+    struct timespec t1, t2;
+    int64_t excessTime, lastExcessTime = 0, targetDataRate, buffersAtOnce, countDown;
+
+    if (setBufRate) {
+        // Fixed the BUFFER rate since data rates may vary between data sources, but
+        // the # of buffers sent need to be identical between those sources.
+        targetDataRate = bufRate * bufsize; // bytes/sec
+        // Don't send more than 2M consecutive bytes with no delays to avoid overwhelming UDP bufs
+        int64_t bytesToWriteAtOnce = 2000000;
+        buffersAtOnce = bytesToWriteAtOnce / bufsize;
+        countDown = buffersAtOnce;
+
+        // musec to write data at desired rate
+        microSecItShouldTake = 1000000L * bytesToWriteAtOnce / targetDataRate;
+        fprintf(stderr,
+                "packetBlaster: bytesToWriteAtOnce = %lld, targetDataRate = %lld, buffersAtOnce = %lld, microSecItShouldTake = %lld\n",
+                bytesToWriteAtOnce, targetDataRate, buffersAtOnce, microSecItShouldTake);
+
+        // Start the clock
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+    }
 
     while (true) {
+
+        // If we're sending buffers at a constant rate AND we've sent the entire bunch
+        if (setBufRate && countDown-- <= 0) {
+            // Get the current time
+            clock_gettime(CLOCK_MONOTONIC, &t2);
+            // Time taken to send bunch of buffers
+            elapsed = 1000000L * (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec)/1000L;
+            // Time yet needed in order for everything we've sent to be at the correct rate
+            excessTime = microSecItShouldTake - elapsed + lastExcessTime;
+
+//fprintf(stderr, "packetBlaster: elapsed = %lld, this excessT = %lld, last excessT = %lld, buffers/sec = %llu\n",
+//        elapsed, (microSecItShouldTake - elapsed), lastExcessTime, buffersAtOnce*1000000/elapsed);
+
+            // Do we need to wait before sending the next bunch of buffers?
+            if (excessTime > 0) {
+                // We need to wait, but it's possible that after the following delay,
+                // we will have waited too long. We know this since any specified sleep
+                // period is always a minimum.
+                // If that's the case, in the next cycle, excessTime will be < 0.
+                std::this_thread::sleep_for(std::chrono::microseconds(excessTime));
+                // After this wait, we'll do another round of buffers to send,
+                // but we need to start the clock again.
+                clock_gettime(CLOCK_MONOTONIC, &t1);
+                // Check to see if we overslept so correction can be done
+                elapsed = 1000000L * (t1.tv_sec - t2.tv_sec) + (t1.tv_nsec - t2.tv_nsec)/1000L;
+                lastExcessTime = excessTime - elapsed;
+            }
+            else {
+                // Record any excess previous sleep time so it can be compensated for in next go round
+                lastExcessTime = excessTime;
+                t1 = t2;
+            }
+            countDown = buffersAtOnce;
+        }
+
         if (sendnocp) {
             err = sendPacketizedBufferFast(buf, bufsize,
                                            maxUdpPayload, clientSocket,
