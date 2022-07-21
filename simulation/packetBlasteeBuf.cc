@@ -428,6 +428,8 @@ static void *rateThread(void *arg) {
             // Actual Data rates (no header info)
             dataRate    = ((double) byteCount) / microSec;
             dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSec;
+
+#ifdef __linux__
             printf("     Data:    %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n",
                    dataRate, dataAvgRate, stats[i]->cpuPkt, stats[i]->cpuBuf, stats[i]->builtBuffers);
 
@@ -436,6 +438,16 @@ static void *rateThread(void *arg) {
                         droppedCount, currDroppedPackets[i], stats[i]->cpuPkt, stats[i]->cpuBuf);
                 fflush(fp);
             }
+#else
+            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n",
+                   dataRate, dataAvgRate, stats[i]->builtBuffers);
+
+            if (writeToFile) {
+                fprintf(fp, "%lld,%d,%d,%d,%lld,%lld\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
+                        droppedCount, currDroppedPackets[i]);
+                fflush(fp);
+            }
+#endif
 
         }
         printf("     Combined Bufs:    %u\n\n", stats[0]->combinedBuffers);
