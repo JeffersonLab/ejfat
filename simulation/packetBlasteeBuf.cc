@@ -62,7 +62,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
@@ -73,6 +73,7 @@ static void printHelp(char *programName) {
             "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]",
             "        [-pinRead <starting core #, 1 for each read thd>]",
+            "        [-pinBuf <starting core #, 1 for each buf assembly thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
@@ -88,6 +89,7 @@ static void printHelp(char *programName) {
  * @param recvBufSize   filled with UDP receive buffer size.
  * @param tickPrescale  expected increase in tick with each incoming buffer.
  * @param core          starting core id on which to run pkt reading threads.
+ * @param coreBuf       starting core id on which to run buf assembly threads.
  * @param sourceIds     array of incoming source ids.
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
@@ -97,7 +99,7 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *core, int *sourceIds, uint16_t* port,
+                      int *core, int *coreBuf, int *sourceIds, uint16_t* port,
                       bool *debug, bool *useIPv6, bool *keepStats,
                       char *listenAddr, char *filename) {
 
@@ -109,8 +111,9 @@ static void parseArgs(int argc, char **argv,
             {             {"tpre",  1, NULL, 1},
                           {"ip6",  0, NULL, 2},
                           {"pinRead",  1, NULL, 3},
-                          {"ids",  1, NULL, 4},
-                          {"stats",  0, NULL, 5},
+                          {"pinBuf",  1, NULL, 4},
+                          {"ids",  1, NULL, 5},
+                          {"stats",  0, NULL, 6},
                           {0,       0, 0,    0}
             };
 
@@ -195,7 +198,7 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 3:
-                // Cores to run on
+                // Cores to run on for packet reading thds
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp >= 0) {
                     *core = i_tmp;
@@ -208,6 +211,19 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 4:
+                // Cores to run on for buf assembly thds
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0) {
+                    *coreBuf = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -pinBuf, need starting core #\n");
+                    exit(-1);
+                }
+
+                break;
+
+            case 5:
                 // Incoming source ids
                 if (strlen(optarg) < 1) {
                     fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ids\n");
@@ -262,7 +278,7 @@ static void parseArgs(int argc, char **argv,
                 break;
 
 
-            case 5:
+            case 6:
                 // Keep stats
                 *keepStats = true;
                 break;
@@ -566,6 +582,7 @@ static void *threadAssemble(void *arg) {
             stats->cpuBuf = sched_getcpu();
         }
     }
+
 
 #endif
 
@@ -910,199 +927,6 @@ static void *threadReadPackets(void *arg) {
 }
 
 
-
-
-/**
- * Thread to read packets from 1 data ID.
- * @param arg
- * @return
- */
-static void *threadReadOnePackets(void *arg) {
-
-    threadArg *tArg = (threadArg *) arg;
-    std::shared_ptr<ejfat::BufferSupply> pktSupply = tArg->pktSupply;
-    int udpSocket         = tArg->udpSocket;
-    bool debug            = tArg->debug;
-    auto stats            = tArg->stats;
-    uint64_t expectedTick = tArg->expectedTick;
-    uint32_t tickPrescale = tArg->tickPrescale;
-    int sourceId          = tArg->sourceId;
-    int core              = tArg->core;
-    bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
-
-    std::shared_ptr<BufferSupplyItem> item;
-
-    // Track cpu by calling sched_getcpu roughly once per sec or 2
-    int cpuLoops = 50000;
-    int loopCount = cpuLoops;
-
-    // Statistics
-    int64_t  prevTick = -1;
-    uint64_t packetTick;
-    uint32_t sequence, prevSequence = 0, expectedSequence = 0;
-    bool dumpTick = false;
-    bool getNewBuf = true;
-    bool takeStats = stats == nullptr ? false : true;
-    bool packetFirst, packetLast;
-    int  bytesRead;
-    char *buffer;
-    ssize_t nBytes;
-
-
-#ifdef __linux__
-
-    if (core > -1) {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << core << "\n";
-        CPU_SET(core, &cpuset);
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-    }
-
-#endif
-
-
-    while (true) {
-
-        if (getNewBuf) {
-            // Grab empty buffer(s?) from ByteBufferSupply
-            item = pktSupply->get();
-            // Get reference to item's byte array
-            buffer = reinterpret_cast<char *>(item->getClearedBuffer()->array()); // uint8_t * -> char *
-        }
-        getNewBuf = true;
-
-        // Read packet into buffer
-        bytesRead = recvfrom(udpSocket, buffer, 9000, 0, NULL, NULL);
-        if (bytesRead < 0) {
-            if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
-            exit(-1);
-        }
-        nBytes = bytesRead - HEADER_BYTES;
-
-        // TODO: What if we get a zero-length packet???
-
-        // Parse header, storing everything for later convenience
-        uint32_t *intArray = (uint32_t *) (item->getUserInts());
-        parseReHeader(buffer, intArray, item->getUserIntCount(), &packetTick);
-
-        item->setUserLong(packetTick);
-        // store extra info in item's int array
-        intArray[5] = nBytes;
-        sequence    = item->getUserInts()[4];
-        packetFirst = intArray[1] ? true : false;
-        packetLast  = intArray[2] ? true : false;
-
-        // This if-else statement is what enables the packet reading/parsing to keep
-        // up an input rate that is too high (causing dropped packets) and still salvage
-        // some of what is coming in.
-        if (packetTick != prevTick) {
-            // If we're here, either we've just read the very first legitimate packet,
-            // or we've dropped some packets and advanced to another tick in the process.
-            expectedSequence = 0;
-
-            if (sequence != 0) {
-                // Already have trouble, looks like we dropped the first packet of a tick,
-                // and possibly others after it.
-                // So go ahead and dump the rest of the tick in an effort to keep up.
-                //printf("Skip %hu, %llu - %u\n", packetDataId, packetTick, sequence);
-                //printf("S %llu - %u\n", packetTick, sequence);
-                getNewBuf = false;
-                continue;
-            }
-
-            // Dump everything we saved from previous tick.
-            dumpTick = false;
-        }
-            // Same tick as last packet
-        else {
-            if (dumpTick || (std::abs((int) (sequence - prevSequence)) > 1)) {
-                // If here, the sequence hopped by at least 2,
-                // probably dropped at least 1,
-                // so drop rest of packets for record.
-                // This branch of the "if" will no longer
-                // be executed once the next record shows up.
-                expectedSequence = 0;
-                dumpTick = true;
-                prevSequence = sequence;
-                //printf("Dump %hu, %llu - %u\n", packetDataId, packetTick, sequence);
-                //printf("D %llu - %u\n", packetTick, sequence);
-                getNewBuf = false;
-                continue;
-            }
-        }
-
-        // This Check is done in reassembly threads? or here? Whichever is faster ...
-        //        // Check RE header consistency
-        //        if (sequence == 0) {
-        //            if (!packetFirst) {
-        //                fprintf(stderr, "Bad RE header, first bit was NOT set on seq = 0\n");
-        //                exit(-1);
-        //            }
-        //        }
-        //        else if (packetFirst) {
-        //            fprintf(stderr, "Bad RE header, first bit was set but seq > 0\n");
-        //            exit(-1);
-        //        }
-
-        if (packetLast) {
-
-            // Send packet to collecting thread
-            pktSupply->publish(item);
-
-            if (takeStats) {
-                if (knowExpectedTick) {
-                    int64_t diff = packetTick - expectedTick;
-                    if (diff % tickPrescale != 0) {
-                        // Error in the way we set things up
-                        // This should always be 0.
-                        fprintf(stderr, "    Using wrong value for tick prescale, %u\n", tickPrescale);
-                        exit(-1);
-                    }
-                    else {
-                        stats->droppedTicks += diff / tickPrescale;
-                        //    printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
-                    }
-                }
-
-                // Total microsec to read buffer
-                stats->acceptedPackets += sequence + 1;
-                stats->droppedPackets  = stats->droppedTicks * (sequence + 1);
-                //      printf("Pkts %llu, dropP %llu, dropT %u, t %llu x %llu \n",
-                //             stats->acceptedPackets, stats->droppedPackets, stats->droppedTicks, packetTick, expectedTick);
-
-#ifdef __linux__
-                if (loopCount-- < 1) {
-                    stats->cpuPkt = sched_getcpu();
-                    loopCount = cpuLoops;
-                }
-#endif
-            }
-
-            expectedTick = packetTick + tickPrescale;
-
-        }
-
-        if (takeStats) {
-            //stats->acceptedBytes += bytesRead;
-            stats->acceptedBytes += nBytes;
-        }
-
-
-        prevTick = packetTick;
-        prevSequence = sequence;
-    }
-}
-
-
-
 int main(int argc, char **argv) {
 
     int status;
@@ -1113,12 +937,14 @@ int main(int argc, char **argv) {
     int tickPrescale = 1;
     uint16_t startingPort = 7777;
     int startingCore = -1;
+    int startingBufCore = -1;
     int sourceIds[128];
     int sourceCount = 0;
     bool debug = false;
     bool useIPv6 = false;
     bool keepStats = false;
     bool pinCores = false;
+    bool pinBufCores = false;
 
 
     char listeningAddr[16];
@@ -1130,10 +956,11 @@ int main(int argc, char **argv) {
         sourceIds[i] = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, sourceIds,
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, &startingBufCore, sourceIds,
               &startingPort, &debug, &useIPv6, &keepStats, listeningAddr, filename);
 
     pinCores = startingCore >= 0 ? true : false;
+    pinBufCores = startingBufCore >= 0 ? true : false;
 
     for (int i=0; i < 128; i++) {
         if (sourceIds[i] > -1) {
@@ -1298,7 +1125,12 @@ int main(int argc, char **argv) {
         tArg2->stats      = stats[i];
         tArg2->sourceId   = sourceIds[i];
         tArg2->debug      = debug;
-        tArg2->core       = -1;
+        if (pinBufCores) {
+            tArg2->core = startingBufCore + i;
+        }
+        else {
+            tArg2->core = -1;
+        }
 
         pthread_t thd1;
         status = pthread_create(&thd1, NULL, threadAssemble, (void *) tArg2);
@@ -1372,6 +1204,9 @@ int main(int argc, char **argv) {
         // How do we know what size to make it?
         //    -  Start with an educated guess and allow for expansion
 
+        // Note: in this blastee, buffers from different ticks would be combined since
+        // the sources are not started at the exact same time
+
         for (int i=0; i < sourceCount; i++) {
 
             auto supply = supplies[i];
@@ -1385,12 +1220,15 @@ int main(int argc, char **argv) {
             // Get reference to item's byte array (underlying itemBuf)
             buffer = reinterpret_cast<char *>(itemBuf->array());
             size_t bufCapacity = itemBuf->capacity();
+//            long packetTick = item->getUserLong();
+//fprintf(stderr, "s%d/%ld ", i, packetTick);
 
             // ETC, ETC
 
             // Release buffer back to supply for reuse
             supply->release(item);
         }
+//fprintf(stderr, "\n");
         stats[0]->combinedBuffers++;
     }
 
