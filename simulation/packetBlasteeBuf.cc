@@ -752,7 +752,7 @@ static void *threadReadPackets(void *arg) {
     ssize_t nBytes;
 
     bool getAnotherBuf = true;
-    int32_t chunk = 100;
+    int32_t chunk = 10;
     int bufIndex = chunk;
 
     std::shared_ptr<BufferSupplyItem> item;
