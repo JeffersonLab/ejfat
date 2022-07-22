@@ -733,7 +733,10 @@ int main(int argc, char **argv) {
                 lastExcessTime = excessTime - elapsed;
             }
             else {
+                // If we're here, it took longer to send buffers than required in order to meet the
+                // given buffer rate. So, it's likely that the specified rate is too high for this node.
                 // Record any excess previous sleep time so it can be compensated for in next go round
+                // if that is even possible.
                 lastExcessTime = excessTime;
                 t1 = t2;
             }
