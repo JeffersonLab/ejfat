@@ -324,7 +324,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
         /**
          * Parse the reassembly header at the start of the given buffer.
-         * Return parsed values in pointer args.
+         * Return parsed values in pointer arg and array.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
@@ -359,6 +359,29 @@ static inline uint64_t bswap_64(uint64_t x) {
                 intArray[4] = ntohl(*((uint32_t *) (buffer + 4))); // sequence
             }
             *tick = ntohll(*((uint64_t *) (buffer + 8)));
+        }
+
+        /**
+         * Parse the reassembly header at the start of the given buffer.
+         * Return parsed values in array. Used in packetBlasteeFast to
+         * return only needed data.
+         *
+         * @param buffer    buffer to parse.
+         * @param intArray  array of ints in which version, first, last,
+         *                  sequence, and tick are returned.
+         * @param index     where in intArray to start writing.
+         * @param tick      returned tick value.
+         */
+        static void parseReHeaderFast(char* buffer, uint32_t* intArray, int index, uint64_t *tick)
+        {
+            intArray[index]     = (buffer[1] & 0x02) >> 1; // first
+            intArray[index + 1] =  buffer[1] & 0x01;       // last
+            intArray[index + 2] = ntohl(*((uint32_t *) (buffer + 4))); // sequence
+
+            *tick = ntohll(*((uint64_t *) (buffer + 8)));
+
+            // store tick for later use in big endian form
+            *((uint64_t *) (&(intArray[index + 3]))) = *tick;
         }
 
 
