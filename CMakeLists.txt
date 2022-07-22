@@ -115,6 +115,7 @@ set(DIS_EXEC_FILES
         simulation/gather.cc
         simulation/testBufSupply.cc
         simulation/packetBlasteeBuf.cc
+        simulation/packetBlasteeFast.cc
         )
 
 set(UTIL_FILES
