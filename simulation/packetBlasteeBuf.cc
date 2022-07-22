@@ -819,7 +819,7 @@ static void *threadReadPackets(void *arg) {
         item->setUserLong(packetTick);
         // store extra info in item's int array
         intArray[5] = nBytes;
-        sequence    = item->getUserInts()[4];
+        sequence    = intArray[4];
         packetFirst = intArray[1] ? true : false;
         packetLast  = intArray[2] ? true : false;
 
