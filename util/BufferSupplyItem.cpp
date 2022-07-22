@@ -132,9 +132,7 @@ namespace ejfat {
      */
     void BufferSupplyItem::reset() {
         buffer->clear();
-        for (int i=0; i < getUserIntCount(); i++) {
-            userInt[i] = 0;
-        }
+        std::memset(userInt, 0, getUserIntCount()*sizeof(int32_t));
         userLong = 0L;
         force = false;
         userBoolean = false;
@@ -216,7 +214,7 @@ namespace ejfat {
      * Get the number of elements in user int array.
      * @return number of elements in user int array.
      */
-    int BufferSupplyItem::getUserIntCount() {return 10;}
+    int BufferSupplyItem::getUserIntCount() {return 60;}
 
 
     /**

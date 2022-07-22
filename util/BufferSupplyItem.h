@@ -15,6 +15,7 @@
 #include <memory>
 #include <atomic>
 #include <functional>
+#include <cstring>
 
 
 #include "Disruptor/Disruptor.h"
@@ -86,9 +87,9 @@ namespace ejfat {
          */
         bool fromConsumerGet = false;
 
-        /** Extra integer array for user's convenience. Array has 10 members.
+        /** Extra integer array for user's convenience. Array has 60 members.
          *  Each int gets reset to 0 each time supply.get() is called. */
-        int32_t userInt[10];
+        int32_t userInt[60];
 
         /** Extra long for user's convenience.
          *  Gets reset to 0 each time supply.get() is called. */
