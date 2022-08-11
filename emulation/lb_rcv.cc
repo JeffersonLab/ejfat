@@ -184,13 +184,14 @@ int main (int argc, char *argv[])
     uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
 
     auto t_start = std::chrono::high_resolution_clock::now();
+    auto t_start0 = t_start; //previous occurance of 'frst' flag
     auto t_end   = std::chrono::high_resolution_clock::now();
 
     uint32_t evnt_num = 0;  // event number
 
     double ltncy_mn = 0, ltncy_sd = 0;
 
-    int64_t evnt_sz = 0;  // event size
+    uint64_t evnt_sz = 0;  // event size
 
     uint32_t xseq   = 0; //expected seq #
 
@@ -199,7 +200,7 @@ int main (int argc, char *argv[])
         //  requesting client will be stored on src_addr variable
 
 #ifdef __linux__
-        cpu = sched_getcpu();
+//        cpu = sched_getcpu();
 #endif
 
 //        nBytes = recvfrom(lstn_sckt, (void*)in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
@@ -226,12 +227,13 @@ int main (int argc, char *argv[])
             {
                 t_start = std::chrono::high_resolution_clock::now();
                 std::cout << "Interval: "
-                          << std::chrono::duration<double, std::micro>(t_start-t_end).count()
+                          << std::chrono::duration<double, std::micro>(t_start-t_start0).count()
                           << " us" << std::endl;
+                t_start0 = t_start;
             }
         }
 
-        //rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
+        rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
         if(passedV)
         {
             char s[1024];
@@ -252,7 +254,7 @@ int main (int argc, char *argv[])
             xseq = 0;
             evnt_sz = 0;
             ++evnt_num;
-//            t_end = std::chrono::high_resolution_clock::now();
+            t_end = std::chrono::high_resolution_clock::now();
 //            ltncy_mn *= (evnt_num-1)/evnt_num; //incremental formula
 //            ltncy_mn += std::chrono::duration<double, std::micro>(t_end-t_start).count()/evnt_num; //incremental formula
 
@@ -266,6 +268,11 @@ int main (int argc, char *argv[])
 
 
     } while(evnt_num < num_evnts);
+
 //    std::cout << "Mean Latency: " << ltncy_mn << '\n';
+
+    rs.close();
+    rslg.close();
+
     return 0;
 }
