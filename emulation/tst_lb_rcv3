@@ -1,7 +1,7 @@
 #!/bin/bash
 #set -x
 evnt_num=$1
-evnt_sz=$2 
+did_sz=$2 
 t=$(mktemp) 
 ../emulation/tst_lb_rcv1 $evnt_num > $t
 t1=$(mktemp) 
@@ -19,14 +19,14 @@ echo ' '
 echo -n "Port count for incorrect event size: " 
 for i in $(seq 17750 17765) 
     do 
-        grep $i $t1|grep "Event_size: $evnt_sz "|wc -l 
+        grep $i $t1|grep "Event_size: $did_sz "|wc -l 
     done|grep -v $evnt_num|wc -l
 echo ' '
 echo -n "Number of missing/incorrect did stream sizes: "
 ndss=$(for i in $(seq 17750 17765)
     do 
-        grep $i $t1|grep "Event_size: $evnt_sz "
-    done|grep $evnt_sz|wc -l)
+        grep $i $t1|grep "Event_size: $did_sz "
+    done|grep $did_sz|wc -l)
 echo $((16*$evnt_num - $ndss))
 echo ' '
 echo $t $t1
@@ -45,11 +45,16 @@ for i in $(seq 17750 17765)
     do 
         echo -n  "Num event sizes for $i :"
         grep $i $t1
-    done|grep -v $evnt_sz|wc -l
+    done|grep -v $did_sz|wc -l
 echo ' '
 echo -n "Num disc dids with incorrect size counts: "
-ls -lt  /tmp/rs*|grep -v log|cut -f5 -d ' '|grep -v  $(($evnt_sz*$evnt_num))|wc -l
-echo -n "Number of unique disc did checksums: "
-for f in /tmp/rs_?????
-    do sum $f
-    done|sort -n|uniq|wc -l
+ls -lt  /tmp/rs*|grep -v log|cut -f5 -d ' '|grep -v  $(($did_sz*$evnt_num))|wc -l
+#echo -n "Number of unique disc did checksums: "
+#for f in /tmp/rs_?????
+#    do sum $f
+#    done|sort -n|uniq|wc -l
+echo -n "Interval Moments: "
+td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | get_moments
+echo -n "Latency Moments: "
+cat $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | get_moments
+td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | gnuplot -p -e "set title 'Latency';p '-' u 1 w l"
