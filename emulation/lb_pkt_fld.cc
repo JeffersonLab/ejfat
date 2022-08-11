@@ -72,7 +72,7 @@ int main (int argc, char *argv[])
     uint16_t       data_id      = 0;      // RE data_id
     useconds_t     lb_dly       = 0;
     int64_t        mtu_pyld_sz  = max_pckt_sz;
-    int64_t        data_pyld_sz = mtu_pyld_sz - mdlen;
+    int64_t        data_pyld_sz = mtu_pyld_sz;
     size_t         evnt_sz      = 0;
 
 
@@ -110,7 +110,7 @@ int main (int argc, char *argv[])
         case 'm':
             mtu_pyld_sz = (size_t) atoi((const char *) optarg);
             mtu_pyld_sz = std::min(mtu_pyld_sz,max_pckt_sz);
-            data_pyld_sz = mtu_pyld_sz - mdlen;
+            data_pyld_sz = mtu_pyld_sz;
             passedM = true;
             fprintf(stdout, "-m %lu ", mtu_pyld_sz);
             break;
@@ -303,5 +303,21 @@ int main (int argc, char *argv[])
          
     // Convert to local time format and print to stdout
     if(passedV) fprintf ( stdout, "Today is %s", ctime(&now));
+
+    //dump buffer for inspection
+    ofstream rs;
+    char x[64];
+    sprintf(x,"/tmp/lbpf_%d",data_id);
+    rs.open(x,std::ios::binary | std::ios::out);
+    for(uint64_t i = 0; i < num_rpts; i++) {
+	int64_t bytes_to_send = evnt_sz;
+	while(bytes_to_send > 0) {
+            uint16_t nb = std::min(bytes_to_send,mtu_pyld_sz-mdlen);
+            rs.write((char*)&buffer[mdlen], nb);
+            bytes_to_send -= nb;
+        }
+    }
+    rs.close();
+
     return 0;
 }
