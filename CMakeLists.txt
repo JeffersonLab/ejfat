@@ -68,6 +68,7 @@ set(EXEC_FILES
         emulation/lb_emu.cc
         emulation/lb_rcv.cc
         emulation/pktzr_md.cc
+        emulation/lb_pkt_fld.cc
         )
 
 set(C_HEADER_FILES
