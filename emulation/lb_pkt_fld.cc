@@ -30,13 +30,13 @@ void   Usage(void)
         -6 Use IPV6 \n\
         -i destination address  \n\
         -p destination port  \n\
-        -t max_tick  \n\
+        -t num ticks  \n\
         -d data_id  \n\
         -l event delay in usec  \n\
         -m mtu size (default 9000)  \n\
         -n num repeats  \n\
         -v verbose mode (default is quiet)  \n\
-        -s event size (MB)  \n\
+        -s event size (B)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i\n";
