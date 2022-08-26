@@ -1257,7 +1257,9 @@ int main(int argc, char **argv) {
             supply->release(item);
         }
 //fprintf(stderr, "\n");
-        stats[0]->combinedBuffers++;
+        if (keepStats) {
+            stats[0]->combinedBuffers++;
+        }
     }
 
     return 0;
