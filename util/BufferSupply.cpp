@@ -236,7 +236,7 @@ namespace ejfat {
         catch (Disruptor::AlertException & ex) {
             std::cout << ex.message() << std::endl;
         }
-        printf("    bufSup: E\n");
+        printf("    bufSup: E, item ptr = %p\n", item.get());
 
         return item;
     }
