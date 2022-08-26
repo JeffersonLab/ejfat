@@ -1247,9 +1247,10 @@ fprintf(stderr, "pkt = s%d/%ld\n", i, packetTick);
             supply->release(item);
 fprintf(stderr, "pkt released\n");
         }
-fprintf(stderr, "EXITING\n");
+fprintf(stderr, "Next round of sources\n");
         stats[0]->combinedBuffers++;
     }
+    fprintf(stderr, "EXITING\n");
 
     return 0;
 }
