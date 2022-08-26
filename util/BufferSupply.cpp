@@ -218,21 +218,25 @@ namespace ejfat {
      */
     std::shared_ptr<BufferSupplyItem> BufferSupply::consumerGet() {
 
+        printf("    bufSup: 1\n");
         std::shared_ptr<BufferSupplyItem> item = nullptr;
 
         try  {
             // Only wait for read-volatile-memory if necessary ...
             if (availableConsumerSequence < nextConsumerSequence) {
+                printf("    bufSup: 2\n");
                 availableConsumerSequence = barrier->waitFor(nextConsumerSequence);
             }
 
             item = (*ringBuffer.get())[nextConsumerSequence];
+            printf("    bufSup: 3\n");
             item->setConsumerSequence(nextConsumerSequence++);
             item->setFromConsumerGet(true);
         }
         catch (Disruptor::AlertException & ex) {
             std::cout << ex.message() << std::endl;
         }
+        printf("    bufSup: E\n");
 
         return item;
     }
@@ -315,13 +319,14 @@ namespace ejfat {
 
 
     /**
-     * Used to tell that the consumer that the ring buffer item is ready for consumption.
-     * This may only be used in conjunction with {@link #get(int)}.
+     * Used to tell that the consumer that the ring buffer items are ready for consumption.
+     * This may only be used in conjunction with {@link #get(int32_t, std::shared_ptr<BufferSupplyItem>[])}.
      * Not sure if this method is thread-safe.
+     * @param n number of array items available for consumer's use.
      * @param items array of items available for consumer's use.
      */
     void BufferSupply::publish(int32_t n, std::shared_ptr<BufferSupplyItem> items[]) {
-        if (items == nullptr) return;
+        if (n < 1 || items == nullptr) return;
         ringBuffer->publish(items[0]->getProducerSequence(), items[n-1]->getProducerSequence());
     }
 

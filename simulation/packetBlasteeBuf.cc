@@ -890,7 +890,7 @@ static void *threadReadPackets(void *arg) {
 printf("Read pkt thd: got last 1\n");
             // Send packet to collecting thread
             pktSupply->publish(item);
-            printf("Read pkt thd: got last 2\n");
+printf("Read pkt thd: got last 2\n");
 
             if (takeStats) {
                 if (knowExpectedTick) {
@@ -922,7 +922,7 @@ printf("Read pkt thd: got last 1\n");
                 }
 #endif
             }
-            printf("Read pkt thd: got last 3\n");
+printf("Read pkt thd: got last 3\n");
 
             expectedTick = packetTick + tickPrescale;
 
@@ -932,8 +932,6 @@ printf("Read pkt thd: got last 1\n");
             //stats->acceptedBytes += bytesRead;
             stats->acceptedBytes += nBytes;
         }
-
-        printf("Read pkt thd: got last 4\n");
 
         prevTick = packetTick;
         prevSequence = sequence;
