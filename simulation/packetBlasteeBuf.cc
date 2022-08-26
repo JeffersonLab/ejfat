@@ -877,8 +877,10 @@ static void *threadReadPackets(void *arg) {
 
         if (packetLast) {
 
+printf("Read pkt thd: got last 1\n");
             // Send packet to collecting thread
             pktSupply->publish(item);
+            printf("Read pkt thd: got last 2\n");
 
             if (takeStats) {
                 if (knowExpectedTick) {
@@ -910,6 +912,7 @@ static void *threadReadPackets(void *arg) {
                 }
 #endif
             }
+            printf("Read pkt thd: got last 3\n");
 
             expectedTick = packetTick + tickPrescale;
 
@@ -920,6 +923,7 @@ static void *threadReadPackets(void *arg) {
             stats->acceptedBytes += nBytes;
         }
 
+        printf("Read pkt thd: got last 4\n");
 
         prevTick = packetTick;
         prevSequence = sequence;
@@ -1220,8 +1224,9 @@ int main(int argc, char **argv) {
             // Get reference to item's byte array (underlying itemBuf)
             buffer = reinterpret_cast<char *>(itemBuf->array());
             size_t bufCapacity = itemBuf->capacity();
-//            long packetTick = item->getUserLong();
-//fprintf(stderr, "s%d/%ld ", i, packetTick);
+
+            long packetTick = item->getUserLong();
+fprintf(stderr, "s%d/%ld ", i, packetTick);
 
             // ETC, ETC
 
