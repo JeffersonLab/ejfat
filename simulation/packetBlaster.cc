@@ -689,8 +689,9 @@ int main(int argc, char **argv) {
         // Fixed the BUFFER rate since data rates may vary between data sources, but
         // the # of buffers sent need to be identical between those sources.
         targetDataRate = bufRate * bufsize; // bytes/sec
-        // Don't send more than 2M consecutive bytes with no delays to avoid overwhelming UDP bufs
-        int64_t bytesToWriteAtOnce = 1000000;
+        // Don't send more than 1M consecutive bytes with no delays to avoid overwhelming UDP bufs
+        // Don't send more than 500k consecutive bytes with no delays to avoid overwhelming UDP bufs
+        int64_t bytesToWriteAtOnce = 500000;
         buffersAtOnce = bytesToWriteAtOnce / bufsize;
         countDown = buffersAtOnce;
 
