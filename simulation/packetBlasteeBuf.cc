@@ -1031,7 +1031,7 @@ int main(int argc, char **argv) {
             setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
             recvBufSize = 0;
             getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-            if (debug) fprintf(stderr, "UDP socket for source %d recv buffer = %d bytes\n", sourceIds[i], recvBufSize);
+            fprintf(stderr, "UDP socket for source %d recv buffer = %d bytes\n", sourceIds[i], recvBufSize);
 
             // Configure settings in address struct
             // Clear it out
