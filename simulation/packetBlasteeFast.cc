@@ -17,7 +17,7 @@
  * and over. It's also necessary to have the tick # changed in set increments.
  * Otherwise, it's impossible to know what was lost.</p>
  *
- * <p>This differs from packetBlaseeBuf. That program reads get a 9k buf from supply,
+ * <p>This differs from packetBlasteeBuf. That program reads get a 9k buf from supply,
  * fills it by reading UDP packet into it, then puts it back. A second thread
  * gets a big buf from another supply, then gets enough pkts from the packet supply
  * to build a full buffer there.</p>
