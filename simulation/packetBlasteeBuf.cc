@@ -1221,16 +1221,21 @@ int main(int argc, char **argv) {
 
         for (int i=0; i < sourceCount; i++) {
 
+            fprintf(stderr, "pkt 1%d\n", i);
             auto supply = supplies[i];
 
             //------------------------------------------------------
             // Get reassembled buffer
             //------------------------------------------------------
+            fprintf(stderr, "pkt 2\n");
             item = supply->consumerGet();
             // Get reference to item's ByteBuffer object
+            fprintf(stderr, "pkt 3\n");
             itemBuf = item->getBuffer();
             // Get reference to item's byte array (underlying itemBuf)
+            fprintf(stderr, "pkt 4\n");
             buffer = reinterpret_cast<char *>(itemBuf->array());
+            fprintf(stderr, "pkt 5\n");
             size_t bufCapacity = itemBuf->capacity();
 
             long packetTick = item->getUserLong();
@@ -1242,7 +1247,7 @@ fprintf(stderr, "pkt = s%d/%ld\n", i, packetTick);
             supply->release(item);
 fprintf(stderr, "pkt released\n");
         }
-//fprintf(stderr, "\n");
+fprintf(stderr, "EXITING\n");
         stats[0]->combinedBuffers++;
     }
 
