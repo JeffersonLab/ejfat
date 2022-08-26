@@ -598,12 +598,14 @@ static void *threadAssemble(void *arg) {
         //------------------------------------------------------
         // Get item (new buf) from supply for reassembled bufs
         //------------------------------------------------------
+printf("  Assembly thd: 1\n");
         item = supply->get();
         // Get reference to item's ByteBuffer object
         itemBuf = item->getClearedBuffer();
         // Get reference to item's byte array (underlying itemBuf)
         buffer = reinterpret_cast<char *>(itemBuf->array());
         size_t bufCapacity = itemBuf->capacity();
+        printf("  Assembly thd: 2\n");
 
         while (true) {
 
@@ -613,6 +615,7 @@ static void *threadAssemble(void *arg) {
             pktItem = pktSupply->consumerGet();
             // Get reference to item's byte array
             pktBuffer = reinterpret_cast<char *>(pktItem->getBuffer()->array());
+            printf("Assembly thd: 3\n");
 
             // Get the RE header data (stored in item)
             uint32_t *intArray = (uint32_t *) pktItem->getUserInts();
@@ -622,6 +625,7 @@ static void *threadAssemble(void *arg) {
             sequence     = intArray[4];
             nBytes       = (int)intArray[5];
             packetTick   = (uint64_t) pktItem->getUserLong();
+            printf("  Assembly thd: 4\n");
 
             if (packetFirst) {
                 putDataAt = buffer;
@@ -647,6 +651,7 @@ static void *threadAssemble(void *arg) {
 
             // Copy data into reassembly buffer
             memcpy(putDataAt, pktBuffer + HEADER_BYTES, nBytes);
+            printf("  Assembly thd: 5\n");
 
             // Release packet buffer back to supply for reuse
             pktSupply->release(pktItem);
@@ -687,13 +692,16 @@ static void *threadAssemble(void *arg) {
             if (debug)
                 fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
                         remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
+            printf("  Assembly thd: 6\n");
 
             // If very last packet, go to next reassembly buffer
             if (packetLast) {
 
+                printf("  Assembly thd: 7\n");
                 // Send the finished buffer to the next guy using circular buffer
                 item->setUserLong(packetTick);
                 supply->publish(item);
+                printf("  Assembly thd: 8\n");
 
                 // Finish up some stats
                 if (takeStats) {
