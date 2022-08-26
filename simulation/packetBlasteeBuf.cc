@@ -598,26 +598,21 @@ static void *threadAssemble(void *arg) {
         //------------------------------------------------------
         // Get item (new buf) from supply for reassembled bufs
         //------------------------------------------------------
-printf("  Assembly thd: 1\n");
         item = supply->get();
         // Get reference to item's ByteBuffer object
         itemBuf = item->getClearedBuffer();
         // Get reference to item's byte array (underlying itemBuf)
         buffer = reinterpret_cast<char *>(itemBuf->array());
         size_t bufCapacity = itemBuf->capacity();
-printf("  Assembly thd: 2\n");
 
         while (true) {
 
             //-------------------------------------------------------------
             // Get item contained packet previously read in by another thd
             //-------------------------------------------------------------
-printf("  Assembly thd: 2.1\n");
             pktItem = pktSupply->consumerGet();
-printf("  Assembly thd: 2.2\n");
             // Get reference to item's byte array
             pktBuffer = reinterpret_cast<char *>(pktItem->getBuffer()->array());
-printf("  Assembly thd: 3\n");
 
             // Get the RE header data (stored in item)
             uint32_t *intArray = (uint32_t *) pktItem->getUserInts();
@@ -627,7 +622,6 @@ printf("  Assembly thd: 3\n");
             sequence     = intArray[4];
             nBytes       = (int)intArray[5];
             packetTick   = (uint64_t) pktItem->getUserLong();
-printf("  Assembly thd: 4\n");
 
             if (packetFirst) {
                 putDataAt = buffer;
@@ -653,7 +647,6 @@ printf("  Assembly thd: 4\n");
 
             // Copy data into reassembly buffer
             memcpy(putDataAt, pktBuffer + HEADER_BYTES, nBytes);
-printf("  Assembly thd: 5\n");
 
             // Release packet buffer back to supply for reuse
             pktSupply->release(pktItem);
@@ -694,16 +687,13 @@ printf("  Assembly thd: 5\n");
             if (debug)
                 fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
                         remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
-printf("  Assembly thd: 6\n");
 
             // If very last packet, go to next reassembly buffer
             if (packetLast) {
 
-printf("  Assembly thd: 7\n");
                 // Send the finished buffer to the next guy using circular buffer
                 item->setUserLong(packetTick);
                 supply->publish(item);
-printf("  Assembly thd: 8\n");
 
                 // Finish up some stats
                 if (takeStats) {
@@ -887,10 +877,8 @@ static void *threadReadPackets(void *arg) {
 
         if (packetLast) {
 
-printf("Read pkt thd: got last 1\n");
             // Send packet to collecting thread
             pktSupply->publish(item);
-printf("Read pkt thd: got last 2\n");
 
             if (takeStats) {
                 if (knowExpectedTick) {
@@ -922,10 +910,8 @@ printf("Read pkt thd: got last 2\n");
                 }
 #endif
             }
-printf("Read pkt thd: got last 3\n");
 
             expectedTick = packetTick + tickPrescale;
-
         }
 
         if (takeStats) {
@@ -1221,36 +1207,30 @@ int main(int argc, char **argv) {
 
         for (int i=0; i < sourceCount; i++) {
 
-            fprintf(stderr, "pkt 1%d\n", i);
             auto supply = supplies[i];
 
             //------------------------------------------------------
             // Get reassembled buffer
             //------------------------------------------------------
-            fprintf(stderr, "pkt 2\n");
             item = supply->consumerGet();
             // Get reference to item's ByteBuffer object
-            fprintf(stderr, "pkt 3\n");
             itemBuf = item->getBuffer();
             // Get reference to item's byte array (underlying itemBuf)
-            fprintf(stderr, "pkt 4\n");
             buffer = reinterpret_cast<char *>(itemBuf->array());
-            fprintf(stderr, "pkt 5\n");
             size_t bufCapacity = itemBuf->capacity();
 
-            long packetTick = item->getUserLong();
-fprintf(stderr, "pkt = s%d/%ld\n", i, packetTick);
+//            long packetTick = item->getUserLong();
+//fprintf(stderr, "pkt = s%d/%ld ", i, packetTick);
 
             // ETC, ETC
 
             // Release buffer back to supply for reuse
             supply->release(item);
-fprintf(stderr, "pkt released\n");
         }
-fprintf(stderr, "Next round of sources\n");
-        stats[0]->combinedBuffers++;
+        if (keepStats) {
+            stats[0]->combinedBuffers++;
+        }
     }
-    fprintf(stderr, "EXITING\n");
 
     return 0;
 }
