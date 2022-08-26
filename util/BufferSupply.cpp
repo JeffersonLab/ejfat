@@ -218,25 +218,21 @@ namespace ejfat {
      */
     std::shared_ptr<BufferSupplyItem> BufferSupply::consumerGet() {
 
-        printf("    bufSup: 1\n");
         std::shared_ptr<BufferSupplyItem> item = nullptr;
 
         try  {
             // Only wait for read-volatile-memory if necessary ...
             if (availableConsumerSequence < nextConsumerSequence) {
-                printf("    bufSup: 2\n");
                 availableConsumerSequence = barrier->waitFor(nextConsumerSequence);
             }
 
             item = (*ringBuffer.get())[nextConsumerSequence];
-            printf("    bufSup: 3\n");
             item->setConsumerSequence(nextConsumerSequence++);
             item->setFromConsumerGet(true);
         }
         catch (Disruptor::AlertException & ex) {
             std::cout << ex.message() << std::endl;
         }
-        printf("    bufSup: E, item ptr = %p\n", item.get());
 
         return item;
     }
