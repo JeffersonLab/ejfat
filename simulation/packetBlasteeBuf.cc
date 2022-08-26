@@ -932,6 +932,7 @@ int main(int argc, char **argv) {
     // Set this to max expected data size
     int bufSize = 100000;
     int recvBufSize = 0;
+    int readRecvBufSize = 0;
     int tickPrescale = 1;
     uint16_t startingPort = 7777;
     int startingCore = -1;
@@ -1029,9 +1030,8 @@ int main(int argc, char **argv) {
             // Set & read back UDP receive buffer size
             socklen_t size = sizeof(int);
             setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-            recvBufSize = 0;
-            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-            fprintf(stderr, "UDP socket for source %d recv buffer = %d bytes\n", sourceIds[i], recvBufSize);
+            readRecvBufSize = 0;
+            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &readRecvBufSize, &size);
 
             // Configure settings in address struct
             // Clear it out
@@ -1064,8 +1064,8 @@ int main(int argc, char **argv) {
             // Set & read back UDP receive buffer size
             socklen_t size = sizeof(int);
             setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-            recvBufSize = 0;
-            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
+            readRecvBufSize = 0;
+            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &readRecvBufSize, &size);
 
             // Configure settings in address struct
             struct sockaddr_in serverAddr{};
@@ -1086,10 +1086,11 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "bind socket error\n");
                 return -1;
             }
-
-            fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes\n", (startingPort + i), recvBufSize);
-
         }
+
+        fprintf(stderr, "UDP socket for source %d: port %d, UDP recv buf = %d bytes\n",
+                sourceIds[i], (startingPort + i), readRecvBufSize);
+
 
         //---------------------------------------------------
         // Supply in which each buf holds one Jumbo packet (9kB).
