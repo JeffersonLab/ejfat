@@ -1234,12 +1234,13 @@ int main(int argc, char **argv) {
             size_t bufCapacity = itemBuf->capacity();
 
             long packetTick = item->getUserLong();
-fprintf(stderr, "s%d/%ld ", i, packetTick);
+fprintf(stderr, "pkt = s%d/%ld\n", i, packetTick);
 
             // ETC, ETC
 
             // Release buffer back to supply for reuse
             supply->release(item);
+fprintf(stderr, "pkt released\n");
         }
 //fprintf(stderr, "\n");
         stats[0]->combinedBuffers++;
