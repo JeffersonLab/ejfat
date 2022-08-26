@@ -159,6 +159,7 @@ int main (int argc, char *argv[])
         re_lstn_addr.sin_port = htons(re_lstn_prt); // "LB"
         re_lstn_addr.sin_addr.s_addr = inet_addr(re_lstn_ip); //indra-s2
         memset(re_lstn_addr.sin_zero, '\0', sizeof re_lstn_addr.sin_zero);
+//fprintf( stdout, "Receiving on port %hu / host %s", re_lstn_prt, re_lstn_ip);
 
         /*Bind socket with address struct*/
         bind(re_lstn_sckt, (struct sockaddr *) &re_lstn_addr, sizeof(re_lstn_addr));
@@ -192,6 +193,7 @@ int main (int argc, char *argv[])
             /* it is an INET address */
             dst_addr6[k].sin6_family = AF_INET6; 
             /* the port we are going to send to, in network byte order */
+//            fprintf( stdout, "sending to port %hu ", (uint16_t)(dst_prt + k));
             dst_addr6[k].sin6_port = htons(dst_prt+k);           // "LB" = 0x4c42 by spec (network order)
             /* the server IP address, in network byte order */
             inet_pton(AF_INET6, dst_ip, &dst_addr6[k].sin6_addr);  // LB address
@@ -210,6 +212,7 @@ int main (int argc, char *argv[])
             dst_addr[k].sin_port = htons(dst_prt+k); // data consumer port to send to
             dst_addr[k].sin_addr.s_addr = inet_addr(dst_ip); // data consumer
             memset(dst_addr[k].sin_zero, '\0', sizeof dst_addr[k].sin_zero);
+//            fprintf( stdout, "Sending to port %d / host %s", (dst_prt+k), dst_ip);
 
             // Initialize size variable to be used later on
             socklen_t addr_size = sizeof dst_addr[k];
@@ -273,7 +276,7 @@ int main (int argc, char *argv[])
                 exit(4);
             }
         } else {
-            if ((rtCd = sendto(dst_sckt[lb_entrp % nm_rcv_prts], &buffer[lblen], nBytes-lblen, 0, 
+            if ((rtCd = sendto(dst_sckt[lb_entrp % nm_rcv_prts], &buffer[lblen], nBytes-lblen, 0,
                     (struct sockaddr *)&dst_addr[lb_entrp % nm_rcv_prts], sizeof dst_addr[lb_entrp % nm_rcv_prts])) < 0) {
                 perror("sendto failed");
                 exit(4);
@@ -297,7 +300,7 @@ int main (int argc, char *argv[])
             time(&now);
          
             // Convert to local time format and print to stdout
-            fprintf ( stdout, "Today is %s", ctime(&now));
+        //    fprintf ( stdout, "Today is %s", ctime(&now));
     }
 
     return 0;
