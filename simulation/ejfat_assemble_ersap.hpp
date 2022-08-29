@@ -627,7 +627,6 @@ static inline uint64_t bswap_64(uint64_t x) {
             bool packetFirst, packetLast;
             bool dumpTick = false;
             bool firstReadForBuf = false;
-            bool tooLittleRoom = false;
             bool takeStats = stats != nullptr;
             bool veryFirstRead = true;
 
@@ -812,7 +811,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         if (debug) fprintf(stderr, "In first read, max bytes/packet = %lu\n", maxPacketBytes);
 
                         // Error check
-                        if (veryFirstRead && !packetFirst) {
+                        if (!packetFirst) {
                             fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
                             clearMap(outOfOrderPackets);
                             return BAD_FIRST_LAST_BIT;
@@ -857,11 +856,10 @@ static inline uint64_t bswap_64(uint64_t x) {
                             break;
                         }
 
-                        // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
-                        if (remainingLen < maxPacketBytes) {
-                            clearMap(outOfOrderPackets);
-                            return BUF_TOO_SMALL;
-                        }
+//                        // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
+//                        if (remainingLen < maxPacketBytes) {
+//                            return BUF_TOO_SMALL;
+//                        }
                     }
                     // If there were previous packets out-of-order, they may now be in order.
                     // If so, write them into buffer.
@@ -895,7 +893,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                 veryFirstRead = false;
 
-                if (packetLast || tooLittleRoom) {
+                if (packetLast) {
                     break;
                 }
             }
