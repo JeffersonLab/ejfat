@@ -667,13 +667,11 @@ int main(int argc, char **argv) {
                                              debug, &tick, &dataId, &stats,
                                              tickPrescale, outOfOrderPackets);
         if (nBytes < 0) {
-            if (debug) {
-                if (nBytes == BUF_TOO_SMALL) {
-                    fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
-                }
-                else {
-                    fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
-                }
+            if (nBytes == BUF_TOO_SMALL) {
+                fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
+            }
+            else {
+                fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
             }
             return (0);
         }

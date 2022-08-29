@@ -90,7 +90,7 @@ namespace ejfat {
         // Default MTU
         int mtu = 1500;
 
-        int sock = socket(PF_INET, SOCK_DGRAM, 0);
+        int sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
         struct ifreq ifr;
         strcpy(ifr.ifr_name, interfaceName);
         if (!ioctl(sock, SIOCGIFMTU, &ifr)) {
