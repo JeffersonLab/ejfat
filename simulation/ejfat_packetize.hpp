@@ -98,7 +98,7 @@ namespace ejfat {
             if (debug) fprintf(stderr, "ioctl says MTU = %d\n", mtu);
         }
         else {
-            if (debug) fprintf(stderr, "Using default MTU\n");
+            if (debug) fprintf(stderr, "cannot find MTU, try %d\n", mtu);
         }
         close(sock);
         return mtu;

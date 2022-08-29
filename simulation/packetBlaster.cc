@@ -545,9 +545,10 @@ int main(int argc, char **argv) {
     // Jumbo (> 1500) ethernet frames are 9000 bytes max.
     // Don't exceed this limit.
     if (mtu > 9000) {
-        fprintf(stderr, "Using MTU = 9000\n");
         mtu = 9000;
     }
+
+    fprintf(stderr, "Using MTU = %d\n", mtu);
 
     // 20 bytes = normal IPv4 packet header (60 is max), 8 bytes = max UDP packet header
     // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
