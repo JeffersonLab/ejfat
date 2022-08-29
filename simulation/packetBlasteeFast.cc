@@ -75,7 +75,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
@@ -83,6 +83,7 @@ static void printHelp(char *programName) {
             "        [-b <internal buffer byte size>]",
             "        [-r <UDP receive buffer byte size>]",
             "        [-f <file for stats>]",
+            "        [-dump (no thd to get & merge buffers)]",
             "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]",
             "        [-pinRead <starting core #, 1 for each read thd>]",
@@ -107,13 +108,15 @@ static void printHelp(char *programName) {
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
+ * @param keepStats     keep and printout stats.
+ * @param dump          don't have a thd which gets all buffers (for possible merging).
  * @param listenAddr    filled with IP address to listen on.
  * @param filename      filled with name of file in which to write stats.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
                       int *core, int *coreBuf, int *sourceIds, uint16_t* port,
-                      bool *debug, bool *useIPv6, bool *keepStats,
+                      bool *debug, bool *useIPv6, bool *keepStats, bool *dump,
                       char *listenAddr, char *filename) {
 
     int c, i_tmp;
@@ -127,6 +130,7 @@ static void parseArgs(int argc, char **argv,
                           {"pinBuf",  1, NULL, 4},
                           {"ids",  1, NULL, 5},
                           {"stats",  0, NULL, 6},
+                          {"dump",  0, NULL, 7},
                           {0,       0, 0,    0}
             };
 
@@ -294,6 +298,11 @@ static void parseArgs(int argc, char **argv,
             case 6:
                 // Keep stats
                 *keepStats = true;
+                break;
+
+            case 7:
+                // dump buffers without gathering into 1 thread
+                *dump = true;
                 break;
 
             case 'v':
@@ -506,6 +515,7 @@ typedef struct threadArg_t {
     int sourceId;
 
     bool debug;
+    bool dump;
 
     std::shared_ptr<packetRecvStats> stats;
 
@@ -758,6 +768,7 @@ static void *threadReadPackets(void *arg) {
     threadArg *tArg = (threadArg *) arg;
     std::shared_ptr<ejfat::BufferSupply> pktSupply = tArg->pktSupply;
     int udpSocket         = tArg->udpSocket;
+    bool dumpBufs         = tArg->dump;
     bool debug            = tArg->debug;
     auto stats            = tArg->stats;
     uint64_t expectedTick = tArg->expectedTick;
@@ -948,8 +959,12 @@ static void *threadReadPackets(void *arg) {
         }
 
         // Send buffer containing packets to assembly thread
-        pktSupply->publish(item);
-
+        if (dumpBufs) {
+            pktSupply->release(item);
+        }
+        else {
+            pktSupply->publish(item);
+        }
     }
 
 }
@@ -973,6 +988,7 @@ int main(int argc, char **argv) {
     bool keepStats = false;
     bool pinCores = false;
     bool pinBufCores = false;
+    bool dumpBufs = false;
 
 
     char listeningAddr[16];
@@ -985,7 +1001,7 @@ int main(int argc, char **argv) {
     }
 
     parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, &startingBufCore, sourceIds,
-              &startingPort, &debug, &useIPv6, &keepStats, listeningAddr, filename);
+              &startingPort, &debug, &useIPv6, &keepStats, &dumpBufs, listeningAddr, filename);
 
     pinCores = startingCore >= 0 ? true : false;
     pinBufCores = startingBufCore >= 0 ? true : false;
@@ -1152,6 +1168,7 @@ int main(int argc, char **argv) {
         tArg2->pktSupply  = pktSupply;
         tArg2->stats      = stats[i];
         tArg2->sourceId   = sourceIds[i];
+        tArg2->dump       = dumpBufs;
         tArg2->debug      = debug;
         if (pinBufCores) {
             tArg2->core = startingBufCore + i;
@@ -1237,24 +1254,31 @@ int main(int argc, char **argv) {
 
         for (int i=0; i < sourceCount; i++) {
 
-            auto supply = supplies[i];
+            if (dumpBufs) {
+                // sleep
+                sleep(1);
+            }
+            else {
 
-            //------------------------------------------------------
-            // Get reassembled buffer
-            //------------------------------------------------------
-            item = supply->consumerGet();
-            // Get reference to item's ByteBuffer object
-            itemBuf = item->getBuffer();
-            // Get reference to item's byte array (underlying itemBuf)
-            buffer = reinterpret_cast<char *>(itemBuf->array());
-            size_t bufCapacity = itemBuf->capacity();
-//            long packetTick = item->getUserLong();
-//fprintf(stderr, "s%d/%ld ", i, packetTick);
+                auto supply = supplies[i];
 
-            // ETC, ETC
+                //------------------------------------------------------
+                // Get reassembled buffer
+                //------------------------------------------------------
+                item = supply->consumerGet();
+                // Get reference to item's ByteBuffer object
+                itemBuf = item->getBuffer();
+                // Get reference to item's byte array (underlying itemBuf)
+                buffer = reinterpret_cast<char *>(itemBuf->array());
+                size_t bufCapacity = itemBuf->capacity();
+                //            long packetTick = item->getUserLong();
+                //fprintf(stderr, "s%d/%ld ", i, packetTick);
 
-            // Release buffer back to supply for reuse
-            supply->release(item);
+                // ETC, ETC
+
+                // Release buffer back to supply for reuse
+                supply->release(item);
+            }
         }
 //fprintf(stderr, "\n");
         if (keepStats) {
