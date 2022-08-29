@@ -539,12 +539,13 @@ int main(int argc, char **argv) {
     // Break data into multiple packets of max MTU size.
     // If the mtu was not set on the command line, get it progamatically
     if (mtu == 0) {
-        mtu = getMTU(interface, debug);
+        mtu = getMTU(interface, true);
     }
 
     // Jumbo (> 1500) ethernet frames are 9000 bytes max.
     // Don't exceed this limit.
     if (mtu > 9000) {
+        fprintf(stderr, "Using MTU = 9000\n");
         mtu = 9000;
     }
 
