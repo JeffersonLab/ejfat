@@ -556,10 +556,11 @@ static void *threadAssemble(void *arg) {
     threadArg *tArg = (threadArg *) arg;
     std::shared_ptr<ejfat::BufferSupply> supply = tArg->supply;
     std::shared_ptr<ejfat::BufferSupply> pktSupply = tArg->pktSupply;
-    bool debug   = tArg->debug;
-    auto stats   = tArg->stats;
-    int sourceId = tArg->sourceId;
-    int core     = tArg->core;
+    bool dumpBufs = tArg->dump;
+    bool debug    = tArg->debug;
+    auto stats    = tArg->stats;
+    int sourceId  = tArg->sourceId;
+    int core      = tArg->core;
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 2000;
@@ -734,7 +735,12 @@ static void *threadAssemble(void *arg) {
 
                 // Send the finished buffer to the next guy using circular buffer
                 item->setUserLong(packetTick);
-                supply->publish(item);
+                if (dumpBufs) {
+                    supply->release(item);
+                }
+                else {
+                    supply->publish(item);
+                }
 
                 // Finish up some stats
                 if (takeStats) {
@@ -768,7 +774,6 @@ static void *threadReadPackets(void *arg) {
     threadArg *tArg = (threadArg *) arg;
     std::shared_ptr<ejfat::BufferSupply> pktSupply = tArg->pktSupply;
     int udpSocket         = tArg->udpSocket;
-    bool dumpBufs         = tArg->dump;
     bool debug            = tArg->debug;
     auto stats            = tArg->stats;
     uint64_t expectedTick = tArg->expectedTick;
@@ -959,12 +964,7 @@ static void *threadReadPackets(void *arg) {
         }
 
         // Send buffer containing packets to assembly thread
-        if (dumpBufs) {
-            pktSupply->release(item);
-        }
-        else {
-            pktSupply->publish(item);
-        }
+        pktSupply->publish(item);
     }
 
 }
