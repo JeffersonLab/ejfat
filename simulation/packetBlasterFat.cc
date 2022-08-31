@@ -832,7 +832,7 @@ int main(int argc, char **argv) {
 
             // Try to increase send buf size - by default to 25 MB
             sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
-            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
+            setsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
 
 #endif
             sendBufBytes = 0; // clear it
@@ -863,7 +863,7 @@ int main(int argc, char **argv) {
 #ifdef __linux__
     {
             int val = IP_PMTUDISC_DO;
-            setsockopt(clientSocket, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+            setsockopt(clientSockets[i], IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
     }
 #endif
 
