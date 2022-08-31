@@ -540,7 +540,7 @@ static void *threadSendBuffer(void *arg) {
 
     std::shared_ptr<BufferSupplyItem> item;
     std::shared_ptr<ByteBuffer> itemBuf;
-    
+
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
@@ -790,7 +790,7 @@ int main(int argc, char **argv) {
 
             // Try to increase send buf size - by default to 25 MB
             sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
-            setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
+            setsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
 
 #endif
 
