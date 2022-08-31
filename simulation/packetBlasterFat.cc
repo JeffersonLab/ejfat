@@ -856,16 +856,17 @@ int main(int argc, char **argv) {
                 return err;
             }
         }
-    }
 
-
-    // set the don't fragment bit
+        // set the don't fragment bit
 #ifdef __linux__
-    {
+        {
             int val = IP_PMTUDISC_DO;
             setsockopt(clientSockets[i], IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
-    }
+        }
 #endif
+
+    }
+
 
     // Start thread to do rate printout
     pthread_t thd;
