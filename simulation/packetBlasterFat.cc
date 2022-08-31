@@ -540,30 +540,7 @@ static void *threadSendBuffer(void *arg) {
 
     std::shared_ptr<BufferSupplyItem> item;
     std::shared_ptr<ByteBuffer> itemBuf;
-
-#ifdef __linux__
-
-    if (core > -1) {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << core << "\n";
-        CPU_SET(core, &cpuset);
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-
-        if (takeStats) {
-            stats->cpuPkt = sched_getcpu();
-        }
-    }
-
-#endif
-
+    
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
@@ -910,7 +887,7 @@ int main(int argc, char **argv) {
 
     int pktsPerBuf = bufSize / maxUdpPayload;
     fprintf(stderr, "sending %d packets per buffer\n", (int)(std::ceil((double)bufSize / (double)maxUdpPayload)));
-    
+
     std::shared_ptr<ejfat::BufferSupply> supplies[socketCount];
 
     // Start threads to do buffer sending
