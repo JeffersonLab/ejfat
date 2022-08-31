@@ -305,6 +305,9 @@ namespace ejfat {
 
     /**
      * Make sure the buffer is the size needed.
+     * This method is dangerous -- definitely not thread safe!
+     * Use this method immediately upon getting this item from the supply
+     * and before the buffer is used.
      * If expanded, all data is <b>LOST</b>, so call this before writing data.
      * @param capacity minimum necessary size of buffer in bytes.
      * @return internal buffer, new object if capacity expanded, else current buffer as is.
