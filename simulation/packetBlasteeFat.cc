@@ -498,7 +498,7 @@ static void *rateThread(void *arg) {
 #endif
 
         }
-        
+
         printf("Combined:  Pkts>  %3.4g Hz,  %3.4g Avg  <Data>  %3.4g MB/s,  %3.4g Avg  <Drops>  %llu   %llu (total)\n\n",
                pktRateCombined, pktAvgRateCombined,
                dataRateCombined, dataAvgRateCombined,
@@ -601,7 +601,7 @@ static void *threadReassemble(void *arg) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        std::cerr << "Run assemble reading thd for source " <<  sourceId << " on core " << core << std::endl;
+        std::cerr << "Run assemble reading thd for source " <<  dataId << " on core " << core << std::endl;
         CPU_SET(core, &cpuset);
 
         pthread_t current_thread = pthread_self();
@@ -678,7 +678,7 @@ static void *threadReassemble(void *arg) {
 
 #ifdef __linux__
         if (loopCount-- < 1) {
-            cpu = sched_getcpu();
+            stats->cpuBuf = sched_getcpu();
             loopCount = cpuLoops;
         }
 #endif
