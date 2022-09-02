@@ -655,16 +655,16 @@ int main(int argc, char **argv) {
     int loopCount = cpuLoops;
 
     // Statistics
-    packetRecvStats stats;
+    std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
     dropped.store(0);
 
     while (true) {
 
-        clearStats(&stats);
+        clearStats(stats);
 
         // Fill with data
         nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                             debug, &tick, &dataId, &stats,
+                                             debug, &tick, &dataId, stats,
                                              tickPrescale, outOfOrderPackets);
         if (nBytes < 0) {
             if (nBytes == BUF_TOO_SMALL) {
@@ -677,9 +677,9 @@ int main(int argc, char **argv) {
         }
 
         totalBytes   += nBytes;
-        totalPackets += stats.acceptedPackets;
+        totalPackets += stats->acceptedPackets;
         // atomic
-        dropped += stats.droppedPackets;
+        dropped += stats->droppedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
