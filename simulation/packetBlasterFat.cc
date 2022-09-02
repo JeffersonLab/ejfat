@@ -9,11 +9,13 @@
 
 
 /**
- * <p>
- * @file Send a single data buffer (full of random data) repeatedly
- * to an ejfat router (FPGA-based or simulated) which then passes it
- * to the receiving program packetBlastee.cc.
- * </p>
+ * @file
+ * In conjunction with packetBlasteeFat, this program seeks to increase the bandwidth
+ * between a UDP sender and receiver by using 2 UDP sockets. Buffers sent by this blaster
+ * alternate in round-robin form from one socket to the other.
+ * The blastee will read and assemble buffers in 1 thread for each socket.
+ * These are used by a 3rd thread which alternates getting buffers between both
+ * receiving threads.
  */
 
 
@@ -60,7 +62,7 @@ static void printHelp(char *programName) {
             "        [-ver <version>]",
             "        [-id <data id>]",
             "        [-pro <protocol>]",
-            "        [-e <entropy>]",
+            "        [-e <starting entropy>]",
             "        [-b <buffer size>]",
             "        [-brate <buffers sent per sec>]",
             "        [-s <UDP send buffer size>]",
@@ -479,6 +481,7 @@ typedef struct threadArg_t {
     uint32_t delayCounter;
     uint32_t tickPrescale;
     int maxUdpPayload;
+    int streams;
 
     bool debug;
     bool dump;
@@ -516,12 +519,17 @@ static void *threadSendBuffer(void *arg) {
     uint32_t delayCounter  = tArg->delayCounter;
     int maxUdpPayload      = tArg->maxUdpPayload;
     int sendNoCopy         = tArg->sendNoCopy;
+    int streams            = tArg->streams;
     bool bufDelay          = tArg->bufDelay;
     bool setBufRate        = tArg->setBufRate;
     uint32_t bufRate       = tArg->bufRate;
     size_t bufSize         = tArg->bufSize;
     uint32_t bufferDelay   = tArg->bufferDelay;
     uint32_t tickPrescale  = tArg->tickPrescale;
+
+    fprintf(stderr,
+            "sending thd: id = %d, tick = %lld, streams = %d, entropy = %d\n",
+            sourceId, tick, streams, entropy);
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 10000;
@@ -552,6 +560,7 @@ static void *threadSendBuffer(void *arg) {
     int64_t elapsed, microSecItShouldTake;
     struct timespec t1, t2;
     int64_t excessTime, lastExcessTime = 0, targetDataRate, buffersAtOnce, countDown;
+
 
     if (setBufRate) {
         // Fixed the BUFFER rate since data rates may vary between data sources, but
@@ -584,7 +593,6 @@ static void *threadSendBuffer(void *arg) {
         // Get reference to item's byte array (underlying itemBuf)
         buffer = reinterpret_cast<char *>(itemBuf->array());
         size_t bufCapacity = itemBuf->capacity();
-
 
         // If we're sending buffers at a constant rate AND we've sent the entire bunch
         if (setBufRate && countDown-- <= 0) {
@@ -659,7 +667,7 @@ static void *threadSendBuffer(void *arg) {
         totalBytes   += bufSize;
         totalPackets += packetsSent;
         offset = 0;
-        tick += tickPrescale;
+        tick += tickPrescale * streams;
     }
 
 }
@@ -896,11 +904,7 @@ int main(int argc, char **argv) {
     for (int i=0; i < socketCount; i++) {
 
         int ringSize = 1024;
-        std::shared_ptr<ejfat::BufferSupply> supply =
-                std::make_shared<ejfat::BufferSupply>(ringSize, bufSize, ByteOrder::ENDIAN_LOCAL, true);
-
-        // Store locally too
-        supplies[i] = supply;
+        supplies[i] = std::make_shared<ejfat::BufferSupply>(ringSize, bufSize, ByteOrder::ENDIAN_LOCAL, true);
 
         threadArg *tArg2 = (threadArg *) calloc(1, sizeof(threadArg));
         if (tArg2 == NULL) {
@@ -909,10 +913,10 @@ int main(int argc, char **argv) {
         }
 
         tArg2->udpSocket     = clientSockets[i];
-        tArg2->bufSupply     = supply;
+        tArg2->bufSupply     = supplies[i];
         tArg2->sourceId      = dataId + i;
         tArg2->debug         = debug;
-        tArg2->tick          = tick;
+        tArg2->tick          = tick + i;
         tArg2->protocol      = protocol;
         tArg2->entropy       = entropy + i;
         tArg2->version       = version;
@@ -928,39 +932,35 @@ int main(int argc, char **argv) {
         tArg2->bufSize       = bufSize;
         tArg2->bufferDelay   = bufferDelay;
         tArg2->tickPrescale  = tickPrescale;
+        tArg2->streams       = socketCount;
 
-        status = pthread_create(&thds[i], NULL, threadSendBuffer, (void *) nullptr);
+        status = pthread_create(&thds[i], NULL, threadSendBuffer, (void *) tArg2);
         if (status != 0) {
             fprintf(stderr, "\n ******* error creating thread\n\n");
             return -1;
         }
     }
 
-
     char *buffer;
-
     std::shared_ptr<BufferSupplyItem> item;
     std::shared_ptr<ByteBuffer> itemBuf;
 
-    int senderIndex = 0;
-
-
     while (true) {
 
-        //------------------------------------------------------
-        // Get item (new buf) from supply for reassembled bufs
-        //------------------------------------------------------
-        item = supplies[senderIndex]->get();
-        // Get reference to item's ByteBuffer object
-        itemBuf = item->getClearedBuffer();
-        // Get reference to item's byte array (underlying itemBuf)
-        buffer = reinterpret_cast<char *>(itemBuf->array());
-        size_t bufCapacity = itemBuf->capacity();
+        for (int i=0; i < socketCount; i++) {
+            // Get item (new buf) from supply for reassembled bufs
+            item = supplies[i]->get();
+            // Get reference to item's ByteBuffer object
+            itemBuf = item->getClearedBuffer();
+            // Get reference to item's byte array (underlying itemBuf)
+            buffer = reinterpret_cast<char *>(itemBuf->array());
+            size_t bufCapacity = itemBuf->capacity();
 
-        // Fill buffer here with real data if this was an actual application
+            // Fill buffer here with real data if this was an actual application
 
-        // Place it back into supply for consumer
-        supplies[senderIndex]->publish(item);
+            // Place it back into supply for consumer
+            supplies[i]->publish(item);
+        }
     }
 
     return 0;
