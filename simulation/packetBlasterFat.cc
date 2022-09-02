@@ -50,7 +50,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-sendnocp]",
             "        [-bufdelay] (delay between each buffer, not packet)",
@@ -63,6 +63,7 @@ static void printHelp(char *programName) {
             "        [-id <data id>]",
             "        [-pro <protocol>]",
             "        [-e <starting entropy>]",
+            "        [-streams <# of underlying udp sockets>]",
             "        [-b <buffer size>]",
             "        [-brate <buffers sent per sec>]",
             "        [-s <UDP send buffer size>]",
@@ -83,7 +84,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t* tick, uint32_t* delay,
                       uint32_t *bufSize, uint32_t *bufRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
-                      int *cores,
+                      int *cores, int *streams,
                       bool *debug, bool *sendnocp,
                       bool *useIPv6, bool *bufDelay,
                       char* host, char *interface) {
@@ -107,6 +108,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"bufdelay",  0, NULL, 12},
              {"cores",  1, NULL, 13},
              {"brate",  1, NULL, 14},
+             {"streams",  1, NULL, 15},
              {0,       0, 0,    0}
             };
 
@@ -294,6 +296,18 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -brate, brate > 0\n");
+                    exit(-1);
+                }
+                break;
+
+            case 15:
+                // Number of UDP sockets to use underneath
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *streams = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -streams, must be > 0\n");
                     exit(-1);
                 }
                 break;
@@ -705,12 +719,13 @@ int main(int argc, char **argv) {
         cores[i] = -1;
     }
 
-    // Fat pipe of 2 sockets
+    // Fat pipe of 2 sockets as default
     int socketCount = 2;
     int socketIndex = 0;
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufSize, &bufRate, &sendBufSize, &delayPrescale, &tickPrescale, cores, &debug, &sendnocp,
+              &delay, &bufSize, &bufRate, &sendBufSize, &delayPrescale, &tickPrescale,
+              cores, &socketCount, &debug, &sendnocp,
               &useIPv6, &bufDelay, host, interface);
 
 #ifdef __linux__
