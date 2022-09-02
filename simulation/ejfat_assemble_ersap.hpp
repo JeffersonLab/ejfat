@@ -539,7 +539,6 @@ static inline uint64_t bswap_64(uint64_t x) {
             int bytesRead = recvfrom(udpSocket, pkt, 9100, 0, NULL, NULL);
             if (bytesRead < 0) {
                 if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
-
                 return(RECV_MSG);
             }
 
@@ -588,11 +587,18 @@ static inline uint64_t bswap_64(uint64_t x) {
          *     there are never out-of-order packets.</li>
          * </ul>
          * </p>
-         *
+         * <p>
          * This routine uses recvfrom to read in packets, but minimizes the copying of data
          * by copying as much data as possible, directly to dataBuf. This involves storing
          * what temporarily gets overwritten by a RE header and then restoring it once the
          * read of a packet is complete.
+         *</p>
+         *
+         * <p>
+         * A note on statistics. The raw counts are <b>ADDED</b> to what's already
+         * in the stats structure. It's up to the user to clear stats before calling
+         * this method if desired.
+         * </p>
          *
          * @param dataBuf           place to store assembled packets.
          * @param bufLen            byte length of dataBuf.
@@ -616,7 +622,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          */
         static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
                                                    bool debug, uint64_t *tick, uint16_t *dataId,
-                                                   packetRecvStats *stats, uint32_t tickPrescale,
+                                                   std::shared_ptr<packetRecvStats> stats, uint32_t tickPrescale,
                                                    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
 
             int64_t  prevTick = -1, firstTick = -1;
@@ -644,7 +650,8 @@ static inline uint64_t bswap_64(uint64_t x) {
             struct timespec now;
 
 
-            if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
+            if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu, take stats = %d, %p\n",
+                               remainingLen, takeStats, stats.get());
 
             while (true) {
 
@@ -754,7 +761,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 prevTick = packetTick;
                 prevSequence = sequence;
 
-                if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
+if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
                                    nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
 
                 // Check to see if packet is out-of-sequence
@@ -823,16 +830,17 @@ static inline uint64_t bswap_64(uint64_t x) {
                         return BAD_FIRST_LAST_BIT;
                     }
 
-                    if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
-                                       remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
+                    if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s, OUTofOrder = %lu\n",
+                                       remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast),
+                                       outOfOrderPackets.size());
 
                     // If no stored, out-of-order packets ...
                     if (outOfOrderPackets.empty()) {
                         // If very last packet, quit
                         if (packetLast) {
-
                             // Finish up some stats
                             if (takeStats) {
+                                uint32_t droppedTicks = 0;
                                 if (knowExpectedTick) {
                                     int64_t diff = packetTick - expectedTick;
                                     if (diff % tickPrescale != 0) {
@@ -843,15 +851,18 @@ static inline uint64_t bswap_64(uint64_t x) {
                                         return INTERNAL_ERROR;
                                     }
                                     else {
-                                        stats->droppedTicks = diff / tickPrescale;
-//printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
+                                        droppedTicks = diff / tickPrescale;
+                                        //printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
                                     }
                                 }
 
                                 // Total microsec to read buffer
-                                stats->readTime = stats->endTime - stats->startTime;
-                                stats->acceptedPackets = sequence + 1;
-                                stats->droppedPackets = stats->droppedTicks * (sequence + 1);
+                                stats->readTime += stats->endTime - stats->startTime;
+                                stats->acceptedBytes += totalBytesRead;
+                                stats->acceptedPackets += sequence + 1;
+//fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, sequence);
+                                stats->droppedTicks   += droppedTicks;
+                                stats->droppedPackets += droppedTicks * (sequence + 1);
                             }
                             break;
                         }
