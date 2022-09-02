@@ -268,18 +268,18 @@ static void *thread(void *arg) {
     int64_t packetsRead=0, byteCount=0, totalBytes=0, totalPackets=0;
     uint16_t dataId;
 
-    packetRecvStats stats;
+    std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
 
     while (true) {
 
         // Get buffer from supply
         auto item = supply->get();
         std::shared_ptr<ByteBuffer> buf = item->getClearedBuffer();
-        clearStats(&stats);
+        clearStats(stats);
 
         // Fill with data
         ssize_t nBytes = getCompletePacketizedBuffer((char *)buf->array(), bufSize, udpSocket,
-                                                      debug, &tick, &dataId, &stats, tickPrescale,
+                                                      debug, &tick, &dataId, stats, tickPrescale,
                                                       outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) {
@@ -293,8 +293,8 @@ static void *thread(void *arg) {
             return (NULL);
         }
 
-        if (stats.droppedPackets != 0) {
-            fprintf(stderr, "Dropped at least %llu packets\n", stats.droppedPackets);
+        if (stats->droppedPackets != 0) {
+            fprintf(stderr, "Dropped at least %llu packets\n", stats->droppedPackets);
         }
 
         // Send it to consumer
@@ -305,7 +305,7 @@ static void *thread(void *arg) {
         supply->publish(item);
 
 //        byteCount   += nBytes;
-//        packetsRead += stats.acceptedPackets;
+//        packetsRead += stats->acceptedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
