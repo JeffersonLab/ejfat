@@ -638,7 +638,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
             bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
 
-            int  version, nBytes, bytesRead;
+            int  version, nBytes, bytesRead, packetCount = 0;
             uint16_t packetDataId;
             size_t  maxPacketBytes = 0;
             ssize_t totalBytesRead = 0;
@@ -703,6 +703,8 @@ static inline uint64_t bswap_64(uint64_t x) {
                     memcpy(writeHeaderAt, headerStorage, HEADER_BYTES);
                 }
 
+                packetCount++;
+
                 // This if-else statement is what enables the packet reading/parsing to keep
                 // up an input rate that is too high (causing dropped packets) and still salvage
                 // some of what is coming in.
@@ -720,6 +722,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         //printf("S %llu - %u\n", packetTick, sequence);
                         putDataAt = dataBuf;
                         remainingLen = bufLen;
+                        packetCount = 0;
                         veryFirstRead = true;
                         continue;
                     }
@@ -744,6 +747,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         remainingLen = bufLen;
                         veryFirstRead = true;
                         expectedSequence = 0;
+                        packetCount = 0;
                         dumpTick = true;
                         prevSequence = sequence;
                         //printf("Dump %hu, %llu - %u\n", packetDataId, packetTick, sequence);
@@ -860,7 +864,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
 //                                stats->readTime += stats->endTime - stats->startTime;
                                 stats->acceptedBytes += totalBytesRead;
                                 stats->acceptedPackets += sequence + 1;
-//fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, sequence);
+fprintf(stderr, "        accepted pkts = %llu, pkt count = %d, seq = %u\n", stats->acceptedPackets, packetCount, sequence);
                                 stats->droppedTicks   += droppedTicks;
                                 stats->droppedPackets += droppedTicks * (sequence + 1);
                             }
