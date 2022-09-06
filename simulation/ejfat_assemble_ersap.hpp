@@ -541,6 +541,11 @@ static inline uint64_t bswap_64(uint64_t x) {
                 if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                 return(RECV_MSG);
             }
+            else if (bytesRead == 0 && bufLen > 0) {
+                // Something clearly wrong. There should be SOME data returned.
+                fprintf(stderr, "recvfrom(): buf too small? won't read in last bit of data\n");
+                return BUF_TOO_SMALL;
+            }
 
             if (bufLen < bytesRead) {
                 return(BUF_TOO_SMALL);
@@ -670,6 +675,12 @@ static inline uint64_t bswap_64(uint64_t x) {
                         clearMap(outOfOrderPackets);
                         return nBytes;
                     }
+                    else if (nBytes == 0 && remainingLen > 0) {
+                        // Something clearly wrong. There should be SOME data returned.
+                        fprintf(stderr, "recvfrom(): buf too small? won't read in last bit of data\n");
+                        clearMap(outOfOrderPackets);
+                        return BUF_TOO_SMALL;
+                    }
 
 //                    if (takeStats) {
 //                        clock_gettime(CLOCK_MONOTONIC, &now);
@@ -686,10 +697,17 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // Read data right into final buffer (including RE header)
                     bytesRead = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
                     if (bytesRead < 0) {
-                        fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
+                        fprintf(stderr, "recvfrom() failed: %s\n", strerror(errno));
                         clearMap(outOfOrderPackets);
                         return(RECV_MSG);
                     }
+                    else if (bytesRead == 0 && remainingLen > 0) {
+                        // Something clearly wrong. There should be SOME data returned.
+                        fprintf(stderr, "recvfrom(): buf too small? won't read in last bit of data\n");
+                        clearMap(outOfOrderPackets);
+                        return BUF_TOO_SMALL;
+                    }
+
                     nBytes = bytesRead - HEADER_BYTES;
 
                     // Parse header
