@@ -489,7 +489,6 @@ static void *rateThread(void *arg) {
 #else
             printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n",
                    dataRate, dataAvgRate, stats[i]->builtBuffers);
-            printf("     Data:    %llu byteCount,  %llu currTotalBytes\n", byteCount, currTotalBytes[i]);
 
             if (writeToFile) {
                 fprintf(fp, "%lld,%d,%d,%d,%lld,%lld\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
@@ -499,6 +498,8 @@ static void *rateThread(void *arg) {
 #endif
 
         }
+
+        printf("     Data:    %llu byteCount,  %llu currTotalBytes\n", byteCount, currTotalBytes[i]);
 
         printf("Combined:  Pkts>  %3.4g Hz,  %3.4g Avg  <Data>  %3.4g MB/s,  %3.4g Avg  <Drops>  %llu   %llu (total)\n\n",
                pktRateCombined, pktAvgRateCombined,
