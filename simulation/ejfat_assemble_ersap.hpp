@@ -666,10 +666,10 @@ static inline uint64_t bswap_64(uint64_t x) {
                         return nBytes;
                     }
 
-                    if (takeStats) {
-                        clock_gettime(CLOCK_MONOTONIC, &now);
-                        stats->startTime = 1000000L * now.tv_sec + now.tv_nsec/1000L; // microseconds
-                    }
+//                    if (takeStats) {
+//                        clock_gettime(CLOCK_MONOTONIC, &now);
+//                        stats->startTime = 1000000L * now.tv_sec + now.tv_nsec/1000L; // microseconds
+//                    }
 
                     veryFirstRead = false;
                 }
@@ -690,14 +690,14 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // Parse header
                     parseReHeader(writeHeaderAt, &version, &packetFirst, &packetLast, &packetDataId, &sequence, &packetTick);
 
-                    if (takeStats && packetLast) {
-                        // This may or may not be the actual last packet.
-                        // (A whole buffer may have been dropped after last received packet.)
-                        // So, for now, just record time in interest of getting a good time value.
-                        // This may be overwritten later if it turns out we had some dropped packets.
-                        clock_gettime(CLOCK_MONOTONIC, &now);
-                        stats->endTime = 1000000L * now.tv_sec + now.tv_nsec/1000L;
-                    }
+//                    if (takeStats && packetLast) {
+//                        // This may or may not be the actual last packet.
+//                        // (A whole buffer may have been dropped after last received packet.)
+//                        // So, for now, just record time in interest of getting a good time value.
+//                        // This may be overwritten later if it turns out we had some dropped packets.
+//                        clock_gettime(CLOCK_MONOTONIC, &now);
+//                        stats->endTime = 1000000L * now.tv_sec + now.tv_nsec/1000L;
+//                    }
 
                     // Replace what was written over
                     memcpy(writeHeaderAt, headerStorage, HEADER_BYTES);
@@ -857,7 +857,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                                 }
 
                                 // Total microsec to read buffer
-                                stats->readTime += stats->endTime - stats->startTime;
+//                                stats->readTime += stats->endTime - stats->startTime;
                                 stats->acceptedBytes += totalBytesRead;
                                 stats->acceptedPackets += sequence + 1;
 //fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, sequence);
