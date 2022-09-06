@@ -871,6 +871,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                             }
                             break;
                         }
+if (remainingLen < 1) fprintf(stderr, "        remaining len = %llu\n", remainingLen);
                     }
                     // If there were previous packets out-of-order, they may now be in order.
                     // If so, write them into buffer.
