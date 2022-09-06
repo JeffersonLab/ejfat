@@ -392,8 +392,11 @@ static void *thread(void *arg) {
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:    %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %llu, total %llu\n\n",
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %llu, total %llu\n",
                dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
+
+        printf(" Data:    %llu byteCount,  %llu currTotalBytes\n\n", byteCount, currTotalBytes);
+
 
         if (writeToFile) {
             fprintf(fp, "%lld,%d,%d,%lld,%lld,%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
