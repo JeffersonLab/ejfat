@@ -687,7 +687,7 @@ int main(int argc, char **argv) {
 
         if (ten-- > 0) {
             fprintf(stderr, "nBytes = %llu, bufSize = %d, acc bytes = %llu, pkts = %llu\n", nBytes, bufSize,
-                    stats->acceptedPackets, stats->acceptedPackets );
+                    stats->acceptedBytes, stats->acceptedPackets );
         }
 
         // atomic
