@@ -681,12 +681,14 @@ int main(int argc, char **argv) {
             return (0);
         }
 
-        if (ten-- > 0) {
-            fprintf(stderr, "nBytes = %lld, bufSize = %d\n", nBytes, bufSize);
-        }
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;
+
+        if (ten-- > 0) {
+            fprintf(stderr, "nBytes = %lld, bufSize = %d, pkets = %llu\n", nBytes, bufSize,stats->acceptedPackets );
+        }
+
         // atomic
         dropped += stats->droppedPackets;
 
