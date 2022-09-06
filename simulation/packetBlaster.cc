@@ -657,6 +657,7 @@ int main(int argc, char **argv) {
     // roughly around 1MB.
     if (bufsize == 0) {
         bufsize = (1000000 / maxUdpPayload + 1) * maxUdpPayload;
+        fprintf(stderr, "internally settin buffer to %u bytes\n", bufsize);
     }
     //uint32_t bufsize = (10000 / maxUdpPayload + 1) * maxUdpPayload; // 10 KB buffers
 
