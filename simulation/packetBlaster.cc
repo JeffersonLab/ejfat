@@ -389,10 +389,11 @@ static void *thread(void *arg) {
 
     double rate, avgRate;
     int64_t totalT = 0, time;
-    struct timespec t1, t2;
+    struct timespec t1, t2, firstT;
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
+    firstT = t1;
 
     while (true) {
 
@@ -404,6 +405,8 @@ static void *thread(void *arg) {
 
         // Read time
         clock_gettime(CLOCK_MONOTONIC, &t2);
+        time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
+        totalT = (1000000L * (t2.tv_sec - firstT.tv_sec)) + ((t2.tv_nsec - firstT.tv_nsec)/1000L);
 
         currTotalBytes   = totalBytes;
         currTotalPackets = totalPackets;
@@ -413,7 +416,7 @@ static void *thread(void *arg) {
             if (currTotalPackets > 0) {
                 skipFirst = false;
             }
-            t1 = t2;
+            firstT = t1 = t2;
             totalT = totalBytes = totalPackets = 0;
             continue;
         }
@@ -425,14 +428,11 @@ static void *thread(void *arg) {
         // Reset things if #s rolling over
         if ( (byteCount < 0) || (totalT < 0) )  {
             totalT = totalBytes = totalPackets = 0;
-            t1 = t2;
+            firstT = t1 = t2;
             continue;
         }
 
         // Packet rates
-        time = 1000000L * (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec)/1000L;
-        totalT += time;
-
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
         printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %lld microsec\n", rate, avgRate, time);
@@ -443,7 +443,7 @@ static void *thread(void *arg) {
         // Must print out t to keep it from being optimized away
         printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
 
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+        t1 = t2;
     }
 
 
