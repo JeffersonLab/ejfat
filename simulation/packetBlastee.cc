@@ -661,6 +661,8 @@ int main(int argc, char **argv) {
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
     dropped.store(0);
 
+    int ten = 10;
+
     while (true) {
 
         clearStats(stats);
@@ -677,6 +679,10 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
             }
             return (0);
+        }
+
+        if (ten-- > 0) {
+            fprintf(stderr, "nBytes = %lld, bufSize = %d\n", nBytes, bufSize);
         }
 
         totalBytes   += nBytes;
