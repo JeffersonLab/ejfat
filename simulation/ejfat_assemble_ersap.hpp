@@ -701,16 +701,10 @@ static inline uint64_t bswap_64(uint64_t x) {
                         clearMap(outOfOrderPackets);
                         return(RECV_MSG);
                     }
-                    else if (bytesRead == 0 && remainingLen > 0) {
-                        // Something clearly wrong. There should be SOME data returned.
-                        fprintf(stderr, "recvfrom(): buf too small? won't read in last bit of data\n");
-                        clearMap(outOfOrderPackets);
-                        return BUF_TOO_SMALL;
-                    }
 
                     nBytes = bytesRead - HEADER_BYTES;
-                    if (nBytes == 0 && remainingLen > 0) {
-                        // Something clearly wrong. There should be SOME data returned.
+                    if (nBytes <= 0 && remainingLen > 0) {
+                        // Something clearly wrong. There should be SOME data besides header returned.
                         fprintf(stderr, "recvfrom(): BUF too small? won't read in last bit of data\n");
                         clearMap(outOfOrderPackets);
                         return BUF_TOO_SMALL;
