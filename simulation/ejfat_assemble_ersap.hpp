@@ -655,6 +655,11 @@ static inline uint64_t bswap_64(uint64_t x) {
 
             while (true) {
 
+                // Another packet of data will exceed buffer space, so quit
+                if (remainingLen < 1) {
+                    return BUF_TOO_SMALL;
+                }
+
                 if (veryFirstRead) {
                     // Read in one packet, return value does NOT include RE header
                     nBytes = readPacketRecvFrom(putDataAt, remainingLen, udpSocket,
@@ -866,11 +871,6 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                             }
                             break;
                         }
-
-//                        // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
-//                        if (remainingLen < maxPacketBytes) {
-//                            return BUF_TOO_SMALL;
-//                        }
                     }
                     // If there were previous packets out-of-order, they may now be in order.
                     // If so, write them into buffer.
