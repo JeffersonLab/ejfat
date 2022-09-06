@@ -709,6 +709,12 @@ static inline uint64_t bswap_64(uint64_t x) {
                     }
 
                     nBytes = bytesRead - HEADER_BYTES;
+                    if (nBytes == 0 && remainingLen > 0) {
+                        // Something clearly wrong. There should be SOME data returned.
+                        fprintf(stderr, "recvfrom(): BUF too small? won't read in last bit of data\n");
+                        clearMap(outOfOrderPackets);
+                        return BUF_TOO_SMALL;
+                    }
 
                     // Parse header
                     parseReHeader(writeHeaderAt, &version, &packetFirst, &packetLast, &packetDataId, &sequence, &packetTick);
@@ -824,7 +830,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                 }
 
                 while (true) {
-                    if (debug) fprintf(stderr, "\nPacket %u in proper order, last = %s\n", sequence, btoa(packetLast));
+                    if (debug) fprintf(stderr, "Packet %u in proper order, last = %s\n", sequence, btoa(packetLast));
 
                     // Packet was in proper order. Get ready to look for next in sequence.
                     putDataAt += nBytes;
@@ -853,7 +859,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                         return BAD_FIRST_LAST_BIT;
                     }
 
-                    if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s, OUTofOrder = %lu\n",
+                    if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s, OUTofOrder = %lu\n\n",
                                        remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast),
                                        outOfOrderPackets.size());
 
