@@ -686,7 +686,8 @@ int main(int argc, char **argv) {
         totalPackets += stats->acceptedPackets;
 
         if (ten-- > 0) {
-            fprintf(stderr, "nBytes = %lld, bufSize = %d, pkets = %llu\n", nBytes, bufSize,stats->acceptedPackets );
+            fprintf(stderr, "nBytes = %llu, bufSize = %d, acc bytes = %llu, pkts = %llu\n", nBytes, bufSize,
+                    stats->acceptedPackets, stats->acceptedPackets );
         }
 
         // atomic
