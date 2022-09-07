@@ -576,7 +576,7 @@ int main(int argc, char **argv) {
 #endif
         sendBufBytes = 0; // clear it
         getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
-        if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+        fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
         // Configure settings in address struct
         // Clear it out
@@ -614,7 +614,7 @@ int main(int argc, char **argv) {
 #endif
         sendBufBytes = 0; // clear it
         getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
-        if (debug) fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+        fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
         // Configure settings in address struct
         memset(&serverAddr, 0, sizeof(serverAddr));
