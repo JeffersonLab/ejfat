@@ -110,7 +110,7 @@
                 }
             }
 
-            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %llu\n",
+            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %" PRIu64 "\n",
                     idCount, endCondition.size(), tick);
             return true;
         }

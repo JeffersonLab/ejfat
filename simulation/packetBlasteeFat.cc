@@ -35,7 +35,7 @@
 #include <algorithm>
 #include <cstring>
 #include <errno.h>
-#include <cinttypes.h>
+#include <cinttypes>
 
 #include "BufferSupply.h"
 #include "BufferSupplyItem.h"
