@@ -499,9 +499,7 @@ static void *rateThread(void *arg) {
 #endif
         }
 
-
-
-        printf("Combined:  Pkts>  %3.4g Hz,  %3.4g Avg  <Data>  %3.4g MB/s,  %3.4g Avg  <Drops>  %llu   %llu (total)\n\n",
+        printf("Combined:  Pkts>  %3.4g Hz,  %3.4g Avg  <Data>  %3.4g MB/s,  %3.4g Avg  <Drops>  %" PRIu64 "   %" PRIu64 " (total)\n\n",
                pktRateCombined, pktAvgRateCombined,
                dataRateCombined, dataAvgRateCombined,
                droppedPacketsCombined, totalDroppedPacketsCombined);
