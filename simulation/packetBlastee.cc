@@ -14,6 +14,7 @@
  */
 
 #include <cstdlib>
+#include <iostream>
 #include <time.h>
 #include <thread>
 #include <cmath>
