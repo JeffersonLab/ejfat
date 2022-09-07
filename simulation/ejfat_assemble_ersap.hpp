@@ -149,7 +149,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             if (!prefix.empty()) {
                 fprintf(stderr, "%s: ", prefix.c_str());
             }
-            fprintf(stderr,  "bytes = %llu, pkts = %llu, dropped pkts = %llu, dropped ticks = %u\n",
+            fprintf(stderr,  "bytes = %" PRIu64 ", pkts = %" PRIu64 ", dropped pkts = %" PRIu64 ", dropped ticks = %u\n",
                          stats->acceptedBytes, stats->acceptedPackets, stats->droppedPackets, stats->droppedTicks);
          }
 
@@ -796,7 +796,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
                         clearMap(outOfOrderPackets);
-                        fprintf(stderr, "getPacketizedBuffer: already got seq %u, id %hu, t %llu\n", sequence, packetDataId, packetTick);
+                        fprintf(stderr, "getPacketizedBuffer: already got seq %u, id %hu, t %" PRIu64 "\n", sequence, packetDataId, packetTick);
                         return OUT_OF_ORDER;
                     }
 
