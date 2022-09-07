@@ -397,7 +397,7 @@ static void *thread(void *arg) {
                dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
 
         if (writeToFile) {
-            fprintf(fp, "%lld,%d,%d,%lld,%lld,%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
+            fprintf(fp, "%" PRId64 ",%d,%d,%" PRId64 ",%" PRId64 ",%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
                     droppedPkts, totalDroppedPkts, cpu);
             fflush(fp);
         }

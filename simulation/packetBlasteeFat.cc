@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cstring>
 #include <errno.h>
+#include <cinttypes.h>
 
 #include "BufferSupply.h"
 #include "BufferSupplyItem.h"
@@ -462,7 +463,7 @@ static void *rateThread(void *arg) {
                 printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
             }
             else {
-                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %llu\n",
+                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRIu64 "\n",
                        sourceIds[i], pktRate, pktAvgRate, droppedCount);
             }
 
@@ -482,7 +483,7 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, stats[i]->cpuPkt, stats[i]->cpuBuf, stats[i]->builtBuffers);
 
             if (writeToFile) {
-                fprintf(fp, "%lld,%d,%d,%d,%lld,%lld,%d,%d\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRIu64 ",%" PRIu64 ",%d,%d\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
                         droppedCount, currDroppedPackets[i], stats[i]->cpuPkt, stats[i]->cpuBuf);
                 fflush(fp);
             }
@@ -491,12 +492,11 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, stats[i]->builtBuffers);
 
             if (writeToFile) {
-                fprintf(fp, "%lld,%d,%d,%d,%lld,%lld\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRIu64 ",%" PRIu64 "\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
                         droppedCount, currDroppedPackets[i]);
                 fflush(fp);
             }
 #endif
-            printf("     Data:    %llu byteCount,  %llu currTotalBytes\n", byteCount, currTotalBytes[i]);
         }
 
 

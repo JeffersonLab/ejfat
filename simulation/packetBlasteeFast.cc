@@ -459,7 +459,7 @@ static void *rateThread(void *arg) {
                 printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
             }
             else {
-                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %llu\n",
+                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRIu64 "\n",
                        sourceIds[i], pktRate, pktAvgRate, droppedCount);
             }
 

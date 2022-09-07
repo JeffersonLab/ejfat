@@ -34,6 +34,7 @@
 #include <memory>
 #include <utility>
 #include <string>
+#include <cinttypes>
 
 #include "et.h"
 #include "et_fifo.h"
@@ -265,7 +266,7 @@
 
                     parseReHeader(packetBuffer, &version, &packetFirst, &packetLast, &dataId, &sequence, &tick);
                     if (debug) {
-                        fprintf(stderr, "\n\nPkt hdr: ver = %d, first = %s, last = %s, dataId = %hu, seq = %u, tick = %llu, nBytes = %d\n",
+                        fprintf(stderr, "\n\nPkt hdr: ver = %d, first = %s, last = %s, dataId = %hu, seq = %u, tick = %" PRIu64 ", nBytes = %d\n",
                                 version, btoa(packetFirst), btoa(packetLast), dataId, sequence, tick, nBytes);
                     }
 
@@ -285,7 +286,7 @@ if (debug) fprintf(stderr, "fifo entry already exists, look for id = %hu\n", dat
                             // Major error
                             throw std::runtime_error("too many source ids for data to be held in fifo entry");
                         }
- if (debug) fprintf(stderr, "  ev len = %llu, id = %d, hasData = %d\n", event->length, event->control[0], event->control[1]);
+ if (debug) fprintf(stderr, "  ev len = %" PRIu64 ", id = %d, hasData = %d\n", event->length, event->control[0], event->control[1]);
 
                         // Find the next expected sequence
                         expectedSequence = expSequence[{tick, dataId}];
@@ -355,7 +356,7 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         return BAD_FIRST_LAST_BIT;
                     }
 
-                    if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %llu, in packet #%d, last = %s, firstReadForBuf = %s\n",
+                    if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %" PRIu64 ", in packet #%d, last = %s, firstReadForBuf = %s\n",
                                        nBytes, dataId, tick, sequence, btoa(packetLast), btoa(firstReadForBuf));
 
                     // Check to see if packet is in sequence, if not ...
@@ -434,7 +435,7 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         // Since we have room and don't have all the last packets,
                         // check out-of-order packets for this tick and dataId
                         if (!outOfOrderPackets.empty()) {
-                            if (debug) fprintf(stderr, "We have stored packets, look for exp seq = %u, id = %hu, tick = %llu\n",
+                            if (debug) fprintf(stderr, "We have stored packets, look for exp seq = %u, id = %hu, tick = %" PRIu64 "\n",
                                                expectedSequence, dataId, tick);
 
                             // Create key (unique for every packet)
