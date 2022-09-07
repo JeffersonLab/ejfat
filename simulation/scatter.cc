@@ -23,6 +23,7 @@
 #include <cmath>
 #include <pthread.h>
 #include <unistd.h>
+#include <cinttypes.h>
 #include "ejfat_packetize.hpp"
 
 using namespace ejfat;
@@ -454,7 +455,7 @@ static void *rateThread(void *arg) {
 
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %lld microsec\n", rate, avgRate, time);
+        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %" PRId64 " microsec\n", rate, avgRate, time);
 
         // Actual Data rates (no header info)
         rate = ((double) byteCount) / time;
