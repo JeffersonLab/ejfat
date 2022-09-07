@@ -500,6 +500,7 @@ static void *rateThread(void *arg) {
         }
 
 
+
         printf("Combined:  Pkts>  %3.4g Hz,  %3.4g Avg  <Data>  %3.4g MB/s,  %3.4g Avg  <Drops>  %llu   %llu (total)\n\n",
                pktRateCombined, pktAvgRateCombined,
                dataRateCombined, dataAvgRateCombined,

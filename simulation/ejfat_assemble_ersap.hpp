@@ -1108,7 +1108,7 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
                         clearMap(outOfOrderPackets);
-                        fprintf(stderr, "    Already got seq %u, id %hu, t %llu\n", sequence, dataId, packetTick);
+                        fprintf(stderr, "    Already got seq %u, id %hu, t %" PRIu64 "\n", sequence, dataId, packetTick);
                         return OUT_OF_ORDER;
                     }
 

@@ -472,7 +472,7 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, stats[i]->cpuPkt, stats[i]->cpuBuf, stats[i]->builtBuffers);
 
             if (writeToFile) {
-                fprintf(fp, "%lld,%d,%d,%d,%lld,%lld,%d,%d\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRIu64 ",%" PRIu64 ",%d,%d\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
                         droppedCount, currDroppedPackets[i], stats[i]->cpuPkt, stats[i]->cpuBuf);
                 fflush(fp);
             }
@@ -481,11 +481,12 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, stats[i]->builtBuffers);
 
             if (writeToFile) {
-                fprintf(fp, "%lld,%d,%d,%d,%lld,%lld\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRIu64 ",%" PRIu64 "\n", totalMicroSec/1000000, sourceIds[i], (int)(pktRate/1000), (int)(dataRate),
                         droppedCount, currDroppedPackets[i]);
                 fflush(fp);
             }
 #endif
+
 
         }
         printf("     Combined Bufs:    %u\n\n", stats[0]->combinedBuffers);
