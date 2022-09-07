@@ -661,7 +661,8 @@ static inline uint64_t bswap_64(uint64_t x) {
             while (true) {
 
                 // Another packet of data will exceed buffer space, so quit
-                if (remainingLen < 1) {
+                if (remainingLen <= HEADER_BYTES) {
+                    fprintf(stderr, "getPacketizedBuffer: buffer too small\n");
                     return BUF_TOO_SMALL;
                 }
 
@@ -677,7 +678,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     }
                     else if (nBytes == 0 && remainingLen > 0) {
                         // Something clearly wrong. There should be SOME data returned.
-                        fprintf(stderr, "recvfrom(): buf too small? won't read in last bit of data\n");
+                        fprintf(stderr, "getPacketizedBuffer: buf too small? won't read in last bit of data\n");
                         clearMap(outOfOrderPackets);
                         return BUF_TOO_SMALL;
                     }
@@ -697,15 +698,16 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // Read data right into final buffer (including RE header)
                     bytesRead = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
                     if (bytesRead < 0) {
-                        fprintf(stderr, "recvfrom() failed: %s\n", strerror(errno));
+                        fprintf(stderr, "getPacketizedBuffer: recvfrom failed: %s\n", strerror(errno));
                         clearMap(outOfOrderPackets);
                         return(RECV_MSG);
                     }
 
                     nBytes = bytesRead - HEADER_BYTES;
+
                     if (nBytes <= 0 && remainingLen > 0) {
                         // Something clearly wrong. There should be SOME data besides header returned.
-                        fprintf(stderr, "recvfrom(): BUF too small? won't read in last bit of data\n");
+                        fprintf(stderr, "getPacketizedBuffer(): buf too small? won't read in last bit of data\n");
                         clearMap(outOfOrderPackets);
                         return BUF_TOO_SMALL;
                     }
@@ -794,14 +796,14 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
                         clearMap(outOfOrderPackets);
-                        fprintf(stderr, "    Already got seq %u, id %hu, t %llu\n", sequence, packetDataId, packetTick);
+                        fprintf(stderr, "getPacketizedBuffer: already got seq %u, id %hu, t %llu\n", sequence, packetDataId, packetTick);
                         return OUT_OF_ORDER;
                     }
 
                     // Set a limit on how much we're going to store (200 packets) while we wait
                     if (outOfOrderPackets.size() >= 200 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
                         clearMap(outOfOrderPackets);
-                        fprintf(stderr, "    Reached size limit of stored packets!\n");
+                        fprintf(stderr, "getPacketizedBuffer: reached size limit of stored packets!\n");
                         return OUT_OF_ORDER;
                     }
 
@@ -811,7 +813,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                     char *tempBuf = (char *) malloc(nBytes);
                     if (tempBuf == nullptr) {
                         clearMap(outOfOrderPackets);
-                        fprintf(stderr, "    Ran out of memory storing packets!\n");
+                        fprintf(stderr, "getPacketizedBuffer: ran out of memory storing packets!\n");
                         return OUT_OF_MEM;
                     }
                     memcpy(tempBuf, putDataAt, nBytes);
@@ -842,13 +844,13 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
 
                         // Error check
                         if (!packetFirst) {
-                            fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
+                            fprintf(stderr, "getPacketizedBuffer: expecting first bit to be set on very first read but wasn't\n");
                             clearMap(outOfOrderPackets);
                             return BAD_FIRST_LAST_BIT;
                         }
                     }
                     else if (packetFirst) {
-                        fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
+                        fprintf(stderr, "getPacketizedBuffer: expecting first bit NOT to be set on read but was\n");
                         clearMap(outOfOrderPackets);
                         return BAD_FIRST_LAST_BIT;
                     }
@@ -870,7 +872,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                                         // Error in the way we set things up
                                         // This should always be 0.
                                         clearMap(outOfOrderPackets);
-                                        fprintf(stderr, "    Using wrong value for tick prescale, %u\n", tickPrescale);
+                                        fprintf(stderr, "getPacketizedBuffer: using wrong value for tick prescale, %u\n", tickPrescale);
                                         return INTERNAL_ERROR;
                                     }
                                     else {
@@ -889,7 +891,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                             }
                             break;
                         }
-if (remainingLen < 1) fprintf(stderr, "        remaining len = %llu\n", remainingLen);
+if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remainingLen);
                     }
                     // If there were previous packets out-of-order, they may now be in order.
                     // If so, write them into buffer.
