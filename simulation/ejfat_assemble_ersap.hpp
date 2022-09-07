@@ -662,7 +662,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                 // Another packet of data will exceed buffer space, so quit
                 if (remainingLen <= HEADER_BYTES) {
-                    fprintf(stderr, "getPacketizedBuffer: buffer too small\n");
+                    fprintf(stderr, "getPacketizedBuffer: buffer too small, remaining len <= header\n");
                     return BUF_TOO_SMALL;
                 }
 
@@ -674,11 +674,12 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // If error
                     if (nBytes < 0) {
                         clearMap(outOfOrderPackets);
+fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         return nBytes;
                     }
                     else if (nBytes == 0 && remainingLen > 0) {
                         // Something clearly wrong. There should be SOME data returned.
-                        fprintf(stderr, "getPacketizedBuffer: buf too small? won't read in last bit of data\n");
+fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = 0, remainingLen = %zu\n", remainingLen);
                         clearMap(outOfOrderPackets);
                         return BUF_TOO_SMALL;
                     }
@@ -707,7 +708,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                     if (nBytes <= 0 && remainingLen > 0) {
                         // Something clearly wrong. There should be SOME data besides header returned.
-                        fprintf(stderr, "getPacketizedBuffer(): buf too small? won't read in last bit of data\n");
+fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         clearMap(outOfOrderPackets);
                         return BUF_TOO_SMALL;
                     }
