@@ -386,13 +386,13 @@ static void *thread(void *arg) {
             printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?\n", pktRate, pktAvgRate);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = " PRId64 "\n", pktRate, pktAvgRate, droppedPkts);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %" PRId64 "\n", pktRate, pktAvgRate, droppedPkts);
         }
 
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped " PRId64 ", total " PRId64 "\n\n",
+        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %" PRId64 ", total %" PRId64 "\n\n",
                dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
 
         if (writeToFile) {
