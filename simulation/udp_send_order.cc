@@ -423,7 +423,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        fprintf(stderr, "Sending offset = %u, tick = %llu\n", offset, tick);
+        fprintf(stderr, "Sending offset = %u, tick = %" PRIu64 "\n", offset, tick);
         err = sendPacketizedBufferFast(buf, nBytes, maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, dataId, &offset,
                                        delay, delayPrescale, &delayCounter,

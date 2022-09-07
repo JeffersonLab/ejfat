@@ -26,6 +26,7 @@
 #include <cerrno>
 #include <thread>
 #include <chrono>
+#include <cinttypes>
 
 
 #include <iostream>
@@ -294,7 +295,7 @@ static void *thread(void *arg) {
         }
 
         if (stats->droppedPackets != 0) {
-            fprintf(stderr, "Dropped at least %llu packets\n", stats->droppedPackets);
+            fprintf(stderr, "Dropped at least %" PRIu64 " packets\n", stats->droppedPackets);
         }
 
         // Send it to consumer

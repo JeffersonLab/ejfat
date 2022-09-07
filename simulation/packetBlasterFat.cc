@@ -25,6 +25,7 @@
 #include <thread>
 #include <pthread.h>
 #include <iostream>
+#include <cinttypes>
 
 #include "BufferSupply.h"
 #include "BufferSupplyItem.h"
@@ -456,7 +457,7 @@ static void *thread(void *arg) {
         // Packet rates
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %lld microsec\n", rate, avgRate, time);
+        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %" PRId64 " microsec\n", rate, avgRate, time);
 
         // Actual Data rates (no header info)
         rate = ((double) byteCount) / time;
@@ -542,7 +543,7 @@ static void *threadSendBuffer(void *arg) {
     uint32_t tickPrescale  = tArg->tickPrescale;
 
     fprintf(stderr,
-            "sending thd: id = %d, tick = %lld, streams = %d, entropy = %d\n",
+            "sending thd: id = %d, tick = %" PRIu64 ", streams = %d, entropy = %d\n",
             sourceId, tick, streams, entropy);
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
@@ -589,7 +590,7 @@ static void *threadSendBuffer(void *arg) {
         // musec to write data at desired rate
         microSecItShouldTake = 1000000L * bytesToWriteAtOnce / targetDataRate;
         fprintf(stderr,
-                "packetBlaster: bytesToWriteAtOnce = %lld, targetDataRate = %lld, buffersAtOnce = %lld, microSecItShouldTake = %lld\n",
+                "packetBlaster: bytesToWriteAtOnce = %" PRId64 ", targetDataRate = %" PRId64 ", buffersAtOnce = %" PRId64 ", microSecItShouldTake = %" PRId64 "\n",
                 bytesToWriteAtOnce, targetDataRate, buffersAtOnce, microSecItShouldTake);
 
         // Start the clock
