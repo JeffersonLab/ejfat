@@ -662,7 +662,12 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                 // Another packet of data will exceed buffer space, so quit
                 if (remainingLen <= HEADER_BYTES) {
-                    fprintf(stderr, "getPacketizedBuffer: buffer too small, remaining len <= header\n");
+                    if (takeStats && stats->droppedPackets > 0) {
+                        fprintf(stderr, "getPacketizedBuffer: dropping packets?, remaining len <= header\n");
+                    }
+                    else {
+                        fprintf(stderr, "getPacketizedBuffer: buffer too small?, remaining len <= header\n");
+                    }
                     return BUF_TOO_SMALL;
                 }
 
