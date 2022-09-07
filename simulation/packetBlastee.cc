@@ -14,7 +14,6 @@
  */
 
 #include <cstdlib>
-#include <iostream>
 #include <time.h>
 #include <thread>
 #include <cmath>
@@ -23,6 +22,7 @@
 #include <algorithm>
 #include <cstring>
 #include <errno.h>
+#include <cinttypes>
 
 #include "ejfat_assemble_ersap.hpp"
 
@@ -383,16 +383,16 @@ static void *thread(void *arg) {
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
         if (packetCount == 0 && droppedPkts == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?, time = %lld microsec\n", pktRate, pktAvgRate, time);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?\n", pktRate, pktAvgRate);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %llu, time = %lld microsec\n", pktRate, pktAvgRate, droppedPkts, time);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = " PRId64 "\n", pktRate, pktAvgRate, droppedPkts);
         }
 
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %llu, total %llu\n",
+        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped " PRId64 ", total " PRId64 "\n\n",
                dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
 
         if (writeToFile) {
