@@ -392,11 +392,8 @@ static void *thread(void *arg) {
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:    %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %llu, total %llu\n",
+        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %llu, total %llu\n",
                dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
-
-        printf(" Data:    %llu byteCount,  %llu currTotalBytes\n\n", byteCount, currTotalBytes);
-
 
         if (writeToFile) {
             fprintf(fp, "%lld,%d,%d,%lld,%lld,%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
@@ -661,8 +658,6 @@ int main(int argc, char **argv) {
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
     dropped.store(0);
 
-    int ten = 10;
-
     while (true) {
 
         clearStats(stats);
@@ -684,11 +679,6 @@ int main(int argc, char **argv) {
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;
-
-        if (ten-- > 0) {
-            fprintf(stderr, "nBytes = %llu, bufSize = %d, acc bytes = %llu, pkts = %llu\n", nBytes, bufSize,
-                    stats->acceptedBytes, stats->acceptedPackets );
-        }
 
         // atomic
         dropped += stats->droppedPackets;
