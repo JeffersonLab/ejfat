@@ -23,7 +23,7 @@
 #include <cmath>
 #include <pthread.h>
 #include <unistd.h>
-#include <cinttypes.h>
+#include <cinttypes>
 #include "ejfat_packetize.hpp"
 
 using namespace ejfat;
