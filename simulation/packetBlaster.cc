@@ -544,6 +544,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    std::cerr << "Initially running on cpu:" << sched_getcpu() << "\n";
+
     if (useFIFO || useRR) {
         // Using the actual pid will set priority of main thd.
         // Using 0 will set priority of calling thd.
