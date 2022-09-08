@@ -78,7 +78,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
-                      uint32_t *bufsize, uint32_t *bufRate, uint32_t *sendBufSize,
+                      uint64_t *bufsize, uint64_t *bufRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       int *cores,
                       bool *debug, bool *sendnocp,
@@ -144,9 +144,9 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
             case 'b':
                 // BUFFER SIZE
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 500) {
-                    *bufsize = i_tmp;
+                tmp = strtol(optarg, nullptr, 0);
+                if (tmp >= 500) {
+                    *bufsize = tmp;
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -b, buf size >= 500\n");
@@ -288,9 +288,9 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
             case 14:
                 // Buffers to be sent per second
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 0) {
-                    *bufRate = i_tmp;
+                tmp = strtol(optarg, nullptr, 0);
+                if (tmp > 0) {
+                    *bufRate = tmp;
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -brate, brate > 0\n");
@@ -384,7 +384,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
     // If we specify the buffer send rate, then all delays are removed
     if (*bufRate > 0) {
-        fprintf(stderr, "Buffer rate set to %u buffers/sec, all delays removed!\n", *bufRate);
+        fprintf(stderr, "Buffer rate set to %" PRIu64 " buffers/sec, all delays removed!\n", *bufRate);
         *bufDelay = false;
         *delayPrescale = 1;
         *delay = 0;
@@ -488,9 +488,9 @@ int main(int argc, char **argv) {
 
     uint32_t tickPrescale = 1;
     uint32_t delayPrescale = 1, delayCounter = 0;
-    uint32_t offset = 0, bufsize = 0, sendBufSize = 0;
+    uint32_t offset = 0, sendBufSize = 0;
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
-    uint32_t bufRate = 0;
+    uint64_t bufRate = 0L, bufsize = 0L;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 0;
     int cores[10];
@@ -744,7 +744,7 @@ int main(int argc, char **argv) {
     // roughly around 1MB.
     if (bufsize == 0) {
         bufsize = (1000000 / maxUdpPayload + 1) * maxUdpPayload;
-        fprintf(stderr, "internally setting buffer to %u bytes\n", bufsize);
+        fprintf(stderr, "internally setting buffer to %" PRIu64 " bytes\n", bufsize);
     }
     //uint32_t bufsize = (10000 / maxUdpPayload + 1) * maxUdpPayload; // 10 KB buffers
 
@@ -753,7 +753,7 @@ int main(int argc, char **argv) {
 
     char *buf = (char *) malloc(bufsize);
     if (buf == NULL) {
-        fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufsize);
+        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufsize);
         return -1;
     }
 
@@ -779,6 +779,9 @@ int main(int argc, char **argv) {
         // Fixed the BUFFER rate since data rates may vary between data sources, but
         // the # of buffers sent need to be identical between those sources.
         targetDataRate = bufRate * bufsize; // bytes/sec
+        fprintf(stderr,
+                "packetBlaster: bufRate = %" PRIu64 ", bufsize = %" PRIu64 ", targetDataRate = %" PRId64 "\n",
+                bufRate, bufsize, targetDataRate);
         // Don't send more than 1M consecutive bytes with no delays to avoid overwhelming UDP bufs
         // Don't send more than 500k consecutive bytes with no delays to avoid overwhelming UDP bufs
         int64_t bytesToWriteAtOnce = 500000;
