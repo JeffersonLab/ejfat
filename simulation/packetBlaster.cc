@@ -495,6 +495,7 @@ int main(int argc, char **argv) {
     uint64_t tick = 0;
     int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
+    int rtPriority = 0;
     uint16_t dataId = 1;
     bool debug = false, sendnocp = false;
     bool useIPv6 = false, bufDelay = false, setBufRate = false;
