@@ -773,25 +773,24 @@ int main(int argc, char **argv) {
     int64_t packetsSent=0;
     int64_t elapsed, microSecItShouldTake;
     struct timespec t1, t2;
-    int64_t excessTime, lastExcessTime = 0, targetDataRate, buffersAtOnce, countDown;
+    int64_t excessTime, lastExcessTime = 0, buffersAtOnce, countDown;
 
     if (setByteRate) {
         // Fixed the BUFFER rate since data rates may vary between data sources, but
         // the # of buffers sent need to be identical between those sources.
         bufRate = byteRate / bufSize;
-        fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", bufSize = %" PRIu64 ", data rate = %" PRId64 "\n",
+        fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
                 bufRate, bufSize, byteRate);
-        // Don't send more than 1M consecutive bytes with no delays to avoid overwhelming UDP bufs
         // Don't send more than 500k consecutive bytes with no delays to avoid overwhelming UDP bufs
         int64_t bytesToWriteAtOnce = 500000;
         buffersAtOnce = bytesToWriteAtOnce / bufSize;
         countDown = buffersAtOnce;
 
         // musec to write data at desired rate
-        microSecItShouldTake = 1000000L * bytesToWriteAtOnce / targetDataRate;
+        microSecItShouldTake = 1000000L * bytesToWriteAtOnce / byteRate;
         fprintf(stderr,
-                "packetBlaster: bytesToWriteAtOnce = %" PRId64 ", targetDataRate = %" PRId64 ", buffersAtOnce = %" PRId64 ", microSecItShouldTake = %" PRId64 "\n",
-                bytesToWriteAtOnce, targetDataRate, buffersAtOnce, microSecItShouldTake);
+                "packetBlaster: bytesToWriteAtOnce = %" PRId64 ", byteRate = %" PRId64 ", buffersAtOnce = %" PRId64 ", microSecItShouldTake = %" PRId64 "\n",
+                bytesToWriteAtOnce, byteRate, buffersAtOnce, microSecItShouldTake);
 
         // Start the clock
         clock_gettime(CLOCK_MONOTONIC, &t1);
