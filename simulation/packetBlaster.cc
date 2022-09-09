@@ -820,6 +820,7 @@ int main(int argc, char **argv) {
                     bufRate, bufSize, byteRate);
 
             buffersAtOnce = 500000 / bufSize;
+            if (buffersAtOnce  < 1) buffersAtOnce = 1;
             bytesToWriteAtOnce = buffersAtOnce * bufSize;
 
             free(buf);
