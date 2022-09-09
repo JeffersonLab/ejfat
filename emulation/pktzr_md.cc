@@ -158,11 +158,14 @@ int main (int argc, char *argv[])
         // Initialize size variable to be used later on
         socklen_t addr_size = sizeof dst_addr;
     }
+
+#ifdef __linux__
     // set the don't fragment bit
     {
         int val = IP_PMTUDISC_DO;
         setsockopt(dst_sckt, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
     }
+#endif
 //=======================================================================
     inet_pton(AF_INET6, dst_ip, &dst_addr6.sin6_addr);  // LB address
 
