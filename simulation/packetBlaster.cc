@@ -893,7 +893,7 @@ int main(int argc, char **argv) {
                 lastExcessTime = excessTime;
                 t1 = t2;
             }
-            countDown = buffersAtOnce;
+            countDown = buffersAtOnce - 1;
         }
 
         if (sendnocp) {
@@ -919,13 +919,13 @@ int main(int argc, char **argv) {
 
         // spin delay
 
-        // delay if any
-        if (bufDelay) {
-            if (--delayCounter < 1) {
-                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
-                delayCounter = delayPrescale;
-            }
-        }
+//        // delay if any
+//        if (bufDelay) {
+//            if (--delayCounter < 1) {
+//                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
+//                delayCounter = delayPrescale;
+//            }
+//        }
 
         totalBytes   += bufSize;
         totalPackets += packetsSent;
