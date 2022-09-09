@@ -777,6 +777,17 @@ int main(int argc, char **argv) {
         fprintf(stderr, "internally setting buffer to %" PRIu64 " bytes\n", bufSize);
     }
 
+    char *buf = (char *) malloc(bufSize);
+    if (buf == NULL) {
+        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufSize);
+        return -1;
+    }
+
+    std::srand(1);
+    for (int i=0; i < bufSize; i++) {
+        buf[i] = std::rand();
+    }
+
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
@@ -808,18 +819,31 @@ int main(int argc, char **argv) {
             fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
                     bufRate, bufSize, byteRate);
 
-            bytesToWriteAtOnce = (500000 / bufSize) * bufSize;
+            buffersAtOnce = 500000 / bufSize;
+            bytesToWriteAtOnce = buffersAtOnce * bufSize;
+
+            free(buf);
+            buf = (char *) malloc(bufSize);
+            if (buf == NULL) {
+                fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufSize);
+                return -1;
+            }
+
+            std::srand(1);
+            for (int i=0; i < bufSize; i++) {
+                buf[i] = std::rand();
+            }
         }
         else if (setBufRate) {
             // Fixed the BUFFER rate since data rates may vary between data sources, but
             // the # of buffers sent need to be identical between those sources.
             byteRate = bufRate * bufSize;
+            buffersAtOnce = bytesToWriteAtOnce / bufSize;
 
             fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
                     bufRate, bufSize, byteRate);
         }
-
-        buffersAtOnce = bytesToWriteAtOnce / bufSize;
+        
         countDown = buffersAtOnce;
 
         // musec to write data at desired rate
@@ -831,19 +855,6 @@ int main(int argc, char **argv) {
         // Start the clock
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
-
-
-    char *buf = (char *) malloc(bufSize);
-    if (buf == NULL) {
-        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufSize);
-        return -1;
-    }
-
-    std::srand(1);
-    for (int i=0; i < bufSize; i++) {
-        buf[i] = std::rand();
-    }
-
 
     while (true) {
 
@@ -874,6 +885,8 @@ int main(int argc, char **argv) {
                 lastExcessTime = excessTime - elapsed;
             }
             else {
+fprintf(stderr, "packetBlaster: PROBLEMS WITH DELAY\n");
+
                 // If we're here, it took longer to send buffers than required in order to meet the
                 // given buffer rate. So, it's likely that the specified rate is too high for this node.
                 // Record any excess previous sleep time so it can be compensated for in next go round
