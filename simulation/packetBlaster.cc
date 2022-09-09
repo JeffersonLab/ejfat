@@ -835,7 +835,7 @@ int main(int argc, char **argv) {
                 buf[i] = std::rand();
             }
         }
-        else if (setBufRate) {
+        else {
             // Fixed the BUFFER rate since data rates may vary between data sources, but
             // the # of buffers sent need to be identical between those sources.
             byteRate = bufRate * bufSize;
