@@ -794,8 +794,12 @@ int main(int argc, char **argv) {
         if (setByteRate) {
             // Fixed the BYTE rate when making performance measurements.
             bufRate = byteRate / bufSize;
+            fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %" PRId64 ", initial buf size = %" PRId64 "\n",
+                    byteRate, bufRate, bufSize);
             // In this case we may need to adjust the buffer size to get the exact data rate.
             bufSize = byteRate / bufRate;
+            fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %" PRId64 ", adjusted buf size = %" PRId64 "\n",
+                    byteRate, bufRate, bufSize);
         }
         else if (setBufRate) {
             // Fixed the BUFFER rate since data rates may vary between data sources, but
@@ -831,7 +835,7 @@ int main(int argc, char **argv) {
     for (int i=0; i < bufSize; i++) {
         buf[i] = std::rand();
     }
-    
+
 
     while (true) {
 
