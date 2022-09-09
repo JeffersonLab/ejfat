@@ -791,6 +791,10 @@ int main(int argc, char **argv) {
     int64_t excessTime, lastExcessTime = 0, buffersAtOnce, countDown;
 
     if (setByteRate || setBufRate) {
+
+        // Don't send more than about 500k consecutive bytes with no delays to avoid overwhelming UDP bufs
+        int64_t bytesToWriteAtOnce = 500000;
+
         if (setByteRate) {
             // Fixed the BYTE rate when making performance measurements.
             bufRate = byteRate / bufSize;
@@ -800,17 +804,21 @@ int main(int argc, char **argv) {
             bufSize = byteRate / bufRate;
             fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %" PRId64 ", adjusted buf size = %" PRId64 "\n",
                     byteRate, bufRate, bufSize);
+
+            fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
+                    bufRate, bufSize, byteRate);
+
+            bytesToWriteAtOnce = (500000 / bufSize + 1) * bufSize;
         }
         else if (setBufRate) {
             // Fixed the BUFFER rate since data rates may vary between data sources, but
             // the # of buffers sent need to be identical between those sources.
             byteRate = bufRate * bufSize;
+
+            fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
+                    bufRate, bufSize, byteRate);
         }
 
-        fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
-                bufRate, bufSize, byteRate);
-        // Don't send more than 500k consecutive bytes with no delays to avoid overwhelming UDP bufs
-        int64_t bytesToWriteAtOnce = 500000;
         buffersAtOnce = bytesToWriteAtOnce / bufSize;
         countDown = buffersAtOnce;
 
