@@ -435,7 +435,7 @@ static void *thread(void *arg) {
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
-    double rate, avgRate;
+    double rate, avgRate, totalRate, totalAvgRate;
     int64_t totalT = 0, time;
     struct timespec t1, t2, firstT;
 
@@ -485,11 +485,17 @@ static void *thread(void *arg) {
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
         printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %" PRId64 " microsec\n", rate, avgRate, time);
 
-        // Actual Data rates (no header info)
+        // Data rates (no header info)
         rate = ((double) byteCount) / time;
         avgRate = ((double) currTotalBytes) / totalT;
         // Must print out t to keep it from being optimized away
-        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n\n", rate, avgRate);
+        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n", rate, avgRate);
+
+        // Data rates (with header info)
+        totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
+        totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
+        printf(" Total:     %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
+
 
         t1 = t2;
     }
