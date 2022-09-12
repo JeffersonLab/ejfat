@@ -331,7 +331,7 @@ static void *thread(void *arg) {
     }
 
 
-    double pktRate, pktAvgRate, dataRate, dataAvgRate;
+    double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
     int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0;
     struct timespec t1, t2, firstT;
 
@@ -393,8 +393,12 @@ static void *thread(void *arg) {
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %" PRId64 ", total %" PRId64 "\n\n",
+        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %" PRId64 ", total %" PRId64 "\n",
                dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
+
+        totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
+        totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
+        printf(" Total:     %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
 
         if (writeToFile) {
             fprintf(fp, "%" PRId64 ",%d,%d,%" PRId64 ",%" PRId64 ",%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
