@@ -677,7 +677,7 @@ static void *threadReassemble(void *arg) {
         tick += tickPrescale * streams;
 
 #ifdef __linux__
-        if (loopCount-- < 1) {
+        if (takeStats && (loopCount-- < 1)) {
             stats->cpuBuf = sched_getcpu();
             loopCount = cpuLoops;
         }
