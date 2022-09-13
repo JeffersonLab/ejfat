@@ -122,7 +122,8 @@ static void parseArgs(int argc, char **argv,
                     *port = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
+                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -134,7 +135,8 @@ static void parseArgs(int argc, char **argv,
                     *bufSize = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -b, internal buf size >= 10kB\n");
+                    fprintf(stderr, "Invalid argument to -b, internal buf size >= 10kB\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -146,7 +148,8 @@ static void parseArgs(int argc, char **argv,
                     *recvBufSize = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -r, UDP recv buf size >= 220kB\n");
+                    fprintf(stderr, "Invalid argument to -r, UDP recv buf size >= 220kB\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -154,7 +157,8 @@ static void parseArgs(int argc, char **argv,
             case 'a':
                 // LISTENING IP ADDRESS
                 if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "listening IP address is bad\n");
+                    fprintf(stderr, "listening IP address is bad\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 strcpy(listenAddr, optarg);
@@ -163,7 +167,8 @@ static void parseArgs(int argc, char **argv,
             case 'f':
                 // output stat file
                 if (strlen(optarg) > 100 || strlen(optarg) < 1) {
-                    fprintf(stderr, "Output file name too long/short, %s\n", optarg);
+                    fprintf(stderr, "Output file name too long/short, %s\n\n", optarg);
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 strcpy(filename, optarg);
@@ -176,7 +181,8 @@ static void parseArgs(int argc, char **argv,
                     *tickPrescale = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n");
+                    fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -189,7 +195,8 @@ static void parseArgs(int argc, char **argv,
             case 3:
                 // Cores to run on
                 if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
 
@@ -230,7 +237,8 @@ static void parseArgs(int argc, char **argv,
                         errno = 0;
                         cores[index] = (int) strtol(s.c_str(), nullptr, 0);
                         if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
+                            printHelp(argv[0]);
                             exit(-1);
                         }
                         index++;
@@ -262,7 +270,8 @@ static void parseArgs(int argc, char **argv,
                     *rtPriority = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -pri, pri >= 1\n");
+                    fprintf(stderr, "Invalid argument to -pri, pri >= 1\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -398,7 +407,7 @@ static void *thread(void *arg) {
 
         totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
         totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
-        printf(" Total:     %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
+        printf(" Total:    %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
 
         if (writeToFile) {
             fprintf(fp, "%" PRId64 ",%d,%d,%" PRId64 ",%" PRId64 ",%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
