@@ -128,7 +128,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *tick = tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -t, tick > 0\n");
+                    fprintf(stderr, "Invalid argument to -t, tick > 0\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -140,7 +141,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *port = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
+                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -152,7 +154,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *bufSize = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -b, buf size >= 500\n");
+                    fprintf(stderr, "Invalid argument to -b, buf size >= 500\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -164,7 +167,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *sendBufSize = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -s, UDP send buf size >= 100kB\n");
+                    fprintf(stderr, "Invalid argument to -s, UDP send buf size >= 100kB\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -173,7 +177,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 // ENTROPY
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp < 0) {
-                    fprintf(stderr, "Invalid argument to -e. Entropy must be >= 0\n");
+                    fprintf(stderr, "Invalid argument to -e. Entropy must be >= 0\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 *entropy = i_tmp;
@@ -186,7 +191,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *delay = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -d, packet delay > 0\n");
+                    fprintf(stderr, "Invalid argument to -d, packet delay > 0\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -194,7 +200,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 'i':
                 // OUTGOING INTERFACE NAME / IP ADDRESS
                 if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "interface address is bad\n");
+                    fprintf(stderr, "interface address is bad\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 strcpy(interface, optarg);
@@ -204,7 +211,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 // MTU
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp < 100) {
-                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be > 100\n");
+                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be > 100\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 *mtu = i_tmp;
@@ -213,7 +221,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 2:
                 // DESTINATION HOST
                 if (strlen(optarg) >= INPUT_LENGTH_MAX) {
-                    fprintf(stderr, "Invalid argument to -host, host name is too long\n");
+                    fprintf(stderr, "Invalid argument to -host, host name is too long\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 strcpy(host, optarg);
@@ -223,7 +232,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 // VERSION
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp < 0 || i_tmp > 31) {
-                    fprintf(stderr, "Invalid argument to -ver. Version must be >= 0 and < 32\n");
+                    fprintf(stderr, "Invalid argument to -ver. Version must be >= 0 and < 32\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 *version = i_tmp;
@@ -233,7 +243,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 // DATA_ID
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp < 0 || i_tmp > 65535) {
-                    fprintf(stderr, "Invalid argument to -id. Id must be >= 0 and < 65536\n");
+                    fprintf(stderr, "Invalid argument to -id. Id must be >= 0 and < 65536\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 *id = i_tmp;
@@ -243,7 +254,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 // PROTOCOL
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp < 0) {
-                    fprintf(stderr, "Invalid argument to -pro. Protocol must be >= 0\n");
+                    fprintf(stderr, "Invalid argument to -pro. Protocol must be >= 0\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 *protocol = i_tmp;
@@ -262,7 +274,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *delayPrescale = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -dpre, dpre >= 1\n");
+                    fprintf(stderr, "Invalid argument to -dpre, dpre >= 1\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -274,7 +287,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *tickPrescale = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n");
+                    fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -296,7 +310,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *bufRate = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -brate, brate > 0\n");
+                    fprintf(stderr, "Invalid argument to -brate, brate > 0\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -308,7 +323,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *streams = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -streams, must be > 0\n");
+                    fprintf(stderr, "Invalid argument to -streams, must be > 0\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
@@ -316,7 +332,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 13:
                 // Cores to run on
                 if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
+                    printHelp(argv[0]);
                     exit(-1);
                 }
 
@@ -357,7 +374,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                         errno = 0;
                         cores[index] = (int) strtol(s.c_str(), nullptr, 0);
                         if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
+                            printHelp(argv[0]);
                             exit(-1);
                         }
                         index++;
