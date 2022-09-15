@@ -983,7 +983,7 @@ int main(int argc, char **argv) {
 //            if (bufDelay) {
 //                if (--delayCounter < 1) {
 //            std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
-            std::this_thread::sleep_for(std::chrono::microseconds(1000000));
+            std::this_thread::sleep_for(std::chrono::microseconds(500000));
 //                    delayCounter = delayPrescale;
 //                }
 //            }
