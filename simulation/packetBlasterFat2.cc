@@ -983,7 +983,6 @@ fprintf(stderr, "packetBlaster: elapsed = %lld, this excessT = %lld, last excess
 //            if (bufDelay) {
 //                if (--delayCounter < 1) {
 //            std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
-            std::this_thread::sleep_for(std::chrono::microseconds(500000));
 //                    delayCounter = delayPrescale;
 //                }
 //            }
