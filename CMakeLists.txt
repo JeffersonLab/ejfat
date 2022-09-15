@@ -134,6 +134,7 @@ set(SIM_EXEC_FILES
         simulation/packetBlaster.cc
         simulation/packetBlastee2.cc
         simulation/packetBlaster2.cc
+        simulation/packetBlasterFat2.cc
         )
 
 set(TEST_FILES
