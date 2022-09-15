@@ -924,8 +924,8 @@ int main(int argc, char **argv) {
             // Time yet needed in order for everything we've sent to be at the correct rate
             excessTime = microSecItShouldTake - elapsed + lastExcessTime;
 
-//fprintf(stderr, "packetBlaster: elapsed = %lld, this excessT = %lld, last excessT = %lld, buffers/sec = %llu\n",
-//        elapsed, (microSecItShouldTake - elapsed), lastExcessTime, buffersAtOnce*1000000/elapsed);
+fprintf(stderr, "packetBlaster: elapsed = %lld, this excessT = %lld, last excessT = %lld, buffers/sec = %llu\n",
+        elapsed, (microSecItShouldTake - elapsed), lastExcessTime, buffersAtOnce*1000000/elapsed);
 
             // Do we need to wait before sending the next bunch of buffers?
             if (excessTime > 0) {
@@ -996,7 +996,7 @@ int main(int argc, char **argv) {
 
             if (setRate && --countDown < 1) {
                 startingStream = (index + 1) % streams;
-                fprintf(stderr, "countdown = 0, starting stream = %d\n", startingStream);
+                fprintf(stderr, "countdown = %d, starting stream = %d\n", countDown, startingStream);
                 break;
             }
         }
