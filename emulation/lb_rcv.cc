@@ -1,7 +1,7 @@
 //       Reassembly Engine - Volkswagon  Quality
 //
 // reads binary from well known ip/port
-// writes reassembled binary data to stdout
+// writes reassembled binary data to disc
 
 #include <unistd.h>
 #include <stdio.h>
@@ -112,9 +112,11 @@ int main (int argc, char *argv[])
     ofstream rslg;
     char x[64];
     sprintf(x,"/tmp/rs_%d",lstn_prt);
+//  sprintf(x,"/nvme/goodrich/rs_%d",lstn_prt);   // on ejfat-fs
     rs.open(x,std::ios::binary | std::ios::out);
     char xlg[64];
     sprintf(xlg,"/tmp/rs_%d_log",lstn_prt);
+//  sprintf(xlg,"/nvme/goodrich/rs_%d_log",lstn_prt);
     rslg.open(xlg,std::ios::out);
 
 //===================== data reception setup ===================================
@@ -138,8 +140,8 @@ int main (int argc, char *argv[])
         // it wants to go before before reverting back to 787kB.
         recvBufSize = 7400000;
     #else
-        // By default set recv buf size to 25 MB
-        recvBufSize = 25000000;
+        // By default set recv buf size to 100 MB
+        recvBufSize = 100000000;
     #endif
         setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
 
@@ -164,6 +166,12 @@ int main (int argc, char *argv[])
         /* increase UDP receive buffer size */
         int recvBufSize = 25000000;
         setsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+        {
+            int recvBufSize1 = 0;
+            socklen_t optlen = sizeof(recvBufSize1);
+            getsockopt(lstn_sckt, SOL_SOCKET, SO_RCVBUF, &recvBufSize1, &optlen);
+            std::cout << "Rcv buffer size " << recvBufSize1 << " optlen " << optlen << '\n';
+        }
 
         /*Configure settings in address struct*/
         lstn_addr.sin_family = AF_INET;
