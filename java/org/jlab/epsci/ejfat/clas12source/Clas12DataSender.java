@@ -202,26 +202,29 @@ public class Clas12DataSender {
             reader.open(filename);
 
             Event event = new Event();
-            reader.nextEvent(event);
-            int evtLength = event.getEventBufferSize();
+            int counter = 0;
 
-            ByteBuffer eventBuffer = event.getEventBuffer();
-            eventBuffer.rewind();
+            while (reader.hasNext()) {
+                reader.nextEvent(event);
+                int evtLength = event.getEventBufferSize();
 
-            byte[] evt = new byte[evtLength];
-            eventBuffer.get(evt);
+                ByteBuffer eventBuffer = event.getEventBuffer();
+                eventBuffer.rewind();
 
-            ByteBuffer outBuffer = ByteBuffer.wrap(evt);
-            outBuffer.order(ByteOrder.LITTLE_ENDIAN);
-            outBuffer.rewind();
+                byte[] evt = new byte[evtLength];
+                eventBuffer.get(evt);
 
+                counter++;
+            }
+
+            System.out.println("File has " + counter + " events");
 
             int entropy = 0;
             boolean useConnectedSocket = true;
             int maxUdpPayload = 9000;
 
             // Create UDP socket
-            System.out.println("    DataChannel UDP out: create UDP sending socket");
+            System.out.println("create UDP sending socket");
             DatagramSocket outSocket = new DatagramSocket();
             // Implementation dependent send buffer size
             outSocket.setSendBufferSize(sendBufSize);
