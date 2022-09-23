@@ -30,6 +30,7 @@
 #include <cinttypes>
 #include <chrono>
 #include <thread>
+#include <system_error>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -370,10 +371,9 @@ namespace ejfat {
                 else {
                     // All other errors are unrecoverable
                     *packetsSent = sentPackets;
-                    if (errno == EBADF) {
-                        fprintf(stderr, "sendPacketizedBufferFast: getting EBADF from send\n");
+                    if (errno == EFAULT) {
+                        fprintf(stderr, "sendPacketizedBufferFast: An invalid user space address is specified for a paramete\n");
                     }
-                    perror("failing in send");
                     fprintf(stderr, "\nsendPacketizedBufferFast: errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
                 }
