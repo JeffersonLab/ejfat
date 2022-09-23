@@ -814,26 +814,26 @@ int main(int argc, char **argv) {
     hipo::event   event;
     //  char *buf;
     uint64_t totalBytes = 0L;
-    int avgBufBytes = 0;
+    int avgBufBytes = 115114;
 
     std::cerr << "Preparing to open file " <<  filename << std::endl;
     reader.open(filename);
 
-    int counter = 0;
+    int counter = 77159;
     int byteSize = 0;
-    int index = 0;
+//    int index = 0;
     uint32_t loops = repeats;
-
-    while(reader.next()) {
-        reader.read(event);
-
-        int bytes = 4*event.getSize();
-        //  printf("Event %d is siz e= %d\n", index++, bytes);
-        totalBytes += bytes;
-
-        counter++;
-    }
-    reader.gotoEvent(0);
+//
+//    while(reader.next()) {
+//        reader.read(event);
+//
+//        int bytes = 4*event.getSize();
+//        //  printf("Event %d is siz e= %d\n", index++, bytes);
+//        totalBytes += bytes;
+//
+//        counter++;
+//    }
+//    reader.gotoEvent(0);
 
     avgBufBytes = totalBytes / counter;
     printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
