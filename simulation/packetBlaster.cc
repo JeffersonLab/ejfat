@@ -577,7 +577,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cerr << "Initially running on cpu " << sched_getcpu() << "\n";
+    std::cerr << "Initially running on cpu " << sched_getcpu() <<
+                  ", useFIFO = " << btoa(useFIFO)  << ", useRR = " << btoa(useRR) << "\n";
 
     if (useFIFO || useRR) {
         // Using the actual pid will set priority of main thd.
