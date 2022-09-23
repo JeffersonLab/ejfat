@@ -370,6 +370,7 @@ namespace ejfat {
                 else {
                     // All other errors are unrecoverable
                     *packetsSent = sentPackets;
+                    fprintf(stderr, "\nsendPacketizedBufferFast: errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
                 }
             }

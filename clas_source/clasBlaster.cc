@@ -932,7 +932,6 @@ fprintf(stderr, "packetBlaster: read next event\n");
 
         if (err < 0) {
             // Should be more info in errno
-            EDESTADDRREQ;
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
             exit(1);
         }
