@@ -56,9 +56,12 @@ ls -lt  /nvme/goodrich/rs*|grep -v log|cut -f5 -d ' '|grep -v  $(($did_sz*$evnt_
 echo -n "Interval Moments: "
 #td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | get_moments
 cat $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | get_moments
-cat $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | gnuplot -p -e "set title 'Interval';p '-' u 1 w l" &
+#cat $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | gnuplot -p -e "set title 'Interval';p '-' u 1 w l" &
+cat $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g'>/tmp/junk; hstgrm /tmp/junk 300 10 'Interval' 700
 echo -n "Latency Moments: "
 #td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | gnuplot -p -e "set title 'Latency';p '-' u 1 w l"
 cat $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | get_moments
-cat $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | gnuplot -p -e "set title 'Latency';p '-' u 1 w l"
+#cat $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | gnuplot -p -e "set title 'Latency';p '-' u 1 w l"
+cat $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g'>/tmp/junk; hstgrm /tmp/junk 100 1 'Latency' 150
+#hstgrm <file> xHalfWidth hstCellWidth title xCenter
 
