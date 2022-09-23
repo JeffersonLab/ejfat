@@ -19,6 +19,7 @@
 
 #include <unistd.h>
 #include <cstdlib>
+#include <cstdint>
 #include <time.h>
 #include <cmath>
 #include <thread>
@@ -49,11 +50,11 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <filename>",
             "        [-r <# repeat read-file cycles>]",
-            "        [-h] [-v] [-ip6] [-sendnocp]",
+            "        [-h] [-v] [-ip6]",
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
@@ -64,9 +65,8 @@ static void printHelp(char *programName) {
             "        [-id <data id>]",
             "        [-pro <protocol>]",
             "        [-e <entropy>]",
-            "        [-b <buffer size>]",
             "        [-bufrate <buffers sent per sec>]",
-            "        [-byterate <bytes sent per sec>]",
+            "        [-bufsize <if setting bufrate, AVERAGE byte size of a single buffer>]",
             "        [-s <UDP send buffer size>]",
             "        [-fifo (Use SCHED_FIFO realtime scheduler for process - linux)]",
             "        [-rr (Use SCHED_RR realtime scheduler for process - linux)]",
@@ -85,12 +85,12 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
-                      uint64_t *bufSize, uint64_t *bufRate,
-                      uint64_t *byteRate, uint32_t *sendBufSize,
+                      uint64_t *bufRate,
+                      uint64_t *avgBufSize, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       uint32_t *repeats,
                       int *cores,
-                      bool *debug, bool *sendnocp,
+                      bool *debug,
                       bool *useIPv6, bool *bufDelay,
                       bool *useFIFO, bool *useRR,
                       char* host, char *interface, char *filename) {
@@ -106,21 +106,20 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ver",   1, NULL, 3},
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
-             {"sendnocp",  0, NULL, 8},
              {"dpre",  1, NULL, 9},
              {"tpre",  1, NULL, 10},
              {"ipv6",  0, NULL, 11},
              {"bufdelay",  0, NULL, 12},
              {"cores",  1, NULL, 13},
              {"bufrate",  1, NULL, 14},
-             {"byterate",  1, NULL, 15},
+             {"bufsize",  1, NULL, 15},
              {"fifo",  0, NULL, 16},
              {"rr",  0, NULL, 17},
              {0,       0, 0,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:s:e:f:r:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:s:e:f:r:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -171,19 +170,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
-            case 'b':
-                // BUFFER SIZE
-                tmp = strtol(optarg, nullptr, 0);
-                if (tmp >= 500) {
-                    *bufSize = tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -b, buf size >= 500\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
@@ -290,12 +276,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *protocol = i_tmp;
                 break;
 
-            case 8:
-                // use "send" to send UDP packets and copy data as little as possible
-                fprintf(stdout, "Use \"send\" with minimal copying data\n");
-                *sendnocp = true;
-                break;
-
             case 9:
                 // Delay prescale
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -334,12 +314,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
             case 14:
                 // Buffers to be sent per second
-                if (*byteRate > 0) {
-                    fprintf(stderr, "Cannot specify bufrate if byterate already specified\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-
                 tmp = strtol(optarg, nullptr, 0);
                 if (tmp > 0) {
                     *bufRate = tmp;
@@ -352,19 +326,13 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 break;
 
             case 15:
-                // Bytes to be sent per second
-                if (*bufRate > 0) {
-                    fprintf(stderr, "Cannot specify byterate if bufrate already specified\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-
+                // Avg # of Bytes in each buf to be sent if fixing buf rate
                 tmp = strtol(optarg, nullptr, 0);
-                if (tmp > 0) {
-                    *byteRate = tmp;
+                if (tmp < 1) {
+                    *avgBufSize = tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -byterate, byterate > 0\n\n");
+                    fprintf(stderr, "Invalid argument to -bufSize, must be > 0\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
@@ -459,8 +427,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
     }
 
     // If we specify the byte/buffer send rate, then all delays are removed
-    if (*byteRate > 0 || *bufRate) {
-        fprintf(stderr, "Byte rate set to %" PRIu64 " bytes/sec, all delays removed!\n", *byteRate);
+    if (*bufRate) {
+        fprintf(stderr, "Buf rate set to %" PRIu64 " bytes/sec, all delays removed!\n", *bufRate);
         *bufDelay = false;
         *delayPrescale = 1;
         *delay = 0;
@@ -570,18 +538,18 @@ int main(int argc, char **argv) {
 
     uint32_t tickPrescale = 1;
     uint32_t delayPrescale = 1, delayCounter = 0;
-    uint32_t offset = 0, sendBufSize = 0, repeats = 0;
+    uint32_t offset = 0, sendBufSize = 0, repeats = UINT32_MAX;
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
-    uint64_t bufRate = 0L, bufSize = 0L, byteRate = 0L;
+    uint64_t bufRate = 0L, avgBufSize = 0L;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 0;
     int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
     int rtPriority = 0;
     uint16_t dataId = 1;
-    bool debug = false, sendnocp = false;
+    bool debug = false;
     bool useIPv6 = false, bufDelay = false;
-    bool setBufRate = false, setByteRate = false;
+    bool setBufRate = false;
     bool useFIFO = false;
     bool useRR = false;
 
@@ -597,8 +565,8 @@ int main(int argc, char **argv) {
     }
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
-              &delayPrescale, &tickPrescale,  &repeats, cores, &debug, &sendnocp,
+              &delay, &bufRate, &avgBufSize, &sendBufSize,
+              &delayPrescale, &tickPrescale,  &repeats, cores, &debug,
               &useIPv6, &bufDelay, &useFIFO, &useRR, host, interface, filename);
 
 #ifdef __linux__
@@ -695,39 +663,6 @@ int main(int argc, char **argv) {
 
 #endif
 
-
-    // HIPO READING PART
-
-    hipo::reader  reader;
-
-    std::cerr << "Preparing to open file " <<  filename << std::endl;
-    reader.open(filename);
-
-    hipo::event event;
-    int counter = 0;
-
-    int index = 0;
-
-    while(reader.next()){
-        reader.read(event);
-
-        int byteSize = 4*event.getSize();
-        printf("Event %d is siz e= %d\n", index++, byteSize);
-
-        //event.getStructure(dataBank,30,1);
-        //dataBank.show();
-
-        //event.getStructure(PART);
-
-        counter++;
-    }
-    printf("processed events = %d\n",counter);
-
-
-
-
-    fprintf(stderr, "send = %s, sendnocp = %s\n", btoa(send), btoa(sendnocp));
-
     if (bufDelay) {
         packetDelay = 0;
         bufferDelay = delay;
@@ -737,10 +672,7 @@ int main(int argc, char **argv) {
         bufferDelay = 0;
     }
 
-    if (byteRate > 0) {
-        setByteRate = true;
-    }
-    else if (bufRate > 0) {
+    if (bufRate > 0) {
         setBufRate = true;
     }
 
@@ -859,26 +791,6 @@ int main(int argc, char **argv) {
 
     if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
-    // To avoid having file reads contaminate our performance measurements,
-    // place some data into a buffer and repeatedly read it.
-    // For most efficient use of UDP packets, make our buffer a multiple of maxUdpPayload,
-    // roughly around 1MB.
-    if (bufSize == 0) {
-        bufSize = (1000000 / maxUdpPayload + 1) * maxUdpPayload;
-        fprintf(stderr, "internally setting buffer to %" PRIu64 " bytes\n", bufSize);
-    }
-
-    char *buf = (char *) malloc(bufSize);
-    if (buf == NULL) {
-        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufSize);
-        return -1;
-    }
-
-    std::srand(1);
-    for (int i=0; i < bufSize; i++) {
-        buf[i] = std::rand();
-    }
-
     int err;
     bool firstBuffer = true;
     bool lastBuffer  = true;
@@ -891,50 +803,18 @@ int main(int argc, char **argv) {
     int64_t elapsed, microSecItShouldTake;
     struct timespec t1, t2;
     int64_t excessTime, lastExcessTime = 0, buffersAtOnce, countDown;
+    uint64_t byteRate = 0L;
 
-    if (setByteRate || setBufRate) {
-
+    if (setBufRate) {
         // Don't send more than about 500k consecutive bytes with no delays to avoid overwhelming UDP bufs
         int64_t bytesToWriteAtOnce = 500000;
 
-        if (setByteRate) {
-            // Fixed the BYTE rate when making performance measurements.
-            bufRate = byteRate / bufSize;
-            fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %" PRId64 ", initial buf size = %" PRId64 "\n",
-                    byteRate, bufRate, bufSize);
-            // In this case we may need to adjust the buffer size to get the exact data rate.
-            bufSize = byteRate / bufRate;
-            fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %" PRId64 ", adjusted buf size = %" PRId64 "\n",
-                    byteRate, bufRate, bufSize);
+        // Fixed the BUFFER rate since the # of buffers sent need to be identical between those sources
+        byteRate = bufRate * avgBufSize;
+        buffersAtOnce = bytesToWriteAtOnce / avgBufSize;
 
-            fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
-                    bufRate, bufSize, byteRate);
-
-            buffersAtOnce = 500000 / bufSize;
-            if (buffersAtOnce  < 1) buffersAtOnce = 1;
-            bytesToWriteAtOnce = buffersAtOnce * bufSize;
-
-            free(buf);
-            buf = (char *) malloc(bufSize);
-            if (buf == NULL) {
-                fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufSize);
-                return -1;
-            }
-
-            std::srand(1);
-            for (int i=0; i < bufSize; i++) {
-                buf[i] = std::rand();
-            }
-        }
-        else {
-            // Fixed the BUFFER rate since data rates may vary between data sources, but
-            // the # of buffers sent need to be identical between those sources.
-            byteRate = bufRate * bufSize;
-            buffersAtOnce = bytesToWriteAtOnce / bufSize;
-
-            fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
-                    bufRate, bufSize, byteRate);
-        }
+        fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", avg buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
+                bufRate, avgBufSize, byteRate);
 
         countDown = buffersAtOnce;
 
@@ -948,10 +828,39 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
+
+
+    // HIPO READING PART
+
+    hipo::reader  reader;
+    hipo::event   event;
+  //  char *buf;
+
+    std::cerr << "Preparing to open file " <<  filename << std::endl;
+    reader.open(filename);
+
+    int counter = 0;
+    int byteSize = 0;
+    int index = 0;
+    uint32_t loops = repeats;
+
+    while(reader.next()){
+        reader.read(event);
+
+        int byteSize = 4*event.getSize();
+        printf("Event %d is siz e= %d\n", index++, byteSize);
+
+        counter++;
+    }
+    printf("processed events = %d\n",counter);
+
+
+
+
     while (true) {
 
         // If we're sending buffers at a constant rate AND we've sent the entire bunch
-        if ((setByteRate || setBufRate) && countDown-- <= 0) {
+        if (setBufRate && countDown-- <= 0) {
             // Get the current time
             clock_gettime(CLOCK_MONOTONIC, &t2);
             // Time taken to send bunch of buffers
@@ -987,19 +896,23 @@ int main(int argc, char **argv) {
             countDown = buffersAtOnce - 1;
         }
 
-        if (sendnocp) {
-            err = sendPacketizedBufferFast(buf, bufSize,
-                                           maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset,
-                                           packetDelay, delayPrescale, &delayCounter,
-                                           firstBuffer, lastBuffer, debug, &packetsSent);
+        if (reader.next()) {
+            reader.read(event);
         }
         else {
-            err = sendPacketizedBufferSend(buf, bufSize, maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset,
-                                           packetDelay, delayPrescale, &delayCounter,
-                                           firstBuffer, lastBuffer, debug, &packetsSent);
+            reader.gotoEvent(0);
+            reader.read(event);
         }
+
+        std::vector<char> & dataVector = event.getEventBuffer();
+        char * buf = dataVector.data();
+        byteSize = 4*event.getSize();
+
+        err = sendPacketizedBufferFast(buf, byteSize,
+                                       maxUdpPayload, clientSocket,
+                                       tick, protocol, entropy, version, dataId, &offset,
+                                       packetDelay, delayPrescale, &delayCounter,
+                                       firstBuffer, lastBuffer, debug, &packetsSent);
 
         if (err < 0) {
             // Should be more info in errno
@@ -1018,10 +931,15 @@ int main(int argc, char **argv) {
 //            }
 //        }
 
-        totalBytes   += bufSize;
+        totalBytes   += byteSize;
         totalPackets += packetsSent;
         offset = 0;
         tick += tickPrescale;
+
+        if (--loops < 1) {
+            fprintf(stderr, "\nclasBlaster: finished %u loops reading & sending buffers from file\n\n", repeats);
+            break;
+        }
     }
 
     return 0;
