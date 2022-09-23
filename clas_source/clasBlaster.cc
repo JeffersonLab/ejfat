@@ -835,7 +835,7 @@ int main(int argc, char **argv) {
 //    }
 //    reader.gotoEvent(0);
 
-    avgBufBytes = totalBytes / counter;
+//    avgBufBytes = totalBytes / counter;
     printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
 
 
