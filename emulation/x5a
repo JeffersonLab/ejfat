@@ -5,7 +5,7 @@ mtu=9000
 b=$1;d=$2;h=$3;r=$4
 t=$(mktemp); tx=$(mktemp);
 echo "../emulation/x5 $b $d 9000 $h $r >$t 2>$tx"
-../emulation/x5 $b $d 9000 $h $r >$t 2>$tx
+sudo ../emulation/x5 $b $d 9000 $h $r >$t 2>$tx
 txx=$(mktemp)
 echo "Sender interval moments:"
 grep Interval $t|sed 's/Interval://'|sed 's/us//'|sort -n > $txx
