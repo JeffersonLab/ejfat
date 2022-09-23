@@ -138,7 +138,6 @@ set(SIM_EXEC_FILES
         )
 
 set(CLAS_EXEC_FILES
-        clas_source/readEvents.cc
         clas_source/clasBlaster.cc
         )
 

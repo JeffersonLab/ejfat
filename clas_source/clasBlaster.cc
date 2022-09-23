@@ -700,7 +700,7 @@ int main(int argc, char **argv) {
 
     hipo::event event;
     int counter = 0;
-    
+
     int index = 0;
 
     while(reader.next()){
