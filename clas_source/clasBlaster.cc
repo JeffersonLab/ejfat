@@ -28,7 +28,7 @@
 #include "ejfat_packetize.hpp"
 
 // HIPO reading
-//#include "reader.h"
+#include "reader.h"
 
 
 #ifdef __linux__
@@ -696,30 +696,30 @@ int main(int argc, char **argv) {
 #endif
 
 
-//    // HIPO READING PART
-//
-//    hipo::reader  reader;
-//    reader.open(filename);
-//
-//    hipo::event event;
-//    int counter = 0;
-//
-//    int index = 0;
-//
-//    while(reader.next()){
-//        reader.read(event);
-//
-//        int byteSize = 4*event.getSize();
-//        printf("Event %d is siz e= %d\n", index++, byteSize);
-//
-//        //event.getStructure(dataBank,30,1);
-//        //dataBank.show();
-//
-//        //event.getStructure(PART);
-//
-//        counter++;
-//    }
-//    printf("processed events = %d\n",counter);
+    // HIPO READING PART
+
+    hipo::reader  reader;
+    reader.open(filename);
+
+    hipo::event event;
+    int counter = 0;
+
+    int index = 0;
+
+    while(reader.next()){
+        reader.read(event);
+
+        int byteSize = 4*event.getSize();
+        printf("Event %d is siz e= %d\n", index++, byteSize);
+
+        //event.getStructure(dataBank,30,1);
+        //dataBank.show();
+
+        //event.getStructure(PART);
+
+        counter++;
+    }
+    printf("processed events = %d\n",counter);
 
 
 
