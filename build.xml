@@ -160,9 +160,9 @@
     <!-- Create Jar file -->
     <target name="jar" depends="compile" description="Generates jar file.">
         <delete file="${jarPath}"/>
-        <jar jarfile="${jarPath}" manifest="${src.dir}/org/jlab/coda/emu/manifest.mf">
+        <jar jarfile="${jarPath}" manifest="${src.dir}/org/jlab/epsci/ejfat/manifest.mf">
             <fileset dir="${build.classes}" excludes="*.class" >
-                <include name="org/jlab/coda/**/*.class"/>
+                <include name="org/jlab/epsci/**/*.class"/>
                 <include name="**/*.properties"/>
                 <include name="**/*.png"/>
                 <include name="**/*.jpg"/>
