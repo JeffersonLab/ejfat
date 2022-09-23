@@ -28,7 +28,7 @@
 #include "ejfat_packetize.hpp"
 
 // HIPO reading
-#include "reader.h"
+//#include "reader.h"
 
 
 #ifdef __linux__
@@ -582,7 +582,7 @@ int main(int argc, char **argv) {
     bool debug = false, sendnocp = false;
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false, setByteRate = false;
-    bool useFIFO2 = false;
+    bool useFIFO = false;
     bool useRR = false;
 
     char host[INPUT_LENGTH_MAX], interface[16], filename[256];
@@ -599,7 +599,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale,  &repeats, cores, &debug, &sendnocp,
-              &useIPv6, &bufDelay, &useFIFO2, &useRR, host, interface, filename);
+              &useIPv6, &bufDelay, &useFIFO, &useRR, host, interface, filename);
 
 #ifdef __linux__
 
@@ -631,16 +631,16 @@ int main(int argc, char **argv) {
     }
 
     std::cerr << "Initially running on cpu " << sched_getcpu() <<
-                  ", useFIFO = " << btoa(useFIFO2)  << ", useRR = " << btoa(useRR) << "\n";
+                  ", useFIFO = " << btoa(useFIFO)  << ", useRR = " << btoa(useRR) << "\n";
 
-    if (useFIFO2 || useRR) {
+    if (useFIFO || useRR) {
         // Using the actual pid will set priority of main thd.
         // Using 0 will set priority of calling thd.
         pid_t myPid = getpid();
         // myPid = 0;
 
         struct sched_param param;
-        int policy = useFIFO2 ? SCHED_FIFO : SCHED_RR;
+        int policy = useFIFO ? SCHED_FIFO : SCHED_RR;
 
         // Set process to correct priority for given scheduler
         int priMax = sched_get_priority_max(policy);
@@ -696,30 +696,30 @@ int main(int argc, char **argv) {
 #endif
 
 
-    // HIPO READING PART
-
-    hipo::reader  reader;
-    reader.open(filename);
-
-    hipo::event event;
-    int counter = 0;
-
-    int index = 0;
-
-    while(reader.next()){
-        reader.read(event);
-
-        int byteSize = 4*event.getSize();
-        printf("Event %d is siz e= %d\n", index++, byteSize);
-
-        //event.getStructure(dataBank,30,1);
-        //dataBank.show();
-
-        //event.getStructure(PART);
-
-        counter++;
-    }
-    printf("processed events = %d\n",counter);
+//    // HIPO READING PART
+//
+//    hipo::reader  reader;
+//    reader.open(filename);
+//
+//    hipo::event event;
+//    int counter = 0;
+//
+//    int index = 0;
+//
+//    while(reader.next()){
+//        reader.read(event);
+//
+//        int byteSize = 4*event.getSize();
+//        printf("Event %d is siz e= %d\n", index++, byteSize);
+//
+//        //event.getStructure(dataBank,30,1);
+//        //dataBank.show();
+//
+//        //event.getStructure(PART);
+//
+//        counter++;
+//    }
+//    printf("processed events = %d\n",counter);
 
 
 
