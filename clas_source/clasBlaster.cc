@@ -668,10 +668,12 @@ int main(int argc, char **argv) {
     if (bufDelay) {
         packetDelay = 0;
         bufferDelay = delay;
+        fprintf(stderr, "Set buffer delay to %u\n", bufferDelay);
     }
     else {
         packetDelay = delay;
         bufferDelay = 0;
+        fprintf(stderr, "Set packet delay to %u\n", packetDelay);
     }
 
     if (bufRate > 0) {
