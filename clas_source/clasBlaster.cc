@@ -120,7 +120,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:s:e:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:s:e:f:r:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
