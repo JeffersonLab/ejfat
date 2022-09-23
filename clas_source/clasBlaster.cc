@@ -99,6 +99,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
     int c, i_tmp;
     int64_t tmp;
     bool help = false;
+    bool gotFile = false;
 
     static struct option long_options[] =
             {{"mtu",   1, NULL, 1},
@@ -137,6 +138,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     printHelp(argv[0]);
                     exit(-1);
                 }
+                gotFile = true;
                 break;
 
             case 'f':
@@ -434,7 +436,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
         *delay = 0;
     }
 
-    if (help) {
+    if (help || !gotFile) {
         printHelp(argv[0]);
         exit(2);
     }
@@ -674,6 +676,10 @@ int main(int argc, char **argv) {
 
     if (bufRate > 0) {
         setBufRate = true;
+        fprintf(stderr, "Try to regulate buffer output rate\n");
+    }
+    else {
+        fprintf(stderr, "Not trying to regulate buffer output rate\n");
     }
 
     // Break data into multiple packets of max MTU size.
