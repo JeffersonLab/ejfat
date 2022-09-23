@@ -806,6 +806,41 @@ int main(int argc, char **argv) {
 
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
 
+
+
+    // HIPO READING PART
+
+    hipo::reader  reader;
+    hipo::event   event;
+    //  char *buf;
+    uint64_t totalBytes = 0L;
+    int avgBufBytes = 0;
+
+    std::cerr << "Preparing to open file " <<  filename << std::endl;
+    reader.open(filename);
+
+    int counter = 0;
+    int byteSize = 0;
+    int index = 0;
+    uint32_t loops = repeats;
+
+    while(reader.next()) {
+        reader.read(event);
+
+        int bytes = 4*event.getSize();
+        //  printf("Event %d is siz e= %d\n", index++, bytes);
+        totalBytes += bytes;
+
+        counter++;
+    }
+    reader.gotoEvent(0);
+
+    avgBufBytes = totalBytes / counter;
+    printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
+
+
+
+
     // Statistics & rate setting
     int64_t packetsSent=0;
     int64_t elapsed, microSecItShouldTake;
@@ -818,11 +853,11 @@ int main(int argc, char **argv) {
         int64_t bytesToWriteAtOnce = 500000;
 
         // Fixed the BUFFER rate since the # of buffers sent need to be identical between those sources
-        byteRate = bufRate * avgBufSize;
-        buffersAtOnce = bytesToWriteAtOnce / avgBufSize;
+        byteRate = bufRate * avgBufBytes;
+        buffersAtOnce = bytesToWriteAtOnce / avgBufBytes;
 
-        fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", avg buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
-                bufRate, avgBufSize, byteRate);
+        fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", avg buf size = %d, data rate = %" PRId64 "\n",
+                bufRate, avgBufBytes, byteRate);
 
         countDown = buffersAtOnce;
 
@@ -835,35 +870,6 @@ int main(int argc, char **argv) {
         // Start the clock
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
-
-
-
-    // HIPO READING PART
-
-    hipo::reader  reader;
-    hipo::event   event;
-  //  char *buf;
-
-    std::cerr << "Preparing to open file " <<  filename << std::endl;
-    reader.open(filename);
-
-    int counter = 0;
-    int byteSize = 0;
-    int index = 0;
-    uint32_t loops = repeats;
-
-    while(reader.next()){
-        reader.read(event);
-
-        int byteSize = 4*event.getSize();
-        printf("Event %d is siz e= %d\n", index++, byteSize);
-
-        counter++;
-    }
-    printf("processed events = %d\n",counter);
-
-
-
 
     while (true) {
 
@@ -906,8 +912,10 @@ int main(int argc, char **argv) {
 
         if (reader.next()) {
             reader.read(event);
+fprintf(stderr, "packetBlaster: read next event\n");
         }
         else {
+            fprintf(stderr, "packetBlaster: no more events, loop around again\n");
             reader.gotoEvent(0);
             reader.read(event);
         }
