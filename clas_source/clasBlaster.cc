@@ -428,17 +428,19 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 16:
                 // use FIFO realtime scheduler
                 if (*useRR) {
-                    fprintf(stderr, "Cannot specify both FIFO and RR\n");
+                    fprintf(stderr, "Cannot specify both FIFO and RR, setting using RR to false\n");
                 }
                 *useFIFO = true;
+                *useRR = false;
                 break;
 
             case 17:
                 // use RR (round robin) realtime scheduler
                 if (*useFIFO) {
-                    fprintf(stderr, "Cannot specify both FIFO and RR\n");
+                    fprintf(stderr, "Cannot specify both FIFO and RR, setting using FIFO to false\n");
                 }
                 *useRR = true;
+                *useFIFO = false;
                 break;
 
             case 'v':
@@ -628,7 +630,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cerr << "Initially running on cpu " << sched_getcpu() << "\n";
+    std::cerr << "Initially running on cpu " << sched_getcpu() <<
+                  ", useFIFO = " << btoa(useFIFO)  << ", useRR = " << btoa(useRR) << "\n";
 
     if (useFIFO || useRR) {
         // Using the actual pid will set priority of main thd.
