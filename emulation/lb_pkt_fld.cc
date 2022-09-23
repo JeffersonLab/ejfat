@@ -192,8 +192,8 @@ int main (int argc, char *argv[])
     uint8_t buffer[mtu_pyld_sz];
     uint16_t pckt_sz;
 
-    auto t_start = std::chrono::high_resolution_clock::now();
-    auto t_end   = std::chrono::high_resolution_clock::now();
+    auto t_start = std::chrono::steady_clock::now();
+    auto t_end   = std::chrono::steady_clock::now();
 
     uint8_t*  pBufLb = buffer;
     uint8_t*  pBufRe = &buffer[lblen];
@@ -228,7 +228,7 @@ int main (int argc, char *argv[])
                 pBufRe[1] = 0x3; //first and last
             } else if(bytes_to_send == evnt_sz)   //first
             {
-                t_start = std::chrono::high_resolution_clock::now();
+                t_start = std::chrono::steady_clock::now();
                 if(passedV) std::cout << "Interval: "
                           << std::chrono::duration<double, std::micro>(t_start-t_end).count()
                           << " us" << std::endl;
@@ -286,7 +286,7 @@ int main (int argc, char *argv[])
             if(passedV) fprintf ( stdout, "\nSending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
             if(bytes_to_send <= data_pyld_sz) //last
             {
-                t_end = std::chrono::high_resolution_clock::now();
+                t_end = std::chrono::steady_clock::now();
                 usleep(lb_dly);
             }
             bytes_to_send -= uint16_t(rtCd-mdlen);
