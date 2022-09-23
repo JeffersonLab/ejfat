@@ -138,7 +138,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                gotFile = true;
                 break;
 
             case 'f':
@@ -149,6 +148,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     exit(-1);
                 }
                 strcpy(filename, optarg);
+                gotFile = true;
                 break;
 
             case 'r':
