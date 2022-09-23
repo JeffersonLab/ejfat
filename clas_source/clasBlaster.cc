@@ -600,7 +600,7 @@ int main(int argc, char **argv) {
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale,  &repeats, cores, &debug, &sendnocp,
               &useIPv6, &bufDelay, &useFIFO2, &useRR, host, interface, filename);
-
+useFIFO2 = false;
 #ifdef __linux__
 
     if (cores[0] > -1) {
