@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="EJFAT" default="compile" basedir=".">
+
+
+    <!-- environmental variables -->
+    <property environment="env"/>
+    
+    <!-- Version -->
+    <property name="ejfat.version" value="1.0" />
+    
+    <!-- Debug -->
+    <property name="javac.debug" value="on" />
+    
+    <!-- Directories/Files -->
+    <property name="src.dir"       value="java" />
+    <property name="build.dir"     value="jbuild" />
+    <property name="build.classes" value="${build.dir}/classes" />
+    <property name="build.lib"     value="${build.dir}/lib" />
+
+    <property name="jarName"       value="ejfat-${ejfat.version}.jar" />
+    <property name="allJarNames"   value="ejfat-*.jar" />
+    <property name="jarPath"       value="${build.lib}/${jarName}" />
+    <property name="local.jars"    value="${src.dir}/jars" />
+
+    <property name="hipoJarName"     value="jn4p-1.0.4.jar" />
+    <property name="hipoJarPath"     value="${local.jars}/${hipoJarName}" />
+
+    <!-- Set Classpath, ignore caller's classpath -->
+    <property name="build.sysclasspath" value="ignore" />
+    <!-- By default use local jars in classpath -->
+    <path id="classpath">
+        <fileset dir="${local.jars}" >
+            <include name="*.jar" />
+        </fileset>
+    </path>
+
+
+
+    <!-- Targets -->
+    <!-- Help -->
+    <target name="help">
+        <echo message="Usage: ant [-Dprefix=dir] &lt;target1&gt; [target2 | target3 | ...]" />
+        <echo message="" />
+        <echo message="       targets:" />
+        <echo message="       help       - print out usage" />
+        <echo message="       env        - print out build file variables' values" />
+        <echo message="       compile    - compile java files" />
+        <echo message="       clean      - remove class files" />
+        <echo message="       cleanall   - remove all generated files" />
+        <echo message="       jar        - compile and create jar file" />
+        <echo message="       install    - create jar file and install into 'prefix'" />
+        <echo message="                    if given on command line by -Dprefix=dir'," />
+        <echo message="                    else install into CODA if defined." />
+        <echo message="                    Also install scripts into the bin directory" />
+        <echo message="       uninstall  - remove jar file previously installed into 'prefix'" />
+        <echo message="                    if given on command line by -Dprefix=dir'," />
+        <echo message="                    else installed into CODA if defined" />
+        <echo message="       all        - clean, compile and create jar file" />
+        <echo message="       prepare    - create necessary directories" />
+    </target>
+    
+    <!-- Environment -->
+    <target name="env">
+        <echo message="Ant environment:" />
+        <echo message="" />
+        <echo message="    src.dir       = ${src.dir}" />
+        <echo message="    build.dir     = ${build.dir}" />
+        <echo message="    build.lib     = ${build.lib}" />
+        <echo message="    build.classes = ${build.classes}" />
+        <echo message="    javac.debug   = ${javac.debug}" />
+        <echo message="    classpath     = ${env.CLASSPATH}" />
+    </target>
+
+
+
+    <!-- ************************************************************* -->
+    <target name="installCheck"  >
+
+        <!-- Test to see if -Dprefix=<dir> used on command line -->
+        <condition property="prefixDefined">
+            <isset property="prefix"/>
+        </condition>
+
+        <!-- Test to see if no installation directory defined   -->
+        <condition property="noInstallDir">
+                <not>
+                    <isset property="prefix"/>
+                </not>
+        </condition>
+
+    </target>
+    <!-- ************************************************************* -->
+
+
+    <!-- use local jars -->
+    <target name="Local_cp" depends="installCheck">
+        <path id="classpath">
+            <!-- use jars from this distribution first -->
+            <fileset dir="${local.jars}" >
+                <include name="*.jar" />
+            </fileset>
+        </path>
+        <echo message="Compile with jar files in java/jars" />
+    </target>
+
+    <!-- ************************************************************* -->
+
+    <!-- Prepare things by creating directories -->
+    <target name="prepare" depends="installCheck" >
+        <mkdir dir="${build.dir}" />
+        <mkdir dir="${build.classes}" />
+        <mkdir dir="${build.lib}" />
+        <antcall target="preparePrefixDir"/>
+    </target>
+
+    <target name="preparePrefixDir" if="prefixDefined">
+        <mkdir dir="${prefix}/jar" />
+        <mkdir dir="${prefix}/bin" />
+    </target>
+
+
+    <!-- Clean by removing class files -->
+    <target name="clean" description="Remove all class files">
+        <delete failonerror="no" >
+            <fileset dir="${build.classes}" includes="**/*.class" />
+        </delete>
+    </target>
+    
+    <!-- Clean by removing build & doc directories -->
+    <target name="cleanall" depends="clean" description="Remove all generated files.">
+        <delete dir="${build.dir}" failonerror="no" />
+    </target>
+    
+    <!-- Compile all source -->
+
+    <target name="compile" depends="Local_cp,prepare" description="Compiles all source code.">
+        <javac sourcepath="" srcdir="${src.dir}" destdir="${build.classes}" debug="${javac.debug}" optimize="yes" >
+            <include name="**/*.java"/>
+            <!-- Only way to exclude a file to set the sourcepath, then specify include as well as exclude
+            <exclude name="**/DataChannelImplUdpStream.java" />
+            <exclude name="**/DataTransportImplUdpStream.java" />  -->
+            <classpath refid="classpath" />
+        </javac>
+
+        <copy overwrite="true" todir="${build.classes}">
+            <fileset dir="${src.dir}">
+                <include name="**/*.properties"/>
+                <include name="**/*.png"/>
+                <include name="**/*.jpg"/>
+                <include name="**/*.gif"/>
+                <include name="**/*.xml"/>
+            </fileset>
+        </copy>
+    </target>
+
+
+    <!-- ************************************************************* -->
+
+    <!-- Create Jar file -->
+    <target name="jar" depends="compile" description="Generates jar file.">
+        <delete file="${jarPath}"/>
+        <jar jarfile="${jarPath}" manifest="${src.dir}/org/jlab/coda/emu/manifest.mf">
+            <fileset dir="${build.classes}" excludes="*.class" >
+                <include name="org/jlab/coda/**/*.class"/>
+                <include name="**/*.properties"/>
+                <include name="**/*.png"/>
+                <include name="**/*.jpg"/>
+                <include name="**/*.gif"/>
+                <include name="**/*.xml"/>
+            </fileset>
+        </jar>
+    </target>
+    
+    <!-- Clean, compile, and create jar -->
+    <target name="all" depends="clean,jar" description="Cleans, compile, then builds jar file." />
+
+
+
+    <!-- Install Jar file -->
+    <target name="install" depends="jar,installCheck" description="Installs jar file.">
+        <antcall target="error"/>
+        <antcall target="installInPrefix"/>
+    </target>
+
+
+    <!-- Install in prefix -->
+    <target name="installInPrefix" if="prefixDefined">
+        <echo>Install ${jarName} into ${prefix}/jar </echo>
+        <echo>Install ${hipoJarName} into ${prefix}/jar </echo>
+        <delete>
+            <fileset dir="${prefix}/jar" includes="${allJarNames}" />
+        </delete>
+        <copy file="${jarPath}"    todir="${prefix}/jar"/>
+        <copy file="${hipoJarPath}"  todir="${prefix}/jar"/>
+    </target>
+
+
+    <!-- No installation directory defined -->
+    <target name="error" if="noInstallDir">
+        <fail message="CODA env var not defined and -Dprefix not used, jar NOT installed" />
+    </target>
+
+
+
+    <!-- Uninstall Jar file -->
+    <target name="uninstall" depends="installCheck" description="Uninstalls jar file.">
+        <antcall target="error2"/>
+        <antcall target="uninstallFromPrefix"/>
+    </target>
+
+    <!-- Uninstall from prefix -->
+    <target name="uninstallFromPrefix" if="prefixDefined">
+        <echo>Remove ${jarName} from ${prefix}</echo>
+        <echo>Remove ${hipoJarName} from ${prefix}</echo>
+        <delete file="${prefix}/jar/${jarName}"/>
+        <delete file="${prefix}/jar/${hipoJarName}"/>
+    </target>
+
+    <!-- No installation directory defined to uninstall from -->
+    <target name="error2" if="noInstallDir">
+        <fail message="Installation directory not defined, jar NOT installed" />
+    </target>
+
+
+
+</project>
