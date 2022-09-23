@@ -13,15 +13,13 @@ grep Interval $t|sed 's/Interval://'|sed 's/us//'|sort -n > $txx
 echo "Sender interval min/max:"
 head -1 $txx
 tail -1 $txx
-echo -n "Theoretical rcvr size, accross dids: "; echo $(($b * $r))
+echo -n "Theoretical rcvr size, accross dids/reps: "; echo $(($b * $r))
 txxx=$(mktemp); grep Sending $t > $txxx
 ns=$(wc -l $txxx | cut -f1 -d' ')
 echo -n "Actual # packets sent to single host: ";echo $(($ns / $h))
 echo "Packets sizes: "
 cat $txxx|cut -f2 -d ' '|sort -n|uniq
 echo $t $tx $txx $txxx
-echo -n "Total Theoretical seq # sends: "; echo $(($d * $h * $r))
-echo -n "Total Theoretical seq # sends to single host: "; echo $(($d * $r))
 ###echo "Actual unique seq # sends: "
 iphdr_sz=20
 udphdr_sz=8
@@ -29,6 +27,8 @@ lbhdr_sz=16
 rehdr_sz=8
 pyld_sz=$(($mtu-$iphdr_sz-$udphdr_sz-$lbhdr_sz-$rehdr_sz))
 max_seq=$(($(($b-1)) / $pyld_sz))
+echo -n "Total Theoretical seq # sends: "; echo $(($max_seq * $h * $r))
+echo -n "Total Theoretical seq # sends to single host: "; echo $(($max_seq))
 ###tsn=$(mktemp); grep 're_seq =' $t > $tsn
 #for i in $(seq 0 $max_seq); do grep "re_seq = ${i}$" $t|wc -l; done|sort -n|uniq
 ###for i in $(seq 0 $max_seq); do grep "re_seq = ${i}$" $tsn|wc -l; done|sort -n|uniq
