@@ -699,6 +699,8 @@ int main(int argc, char **argv) {
     // HIPO READING PART
 
     hipo::reader  reader;
+
+    std::cerr << "Preparing to open file " <<  filename << std::endl;
     reader.open(filename);
 
     hipo::event event;
