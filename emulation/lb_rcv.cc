@@ -191,9 +191,9 @@ int main (int argc, char *argv[])
     uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint32_t)];
     uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
 
-    auto t_start = std::chrono::high_resolution_clock::now();
+    auto t_start = std::chrono::steady_clock::now();
     auto t_start0 = t_start; //previous occurance of 'frst' flag
-    auto t_end   = std::chrono::high_resolution_clock::now();
+    auto t_end   = std::chrono::steady_clock::now();
 
     uint32_t evnt_num = 0;  // event number
 
@@ -233,7 +233,7 @@ int main (int argc, char *argv[])
         {
             if(passedV)
             {
-                t_start = std::chrono::high_resolution_clock::now();
+                t_start = std::chrono::steady_clock::now();
                 std::cout << "Interval: "
                           << std::chrono::duration<double, std::micro>(t_start-t_start0).count()
                           << " us" << std::endl;
@@ -262,7 +262,7 @@ int main (int argc, char *argv[])
             xseq = 0;
             evnt_sz = 0;
             ++evnt_num;
-            t_end = std::chrono::high_resolution_clock::now();
+            t_end = std::chrono::steady_clock::now();
 //            ltncy_mn *= (evnt_num-1)/evnt_num; //incremental formula
 //            ltncy_mn += std::chrono::duration<double, std::micro>(t_end-t_start).count()/evnt_num; //incremental formula
 
