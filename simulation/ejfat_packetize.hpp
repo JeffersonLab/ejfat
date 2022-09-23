@@ -370,6 +370,9 @@ namespace ejfat {
                 else {
                     // All other errors are unrecoverable
                     *packetsSent = sentPackets;
+                    if (errno == EBADF) {
+                        fprintf(stderr, "sendPacketizedBufferFast: getting EBADF from send\n");
+                    }
                     perror("failing in send");
                     fprintf(stderr, "\nsendPacketizedBufferFast: errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
