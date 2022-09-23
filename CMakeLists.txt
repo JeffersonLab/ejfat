@@ -137,6 +137,11 @@ set(SIM_EXEC_FILES
         simulation/packetBlasterFat2.cc
         )
 
+set(CLAS_EXEC_FILES
+        clas_source/readEvents.cc
+        clas_source/clasBlaster.cc
+        )
+
 set(TEST_FILES
         simulation/re_header_test.cc
         )
@@ -241,6 +246,22 @@ else()
 endif()
 
 
+# CLAS12 source build is optional and set it to OFF by default
+option(BUILD_CLAS "Build CLAS 12 source code" OFF)
+
+# if you tell cmake to have code use USE_CLAS preprocessor macro
+if (BUILD_CLAS)
+    find_package(HIPO)
+    if (HIPO_FOUND)
+        set(EXEC_FILES ${EXEC_FILES} ${CLAS_EXEC_FILES})
+    else()
+        message(STATUS "Hipo cannot be found, compile without it")
+    endif()
+else()
+    message(STATUS "Compile without hipo")
+endif()
+
+
 if (BUILD_TEST)
     set(EXEC_FILES ${EXEC_FILES} ${TEST_FILES})
 endif()
@@ -332,9 +353,10 @@ if (DEFINED MAKE_EXEC)
         target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
                                                       ${CMAKE_SOURCE_DIR}/util
                                                       ${ZeroMQ_INCLUDE_DIRS}
-                                                      ${ET_INCLUDE_DIRS})
+                                                      ${ET_INCLUDE_DIRS}
+                                                      ${HIPO_INCLUDE_DIRS})
         # Needs these libs
-        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
+        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY} ${HIPO_LIBRARIES})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)
