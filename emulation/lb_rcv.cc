@@ -111,12 +111,12 @@ int main (int argc, char *argv[])
     ofstream rs;
     ofstream rslg;
     char x[64];
-    sprintf(x,"/tmp/rs_%d",lstn_prt);
-//  sprintf(x,"/nvme/goodrich/rs_%d",lstn_prt);   // on ejfat-fs
+//  sprintf(x,"/tmp/rs_%d",lstn_prt);
+    sprintf(x,"/nvme/goodrich/rs_%d",lstn_prt);   // on ejfat-fs
     rs.open(x,std::ios::binary | std::ios::out);
     char xlg[64];
-    sprintf(xlg,"/tmp/rs_%d_log",lstn_prt);
-//  sprintf(xlg,"/nvme/goodrich/rs_%d_log",lstn_prt);
+//  sprintf(xlg,"/tmp/rs_%d_log",lstn_prt);
+    sprintf(xlg,"/nvme/goodrich/rs_%d_log",lstn_prt);
     rslg.open(xlg,std::ios::out);
 
 //===================== data reception setup ===================================
@@ -229,7 +229,7 @@ int main (int argc, char *argv[])
         uint8_t frst = (pBufRe[1] & 0x02) >> 1;
         uint8_t lst  =  pBufRe[1] & 0x01;
 
-        if(frst) 
+        if(passedV && (evnt_num > 0) && frst) 
         {
             if(passedV)
             {
@@ -240,6 +240,8 @@ int main (int argc, char *argv[])
                 t_start0 = t_start;
             }
         }
+        
+        if(passedV && evnt_num == 0 && frst) t_start0 = std::chrono::steady_clock::now();
 
         rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
         if(passedV)
@@ -269,7 +271,7 @@ int main (int argc, char *argv[])
             if(passedV)
             {
                 std::cout << "Latency: "
-                          << std::chrono::duration<double, std::micro>(t_end-t_start).count()
+                          << std::chrono::duration<double, std::micro>(t_end-t_start0).count()
                           << " us" << std::endl;
             }
         }
