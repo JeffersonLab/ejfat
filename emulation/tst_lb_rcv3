@@ -48,13 +48,17 @@ for i in $(seq 17750 17765)
     done|grep -v $did_sz|wc -l
 echo ' '
 echo -n "Num disc dids with incorrect size counts: "
-ls -lt  /tmp/rs*|grep -v log|cut -f5 -d ' '|grep -v  $(($did_sz*$evnt_num))|wc -l
+ls -lt  /nvme/goodrich/rs*|grep -v log|cut -f5 -d ' '|grep -v  $(($did_sz*$evnt_num))|wc -l
 #echo -n "Number of unique disc did checksums: "
 #for f in /tmp/rs_?????
 #    do sum $f
 #    done|sort -n|uniq|wc -l
 echo -n "Interval Moments: "
-td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | get_moments
+#td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | get_moments
+cat $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | get_moments
+cat $t|grep Interval: | sed 's/Interval://g'| sed 's/us//g' | gnuplot -p -e "set title 'Interval';p '-' u 1 w l" &
 echo -n "Latency Moments: "
+#td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | gnuplot -p -e "set title 'Latency';p '-' u 1 w l"
 cat $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | get_moments
-td=$(mktemp);grep -A 1 '\-v' $t > $td;grep -v -f $td $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | gnuplot -p -e "set title 'Latency';p '-' u 1 w l"
+cat $t|grep Latency: | sed 's/Latency://g'| sed 's/us//g' | gnuplot -p -e "set title 'Latency';p '-' u 1 w l"
+
