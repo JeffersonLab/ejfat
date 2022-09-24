@@ -920,9 +920,8 @@ fprintf(stderr, "packetBlaster: read next event\n");
             reader.read(event);
         }
 
-        std::vector<char> & dataVector = event.getEventBuffer();
-        char * buf = dataVector.data();
-        byteSize = 4*event.getSize();
+        char *buf = &event.getEventBuffer()[0];
+        byteSize = event.getSize();
         fprintf(stderr, "packetBlaster: sending %d bytes from pointer %p\n", byteSize, buf);
 
         err = sendPacketizedBufferFast(buf, byteSize,
