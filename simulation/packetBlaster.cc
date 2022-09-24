@@ -67,7 +67,7 @@ static void printHelp(char *programName) {
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
-            "        [-d <delay in microsec between packets>]");
+            "        [-d <delay in microsec between packets or buffers depending on -bufdelay>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
@@ -928,13 +928,13 @@ int main(int argc, char **argv) {
 
         // spin delay
 
-//        // delay if any
-//        if (bufDelay) {
-//            if (--delayCounter < 1) {
-//                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
-//                delayCounter = delayPrescale;
-//            }
-//        }
+        // delay if any
+        if (bufDelay) {
+            if (--delayCounter < 1) {
+                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
+                delayCounter = delayPrescale;
+            }
+        }
 
         totalBytes   += bufSize;
         totalPackets += packetsSent;
