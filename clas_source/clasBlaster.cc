@@ -937,13 +937,13 @@ int main(int argc, char **argv) {
 
         // spin delay
 
-//        // delay if any
-//        if (bufDelay) {
-//            if (--delayCounter < 1) {
-//                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
-//                delayCounter = delayPrescale;
-//            }
-//        }
+        // delay if any
+        if (bufDelay) {
+            if (--delayCounter < 1) {
+                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
+                delayCounter = delayPrescale;
+            }
+        }
 
         totalBytes   += byteSize;
         totalPackets += packetsSent;
