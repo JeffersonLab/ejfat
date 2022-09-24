@@ -884,7 +884,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                                     }
                                     else {
                                         droppedTicks = diff / tickPrescale;
-                                        printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
+                                        //printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
                                     }
                                 }
 
