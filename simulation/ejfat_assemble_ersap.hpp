@@ -872,9 +872,10 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                         if (packetLast) {
                             // Finish up some stats
                             if (takeStats) {
+                                int64_t diff = 0;
                                 uint32_t droppedTicks = 0;
                                 if (knowExpectedTick) {
-                                    int64_t diff = packetTick - expectedTick;
+                                    diff = packetTick - expectedTick;
                                     if (diff % tickPrescale != 0) {
                                         // Error in the way we set things up
                                         // This should always be 0.
@@ -884,7 +885,6 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                                     }
                                     else {
                                         droppedTicks = diff / tickPrescale;
-if (droppedTicks != 0) printf("Dropped %u, tick dif %lld = pkt %llu - ex %llu \n", droppedTicks, diff, packetTick, expectedTick);
                                     }
                                 }
 
@@ -895,6 +895,8 @@ if (droppedTicks != 0) printf("Dropped %u, tick dif %lld = pkt %llu - ex %llu \n
 //fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, sequence);
                                 stats->droppedTicks   += droppedTicks;
                                 stats->droppedPackets += droppedTicks * (sequence + 1);
+if (droppedTicks != 0) printf("Dropped %u ticks, tick diff %" PRId64 ", packets = %" PRIu64 ", seq#s = %u\n",
+                              droppedTicks, diff, stats->droppedPackets, (sequence + 1));
                             }
                             break;
                         }
