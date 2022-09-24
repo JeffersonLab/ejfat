@@ -748,7 +748,7 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                         // Already have trouble, looks like we dropped the first packet of a tick,
                         // and possibly others after it.
                         // So go ahead and dump the rest of the tick in an effort to keep up.
-                        //printf("Skip %hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                        printf("Skip pkt from %hu, %llu - %u, expected seq 0\n", packetDataId, packetTick, sequence);
                         //printf("S %llu - %u\n", packetTick, sequence);
                         putDataAt = dataBuf;
                         remainingLen = bufLen;
@@ -778,7 +778,7 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                         expectedSequence = 0;
                         dumpTick = true;
                         prevSequence = sequence;
-                        //printf("Dump %hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                        printf("Dump pkt from %hu, %llu - %u\n", packetDataId, packetTick, sequence);
                         //printf("D %llu - %u\n", packetTick, sequence);
                         continue;
                     }
@@ -798,7 +798,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
 
                 // Check to see if packet is out-of-sequence
                 if (sequence != expectedSequence) {
-                    if (debug) fprintf(stderr, "\n    Got seq %u, expecting %u\n", sequence, expectedSequence);
+ fprintf(stderr, "\n    Got seq %u, expecting %u\n", sequence, expectedSequence);
 
                     // If we get one that we already received, ERROR!
                     if (sequence < expectedSequence) {
