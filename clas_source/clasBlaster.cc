@@ -912,17 +912,16 @@ int main(int argc, char **argv) {
 
         if (reader.next()) {
             reader.read(event);
-fprintf(stderr, "packetBlaster: read next event\n");
+//fprintf(stderr, "packetBlaster: read next event\n");
         }
         else {
-            fprintf(stderr, "packetBlaster: no more events, loop around again\n");
+//            fprintf(stderr, "packetBlaster: no more events, loop around again\n");
             reader.gotoEvent(0);
             reader.read(event);
         }
 
         char *buf = &event.getEventBuffer()[0];
         byteSize = event.getSize();
-        fprintf(stderr, "packetBlaster: sending %d bytes from pointer %p\n", byteSize, buf);
 
         err = sendPacketizedBufferFast(buf, byteSize,
                                        maxUdpPayload, clientSocket,
