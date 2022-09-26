@@ -304,7 +304,8 @@ static void parseArgs(int argc, char **argv,
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
 static volatile int cpu=-1;
-static std::atomic<uint32_t> dropped;
+static std::atomic<uint32_t> droppedPackets;
+static std::atomic<uint32_t> droppedTicks;
 typedef struct threadStruct_t {
     char filename[101];
 } threadStruct;
@@ -341,7 +342,7 @@ static void *thread(void *arg) {
 
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
-    int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0;
+    int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
     struct timespec t1, t2, firstT;
 
     // Get the current time
@@ -385,24 +386,29 @@ static void *thread(void *arg) {
             continue;
         }
 
-        // Packet rates
-        droppedPkts = dropped;
-        dropped.store(0);
+        // Dropped stuff rates
+        droppedPkts = droppedPackets;
+        droppedPackets.store(0);
         totalDroppedPkts += droppedPkts;
+
+        droppedTiks = droppedTicks;
+        droppedTicks.store(0);
+        totalDroppedTiks += droppedTiks;
 
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
         if (packetCount == 0 && droppedPkts == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = 0?/everything?\n", pktRate, pktAvgRate);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = 0?/everything? ", pktRate, pktAvgRate);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped = %" PRId64 "\n", pktRate, pktAvgRate, droppedPkts);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 ", ", pktRate, pktAvgRate, droppedPkts);
         }
+        printf(": Dropped Ticks = %" PRId64 ", total = " PRId64 "\n", droppedTiks, totalDroppedTiks);
 
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped %" PRId64 ", total %" PRId64 "\n",
+        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped pkts %" PRId64 ", total %" PRId64 "\n",
                dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
 
         totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
@@ -670,7 +676,8 @@ int main(int argc, char **argv) {
 
     // Statistics
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
-    dropped.store(0);
+    droppedTicks.store(0);
+    droppedPackets.store(0);
 
     while (true) {
 
@@ -695,7 +702,8 @@ int main(int argc, char **argv) {
         totalPackets += stats->acceptedPackets;
 
         // atomic
-        dropped += stats->droppedPackets;
+        droppedTicks += stats->droppedTicks;
+        droppedPackets += stats->droppedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
