@@ -403,7 +403,7 @@ static void *thread(void *arg) {
         else {
             printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 ", ", pktRate, pktAvgRate, droppedPkts);
         }
-        printf(": Dropped Ticks = %" PRId64 ", total = " PRId64 "\n", droppedTiks, totalDroppedTiks);
+        printf(": Dropped Ticks = %" PRId64 ", total = %" PRId64 "\n", droppedTiks, totalDroppedTiks);
 
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
