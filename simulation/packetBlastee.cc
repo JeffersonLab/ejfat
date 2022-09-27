@@ -189,6 +189,7 @@ static void parseArgs(int argc, char **argv,
 
             case 2:
                 // use IP version 6
+                fprintf(stderr, "SETTING TO IP version 6\n");
                 *useIPv6 = true;
                 break;
 
