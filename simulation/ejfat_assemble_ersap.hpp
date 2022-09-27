@@ -759,8 +759,13 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                     // If here, new tick/buffer, sequence = 0.
                     // There's a chance we can construct a full buffer.
 
-                    if ((prevTick >= 0) && (packetTick - prevTick > 1)) {
-                        printf("Skipped a whole tick, got %" PRIu64 ", prev = %" PRIu64 "\n", packetTick, prevTick);
+                    if (prevTick >= 0) {
+                        if (packetTick - prevTick > 1) {
+                            printf("Skipped a whole tick, got %" PRIu64 ", prev = %" PRIu64 "\n", packetTick, prevTick);
+                        }
+                        else if (prevTick - prevTick > 1) {
+                            printf("Backe up a whole tick, got %" PRIu64 ", prev = %" PRIu64 "\n", packetTick, prevTick);
+                        }
                     }
 
                     // Dump everything we saved from previous tick.
