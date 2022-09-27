@@ -903,7 +903,7 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                                 // is used to guess at how many packets were dropped for the dropped tick(s).
                                 stats->droppedPackets += droppedTicks * (sequence + 1);
 //if (droppedTicks != 0) printf("Dropped %u ticks, tick diff %" PRId64 ", packets = %" PRIu64 ", seq#s = %u\n",
-                              droppedTicks, diff, stats->droppedPackets, (sequence + 1));
+//                              droppedTicks, diff, stats->droppedPackets, (sequence + 1));
                             }
                             break;
                         }
