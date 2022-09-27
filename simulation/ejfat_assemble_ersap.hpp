@@ -894,6 +894,9 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                                 stats->acceptedPackets += sequence + 1;
 //fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, sequence);
                                 stats->droppedTicks   += droppedTicks;
+                                // This works if all the buffers coming in are exactly the same size.
+                                // If they're not, then the sequence (# of packets - 1) of this buffer
+                                // is used to guess at how many packets were dropped for the dropped tick(s).
                                 stats->droppedPackets += droppedTicks * (sequence + 1);
 if (droppedTicks != 0) printf("Dropped %u ticks, tick diff %" PRId64 ", packets = %" PRIu64 ", seq#s = %u\n",
                               droppedTicks, diff, stats->droppedPackets, (sequence + 1));

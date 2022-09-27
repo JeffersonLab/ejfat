@@ -401,7 +401,7 @@ static void *thread(void *arg) {
             printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = 0?/everything? ", pktRate, pktAvgRate);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 ", ", pktRate, pktAvgRate, droppedPkts);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 " ", pktRate, pktAvgRate, droppedPkts);
         }
         printf(": Dropped Ticks = %" PRId64 ", total = %" PRId64 "\n", droppedTiks, totalDroppedTiks);
 
@@ -702,7 +702,7 @@ int main(int argc, char **argv) {
         totalPackets += stats->acceptedPackets;
 
         // atomic
-        droppedTicks += stats->droppedTicks;
+        droppedTicks   += stats->droppedTicks;
         droppedPackets += stats->droppedPackets;
 
         // The tick returned is what was just built.
