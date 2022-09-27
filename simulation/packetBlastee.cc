@@ -702,7 +702,7 @@ int main(int argc, char **argv) {
         }
 
         diff = tick - prevTick;
-        if (diff != 1) {
+        if (diff != 0) {
             fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
         }
 
