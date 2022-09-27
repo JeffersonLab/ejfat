@@ -680,9 +680,12 @@ int main(int argc, char **argv) {
     droppedTicks.store(0);
     droppedPackets.store(0);
 
+
+
     while (true) {
 
         clearStats(stats);
+        uint64_t diff, prevTick = tick;
 
         // Fill with data
         nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
@@ -698,6 +701,10 @@ int main(int argc, char **argv) {
             return (0);
         }
 
+        diff = tick - prevTick;
+        if (diff != 1) {
+            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
+        }
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;
