@@ -767,7 +767,8 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                             printf("Backed up a whole tick, got %" PRIu64 ", prev = %" PRIu64 "\n", packetTick, prevTick);
                         }
                         else if (packetTick != expectedTick) {
-                            printf("Packet != expected tick, got %" PRIu64 ", ex = %" PRIu64 "\n", packetTick, expectedTick);
+                            printf("Packet != expected tick, got %" PRIu64 ", ex = %" PRIu64 ", prev = %" PRIu64 "\n",
+                                   packetTick, expectedTick, prevTick);
                         }
                     }
 
