@@ -915,7 +915,7 @@ int main(int argc, char **argv) {
 //fprintf(stderr, "packetBlaster: read next event\n");
         }
         else {
-            fprintf(stderr, "again\n");
+//            fprintf(stderr, "again\n");
             reader.gotoEvent(0);
             reader.read(event);
         }
