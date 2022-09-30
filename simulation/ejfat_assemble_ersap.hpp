@@ -313,7 +313,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                                   uint64_t *tick)
         {
             // Now pull out the component values
-            *version = (buffer[0] & 0xf0) >> 4;
+            *version = (buffer[0] >> 4) & 0xf;
             *first   = (buffer[1] & 0x02) >> 1;
             *last    =  buffer[1] & 0x01;
 
@@ -352,7 +352,7 @@ static inline uint64_t bswap_64(uint64_t x) {
         static void parseReHeader(char* buffer, uint32_t* intArray, int arraySize, uint64_t *tick)
         {
             if (intArray != nullptr && arraySize > 4) {
-                intArray[0] = (buffer[0] & 0xf0) >> 4; // version
+                intArray[0] = (buffer[0] >> 4) & 0xf;  // version
                 intArray[1] = (buffer[1] & 0x02) >> 1; // first
                 intArray[2] =  buffer[1] & 0x01;       // last
 
@@ -528,6 +528,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          *
          * @return number of data (not headers!) bytes read from packet.
          *         If there's an error in recvfrom, it will return RECV_MSG.
+         *         If there is not enough data to contain a header, it will return INTERNAL_ERROR.
          *         If there is not enough room in dataBuf to hold incoming data, it will return BUF_TOO_SMALL.
          */
         static int readPacketRecvFrom(char *dataBuf, size_t bufLen, int udpSocket,
@@ -542,10 +543,9 @@ static inline uint64_t bswap_64(uint64_t x) {
                 if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                 return(RECV_MSG);
             }
-            else if (bytesRead == 0 && bufLen > 0) {
-                // Something clearly wrong. There should be SOME data returned.
-                fprintf(stderr, "recvfrom(): buf too small? won't read in last bit of data\n");
-                return BUF_TOO_SMALL;
+            else if (bytesRead < HEADER_BYTES) {
+                fprintf(stderr, "recvfrom(): not enough data to contain a header on read\n");
+                return(INTERNAL_ERROR);
             }
 
             if (bufLen < bytesRead) {
@@ -625,13 +625,16 @@ static inline uint64_t bswap_64(uint64_t x) {
          *              it will return OUT_OF_ORDER.
          *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
          *         If cannot allocate memory, it will return OUT_OF_MEM.
+         *         If on a read no data is returned when buffer not filled, return INTERNAL_ERROR.
+         *         If on a read &lt; HEADER_BYTES data returned, not enough data to contain header.
+         *              Then some sort of internal error and will return INTERNAL_ERROR.
          */
         static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
                                                    bool debug, uint64_t *tick, uint16_t *dataId,
                                                    std::shared_ptr<packetRecvStats> stats, uint32_t tickPrescale,
                                                    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
 
-            int64_t  prevTick = -1, firstTick = -1;
+            int64_t  prevTick = -1;
             uint64_t expectedTick = *tick;
             uint64_t packetTick;
             uint32_t sequence, prevSequence = 0, expectedSequence = 0;
@@ -687,7 +690,7 @@ fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = %d,
                         // Something clearly wrong. There should be SOME data returned.
 fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = 0, remainingLen = %zu\n", remainingLen);
                         clearMap(outOfOrderPackets);
-                        return BUF_TOO_SMALL;
+                        return INTERNAL_ERROR;
                     }
 
 //                    if (takeStats) {
@@ -709,14 +712,19 @@ fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = 0, 
                         clearMap(outOfOrderPackets);
                         return(RECV_MSG);
                     }
+                    else if (bytesRead < HEADER_BYTES) {
+                        fprintf(stderr, "getPacketizedBuffer: not enough data to contain a header on read\n");
+                        clearMap(outOfOrderPackets);
+                        return(INTERNAL_ERROR);
+                    }
 
                     nBytes = bytesRead - HEADER_BYTES;
 
-                    if (nBytes <= 0 && remainingLen > 0) {
+                    if (nBytes == 0 && remainingLen > 0) {
                         // Something clearly wrong. There should be SOME data besides header returned.
 fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         clearMap(outOfOrderPackets);
-                        return BUF_TOO_SMALL;
+                        return INTERNAL_ERROR;
                     }
 
                     // Parse header
@@ -739,7 +747,6 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                     printf("Packet != expected tick, got %" PRIu64 ", ex = %" PRIu64 ", prev = %" PRIu64 "\n",
                            packetTick, expectedTick, prevTick);
                 }
-
 
                 // This if-else statement is what enables the packet reading/parsing to keep
                 // up an input rate that is too high (causing dropped packets) and still salvage
