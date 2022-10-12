@@ -1,0 +1,12 @@
+#!/bin/bash 
+#format scheduling density into LB calendar
+cp runsim.netid.txt runsim.txt
+#set new epoch
+#echo "table_add epoch_assign_table do_assign_epoch 0x0000000000000000/0 => 0x00000000 63" >> runsim.txt
+cat runsim.mbr.txt >> runsim.txt
+for ((i=0;i<512;i++)); do 
+   m=`bc <<< $i%1`
+   printf 'table_add load_balance_calendar_table do_assign_member 0x00000000 0x%x => 0x%x # for epoch 0, tick= 0x%x return member slot 00x%x\n' $i $m $i $m
+done >> runsim.txt
+echo "run_traffic packets" >> runsim.txt
+
