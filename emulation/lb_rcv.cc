@@ -68,7 +68,7 @@ int main (int argc, char *argv[])
     uint16_t lstn_prt;                  // listening port
     uint32_t num_evnts;                 // number of events to recv
 
-    while ((optc = getopt(argc, argv, "i:p:6n:v")) != -1)
+    while ((optc = getopt(argc, argv, "hi:p:6n:v")) != -1)
     {
         switch (optc)
         {
