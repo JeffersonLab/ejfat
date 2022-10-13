@@ -65,13 +65,16 @@ size_t smpl_wghtd(X w)
     size_t s = w.size();
     vector<double> t;
     t.push_back(N*w[0]);
-    for(size_t i=1;i<N;i++) t.push_back(N*w[i]+w[i-1]);
+    for(size_t i=1;i<s;i++) t.push_back(N*w[i]+t[i-1]);
+cout << "softmax t = "; print(t);            
     //now get random uniform in [1,N]:
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::default_random_engine g (seed);
     std::uniform_int_distribution<int> u(1,N);
     size_t r = u(g);
+cout << "softmax r = " << r << '\n';            
     //now index into weight array
-    for(size_t i=0;i<N;i++) if(r<=t[i]) return i; //fix this hack
+    for(size_t i=0;i<s;i++) if(r<=t[i]) return i; //fix this hack
     return s;
 }
 
@@ -118,7 +121,7 @@ int main (int argc, char *argv[])
     double beta_1 = 1; //  temperature
 
     // R vector with the first value set at 0.5
-    vector<double> R; R.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) R[h] = 0;
+    vector<double> R; R.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) R[h] = 0.5+h*0.2;
     // Q vector with the first value set at 0.5
     vector<double> Q; Q.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) Q[h] = 0.5+h*0.1;
     ifstream hst_fdbk;
@@ -127,7 +130,7 @@ int main (int argc, char *argv[])
     do {
         // Monitor feedback from nodes and adjust scheduling density
 
-        sleep(1);
+        //sleep(1);
         //read host feedback: an array of health metrics
         hst_fdbk.open(hst_fdbk_t,std::ios::in);
         //load the feedback from each host
@@ -171,7 +174,7 @@ cout << "new Q = "; print(Q);
           for (k in 1:num_hsts)  BO[t,k] = (NS[k]+1)/(t+2)
         }
 */
-    } while(0);
+    } while(1);
 
     return 0;
 }
