@@ -37,6 +37,7 @@ void   Usage(void)
         "\nUsage: \n\
         -f feedback file   \n\
         -n num hosts  \n\
+        -d debug mode \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i -p\n";
@@ -84,18 +85,22 @@ int main (int argc, char *argv[])
     extern char *optarg;
     extern int   optind, optopt;
 
-    bool passedN=false, passedF=false;
+    bool passedN=false, passedF=false, passedD=false;
 
     uint32_t num_hsts;                 // number of hosts to schedule
     char     hst_fdbk_t[256];           // host feedback file
 
-    while ((optc = getopt(argc, argv, "hn:f:")) != -1)
+    while ((optc = getopt(argc, argv, "dhn:f:")) != -1)
     {
         switch (optc)
         {
         case 'h':
             Usage();
             exit(1);
+        case 'd':
+            passedD = true;
+            fprintf(stdout, "-d ");
+            break;
         case 'n':
             num_hsts = (uint32_t) atoi((const char *) optarg) ;
             passedN = true;
@@ -126,7 +131,18 @@ int main (int argc, char *argv[])
     vector<double> Q; Q.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) Q[h] = 0.5+h*0.1;
     ifstream hst_fdbk;
  //   std::discrete_distribution<uint16_t> d;
-    
+     // random device class instance, source of 'true' randomness for initializing random seed
+    std::random_device rd; 
+
+    // Mersenne twister PRNG, initialized with seed from previous random device instance
+    std::mt19937 gen(rd()); 
+    std::normal_distribution<float> d(0, 0.1); 
+
+    vector<double> BO;   BO.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) BO[h] = 0;
+    vector<uint32_t> NS; NS.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) NS[h] = 0;
+
+    uint32_t trl=0;   // loop counter
+
     do {
         // Monitor feedback from nodes and adjust scheduling density
 
@@ -140,40 +156,46 @@ int main (int argc, char *argv[])
             uint16_t i = 0;
             hst_fdbk >> x;
             if(!hst_fdbk.good()) break;
-cout << "read " << x << " from feedback file\n";            
+if(passedD) cout << "read " << x << " from feedback file\n";            
             R.push_back(R[i++]+x);
         }
         hst_fdbk.close();
-
-
+///////////// RW test /////////////////////////
+        {
+            size_t s = R.size();
+            for(size_t i=0;i<s;i++) R[i] += d(gen);
+        }      
+///////////////////////////////////////////////
         //theta <- rep(NA, times = N_trials)
 //        d.param(Q.begin(),Q.end()); //update action selection probability weightings from Q
 
         vector<double> t; t.resize(num_hsts);
-cout << "Q = "; print(Q);            
+if(passedD) cout << "Q = "; print(Q);            
         softmax(Q, t, num_hsts, beta_1);
-cout << "t = "; print(t);            
+if(passedD) cout << "t = "; print(t);            
         uint16_t action = smpl_wghtd(t);  //d();  //which.max(R[t,]) #
-cout << "action = " << action << "\n";            
+if(passedD) cout << "action = " << action << "\n";            
         Q[action] += alpha * (R[action] - Q[action]);
-cout << "new Q = "; print(Q);            
+if(passedD) cout << "new Q = "; print(Q);            
 /*
         nonactions_t <- (1:num_hsts)[-action[t]]
         Q[t + 1, nonactions_t] <- Q[t, nonactions_t]
-
         SM <- apply(Q, 1, softmax, temp=1)
         plot(SM[1,],type='l',col=clrs[1],ylim = c(min(SM),max(SM)))
         for (a in 2:num_hsts) {
           lines(SM[a,],col=clrs[a])
         }
-        //what are the betting odds after each trial? (LaPlace's Rule of Succession)
-        BO <- matrix(nrow = N_trials, ncol = num_hsts)
-        NS <- vector(length = num_hsts)
-        for (t in 1:N_trials) {
-          NS[action[t]] = NS[action[t]] + 1
-          for (k in 1:num_hsts)  BO[t,k] = (NS[k]+1)/(t+2)
-        }
 */
+        //what are the betting odds after each trial? (LaPlace's Rule of Succession)
+//        BO <- matrix(nrow = N_trials, ncol = num_hsts)
+//        NS <- vector(length = num_hsts)
+          NS[action]++;
+if(passedD) cout << "NS = "; print(NS);            
+          for(size_t i=0;i<num_hsts;i++)  BO[i] = double(NS[i]+1)/double(trl+2);
+            //cout << "BO["<<i<<"] = "<<BO[i]<<" for NS["<<i<<"] = "<<NS[i]<<" and trl = "<<trl<<'\n';
+          //}
+if(passedD) cout << "BO = "; print(BO);            
+          trl++;
     } while(1);
 
     return 0;
