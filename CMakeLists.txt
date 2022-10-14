@@ -131,10 +131,15 @@ set(SIM_EXEC_FILES
         simulation/udp_rcv_order.cc
         simulation/udp_send_order.cc
         simulation/packetBlastee.cc
+        simulation/packetBlasteeTcp.cc
         simulation/packetBlaster.cc
         simulation/packetBlastee2.cc
         simulation/packetBlaster2.cc
         simulation/packetBlasterFat2.cc
+        )
+
+set(ZMQ_EXEC_FILES
+        simulation/packetBlasteeZmq.cc
         )
 
 set(CLAS_EXEC_FILES
