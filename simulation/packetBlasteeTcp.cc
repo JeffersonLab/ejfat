@@ -1233,7 +1233,7 @@ int main(int argc, char **argv) {
         if (sendToServer) {
             // We first send the size of the buffer in bytes (in BIG endian).
             int32_t bytes = nBytes;
-            bytes = htonl(bytes);
+            //bytes = htonl(bytes);
 
             if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
                 close(udpSocket);
