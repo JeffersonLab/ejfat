@@ -1243,8 +1243,30 @@ int main(int argc, char **argv) {
         if (sendToServer) {
 
 
+//            // We first send the size of the buffer in bytes (in BIG endian).
+//            int32_t bytes = 12;
+//
+//            if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
+//                close(udpSocket);
+//                close(tcpSocket);
+//                fprintf(stderr, "Error writing size\n");
+//                perror("bad write");
+//                return(-1);
+//            }
+//
+//            // Then we send the buffer itself
+//            if (tcpWrite(tcpSocket, (void *) fakeData, bytes) != bytes) {
+//                close(udpSocket);
+//                close(tcpSocket);
+//                fprintf(stderr, "Error writing buffer\n");
+//                perror("bad buf write");
+//                return(-1);
+//            }
+
+
             // We first send the size of the buffer in bytes (in BIG endian).
-            int32_t bytes = 12;
+            int32_t bytes = nBytes;
+            //bytes = htonl(bytes);
 
             if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
                 close(udpSocket);
@@ -1255,31 +1277,13 @@ int main(int argc, char **argv) {
             }
 
             // Then we send the buffer itself
-            if (tcpWrite(tcpSocket, (void *) fakeData, bytes) != bytes) {
+            if (tcpWrite(tcpSocket, (void *) &dataBuf, nBytes) != nBytes) {
                 close(udpSocket);
                 close(tcpSocket);
                 fprintf(stderr, "Error writing buffer\n");
                 perror("bad buf write");
                 return(-1);
             }
-
-
-//            // We first send the size of the buffer in bytes (in BIG endian).
-//            int32_t bytes = nBytes;
-//            //bytes = htonl(bytes);
-//
-//            if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
-//                close(udpSocket);
-//                close(tcpSocket);
-//                return(-1);
-//            }
-//
-//            // Then we send the buffer itself
-//            if (tcpWrite(tcpSocket, (void *) &dataBuf, nBytes) != nBytes) {
-//                close(udpSocket);
-//                close(tcpSocket);
-//                return(-1);
-//            }
 
         }
 
