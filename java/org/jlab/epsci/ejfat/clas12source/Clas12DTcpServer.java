@@ -182,6 +182,9 @@ public class Clas12DTcpServer extends Thread {
                 System.exit(-1);
             }
 
+            // Set non-blocking mode for the listening socket
+            serverChannel.configureBlocking(false);
+
             // Register the channel with the selector for accepts
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
@@ -219,6 +222,8 @@ public class Clas12DTcpServer extends Thread {
                         // Accept the connection from the client
                         SocketChannel channel = serverChannel.accept();
 
+                        // Go back to using streams
+                        channel.configureBlocking(true);
                         buf.clear();
 
                         // Read incoming buffer size in bytes, little endian
