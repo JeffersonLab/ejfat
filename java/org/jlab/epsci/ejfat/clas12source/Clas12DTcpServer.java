@@ -254,6 +254,7 @@ public class Clas12DTcpServer extends Thread {
                 // Read incoming buffer size in bytes, little endian
                 buf.clear();
                 buf.limit(4);
+                System.out.println("    ERSAP TCP Server: read size");
                 int bytes = channel.read(buf);
 
                 int bufferSize = toInt(data[0], data[1], data[2], data[3], ByteOrder.LITTLE_ENDIAN);
