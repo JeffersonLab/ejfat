@@ -48,7 +48,7 @@ public class Clas12DTcpServer extends Thread {
     /** Level of debug output for this class. */
     private final int debug = debugConstants.debugError;
 
-    private final int serverPort;
+    static int serverPort = 8989;
 
     /** Setting this to true will kill all threads. */
     private volatile boolean killThreads;
@@ -136,13 +136,22 @@ public class Clas12DTcpServer extends Thread {
 
 
     /**
+     * Run as a stand-alone application.
+     */
+    public static void main(String[] args) {
+        Clas12DTcpServer sender = new Clas12DTcpServer(serverPort);
+        sender.run();
+    }
+
+
+    /**
      * Constructor.
      * @param server emu server that created this object
-     * @param serverPort TCP port on which to receive transmissions from emu clients
+     * @param port TCP port on which to receive transmissions from emu clients
      */
-    public Clas12DTcpServer(int serverPort) {
+    public Clas12DTcpServer(int port) {
         setName("ERSAP Simulated TCP server");
-        this.serverPort = serverPort;
+        serverPort = port;
     }
 
 
