@@ -1249,6 +1249,8 @@ int main(int argc, char **argv) {
             if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
                 close(udpSocket);
                 close(tcpSocket);
+                fprintf(stderr, "Error writing size\n");
+                perror("bad write");
                 return(-1);
             }
 
@@ -1256,6 +1258,8 @@ int main(int argc, char **argv) {
             if (tcpWrite(tcpSocket, (void *) fakeData, bytes) != bytes) {
                 close(udpSocket);
                 close(tcpSocket);
+                fprintf(stderr, "Error writing buffer\n");
+                perror("bad buf write");
                 return(-1);
             }
 
