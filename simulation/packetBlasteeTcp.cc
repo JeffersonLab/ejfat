@@ -945,6 +945,10 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, &port, &rtPriority, &debug,
               &useIPv6, &useFIFO, &useRR, listeningAddr, filename, server, &serverPort, interface);
 
+
+    std::cerr << "Tick prescale = " << tickPrescale << "\n";
+
+
 #ifdef __linux__
 
     if (cores[0] > -1) {
@@ -1123,6 +1127,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    std::cerr << "Tick prescale = " << tickPrescale << "\n";
+
     // Start thread to do rate printout
     threadStruct *targ = (threadStruct *)malloc(sizeof(threadStruct));
     if (targ == nullptr) {
@@ -1185,6 +1191,7 @@ int main(int argc, char **argv) {
     char fakeData[12];
     std::memset(fakeData, 1, 12);
 
+    std::cerr << "Tick prescale = " << tickPrescale << "\n";
 
     while (true) {
 
