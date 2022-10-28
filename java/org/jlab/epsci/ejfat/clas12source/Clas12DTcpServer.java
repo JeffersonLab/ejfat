@@ -224,21 +224,7 @@ public class Clas12DTcpServer extends Thread {
 
                         // Go back to using streams
                         channel.configureBlocking(true);
-                        buf.clear();
-
-                        // Read incoming buffer size in bytes, little endian
-                        buf.limit(4);
-                        int bytes = channel.read(buf);
-
-                        int bufferSize = toInt(data[0], data[1], data[2], data[3], ByteOrder.LITTLE_ENDIAN);
-
-                        System.out.println("    ERSAP TCP Server: size = " + bufferSize);
-
-                        buf.clear();
-                        buf.limit(bufferSize);
-                        int bytesRead = channel.read(buf);
-
-                        System.out.println("    ERSAP TCP Server: read whole buffer, " + bytesRead + " bytes");
+                        readBuffers(channel);
                     }
 
                     // remove key from selected set since it's been handled
@@ -257,6 +243,34 @@ public class Clas12DTcpServer extends Thread {
         if (debug >= debugConstants.debugInfo) {
             System.out.println("    ERSAP TCP Server: quitting");
         }
+    }
+
+
+
+    private void readBuffers(SocketChannel channel) {
+        try {
+            while (true) {
+
+                // Read incoming buffer size in bytes, little endian
+                buf.clear();
+                buf.limit(4);
+                int bytes = channel.read(buf);
+
+                int bufferSize = toInt(data[0], data[1], data[2], data[3], ByteOrder.LITTLE_ENDIAN);
+
+                System.out.println("    ERSAP TCP Server: size = " + bufferSize);
+
+                buf.clear();
+                buf.limit(bufferSize);
+                int bytesRead = channel.read(buf);
+
+                System.out.println("    ERSAP TCP Server: read whole buffer, " + bytesRead + " bytes");
+            }
+        }
+        catch (java.lang.Exception e) {
+            e.printStackTrace();
+        }
+
     }
 
 }
