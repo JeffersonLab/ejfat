@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Created-By: epsci.jlab.org
 Specification-Title: EJFAT
 Sealed: true
-Main-Class: org.jlab.epsci.ejfat.clas12source.Clas12TcpServer
+Main-Class: org.jlab.epsci.ejfat.clas12source.Clas12DTcpServer
 Class-Path: j4np-1.0.4.jar
 
 
