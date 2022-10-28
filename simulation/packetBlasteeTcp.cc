@@ -1182,6 +1182,9 @@ int main(int argc, char **argv) {
         }
     }
 
+    char fakeData[12];
+    std::memset(fakeData, 1, 12);
+
 
     while (true) {
 
@@ -1231,9 +1234,10 @@ int main(int argc, char **argv) {
 
         // Send to server if desired
         if (sendToServer) {
+
+
             // We first send the size of the buffer in bytes (in BIG endian).
-            int32_t bytes = nBytes;
-            //bytes = htonl(bytes);
+            int32_t bytes = 12;
 
             if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
                 close(udpSocket);
@@ -1242,11 +1246,30 @@ int main(int argc, char **argv) {
             }
 
             // Then we send the buffer itself
-            if (tcpWrite(tcpSocket, (void *) &dataBuf, nBytes) != nBytes) {
+            if (tcpWrite(tcpSocket, (void *) fakeData, bytes) != bytes) {
                 close(udpSocket);
                 close(tcpSocket);
                 return(-1);
             }
+
+
+//            // We first send the size of the buffer in bytes (in BIG endian).
+//            int32_t bytes = nBytes;
+//            //bytes = htonl(bytes);
+//
+//            if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
+//                close(udpSocket);
+//                close(tcpSocket);
+//                return(-1);
+//            }
+//
+//            // Then we send the buffer itself
+//            if (tcpWrite(tcpSocket, (void *) &dataBuf, nBytes) != nBytes) {
+//                close(udpSocket);
+//                close(tcpSocket);
+//                return(-1);
+//            }
+
         }
 
     }
