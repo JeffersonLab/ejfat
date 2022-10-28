@@ -9,7 +9,7 @@
  *
  */
 
-package org.jlab.epsci.clas12source;
+package org.jlab.epsci.ejfat.clas12source;
 
 
 import java.io.*;
@@ -139,8 +139,8 @@ public class Clas12DTcpServer extends Thread {
      * Run as a stand-alone application.
      */
     public static void main(String[] args) {
-        Clas12DTcpServer sender = new Clas12DTcpServer(serverPort);
-        sender.run();
+        Clas12DTcpServer server = new Clas12DTcpServer(serverPort);
+        server.run();
     }
 
 
