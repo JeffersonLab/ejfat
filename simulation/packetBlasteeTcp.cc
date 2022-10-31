@@ -1216,6 +1216,8 @@ int main(int argc, char **argv) {
             return (0);
         }
 
+        fprintf(stderr, "Received buffer of %d bytes", (int)nBytes);
+
         diff = tick - prevTick;
         if (diff != 0) {
             fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
@@ -1266,6 +1268,7 @@ int main(int argc, char **argv) {
 
             // We first send the size of the buffer in bytes (in BIG endian).
             int32_t bytes = nBytes;
+            fprintf(stderr, "Sending %d bytes\n", bytes);
             //bytes = htonl(bytes);
 
             if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
