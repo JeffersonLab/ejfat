@@ -658,7 +658,6 @@ static inline uint64_t bswap_64(uint64_t x) {
             size_t remainingLen = bufLen;
             struct timespec now;
 
-            fprintf(stderr, "getPacketizedBuffer2: tickPrescale = %u\n", tickPrescale);
 
             if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu, take stats = %d, %p\n",
                                remainingLen, takeStats, stats.get());
@@ -744,10 +743,10 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                     memcpy(writeHeaderAt, headerStorage, HEADER_BYTES);
                 }
 
-                if (packetTick != expectedTick) {
-                    printf("Packet != expected tick, got %" PRIu64 ", ex = %" PRIu64 ", prev = %" PRIu64 "\n",
-                           packetTick, expectedTick, prevTick);
-                }
+//                if (packetTick != expectedTick) {
+//                    printf("Packet != expected tick, got %" PRIu64 ", ex = %" PRIu64 ", prev = %" PRIu64 "\n",
+//                           packetTick, expectedTick, prevTick);
+//                }
 
                 // This if-else statement is what enables the packet reading/parsing to keep
                 // up an input rate that is too high (causing dropped packets) and still salvage
@@ -956,7 +955,6 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                 }
             }
 
-            fprintf(stderr, "getPacketizedBuffer2: tickPrescale = %u\n", tickPrescale);
             *tick   = packetTick;
             *dataId = packetDataId;
             clearMap(outOfOrderPackets);
