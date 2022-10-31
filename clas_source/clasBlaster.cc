@@ -839,7 +839,7 @@ int main(int argc, char **argv) {
     printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
 
 
-int sizeCount = 20;
+int sizeCount = 100;
 
     // Statistics & rate setting
     int64_t packetsSent=0;
