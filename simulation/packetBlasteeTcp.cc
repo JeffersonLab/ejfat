@@ -1216,7 +1216,7 @@ int main(int argc, char **argv) {
             return (0);
         }
 
-        fprintf(stderr, "Received buffer of %d bytes, tpre %d", (int)nBytes, tickPrescale);
+        fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
 
         diff = tick - prevTick;
         if (diff != 0) {
