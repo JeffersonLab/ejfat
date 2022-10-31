@@ -924,7 +924,7 @@ int sizeCount = 100;
         byteSize = event.getSize();
 
         if (sizeCount-- > 0) {
-            printf("sending event size = %d\n", byteSize);
+            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
         }
 
         err = sendPacketizedBufferFast(buf, byteSize,
