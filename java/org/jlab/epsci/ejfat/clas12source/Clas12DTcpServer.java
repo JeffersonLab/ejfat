@@ -254,18 +254,17 @@ public class Clas12DTcpServer extends Thread {
                 // Read incoming buffer size in bytes, little endian
                 buf.clear();
                 buf.limit(4);
-                System.out.println("    ERSAP TCP Server: read size");
                 int bytes = channel.read(buf);
 
                 int bufferSize = toInt(data[0], data[1], data[2], data[3], ByteOrder.LITTLE_ENDIAN);
 
-                System.out.println("    ERSAP TCP Server: size = " + bufferSize);
+                System.out.println("size = " + bufferSize);
 
                 buf.clear();
                 buf.limit(bufferSize);
                 int bytesRead = channel.read(buf);
 
-                System.out.println("    ERSAP TCP Server: read whole buffer, " + bytesRead + " bytes");
+                System.out.println("read buf, " + bytesRead + " bytes");
             }
         }
         catch (java.lang.Exception e) {
