@@ -1280,7 +1280,7 @@ int main(int argc, char **argv) {
             }
 
             // Then we send the buffer itself
-            if (tcpWrite(tcpSocket, (void *) &dataBuf, nBytes) != nBytes) {
+            if (tcpWrite(tcpSocket, (void *) dataBuf, nBytes) != nBytes) {
                 close(udpSocket);
                 close(tcpSocket);
                 fprintf(stderr, "Error writing buffer\n");
