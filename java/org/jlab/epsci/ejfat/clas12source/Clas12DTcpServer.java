@@ -262,7 +262,11 @@ public class Clas12DTcpServer extends Thread {
 
                 buf.clear();
                 buf.limit(bufferSize);
-                int bytesRead = channel.read(buf);
+                int bytesRead = 0;
+
+                while (bytesRead < bufferSize) {
+                    bytesRead += channel.read(buf);
+                }
 
                 System.out.println("read buf, " + bytesRead + " bytes");
             }
