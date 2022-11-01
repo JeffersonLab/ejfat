@@ -1268,7 +1268,7 @@ int main(int argc, char **argv) {
 
             // We first send the size of the buffer in bytes (in BIG endian).
             int32_t bytes = nBytes;
-            fprintf(stderr, "Sending %d bytes\n", bytes);
+            //fprintf(stderr, "Sending %d bytes\n", bytes);
             //bytes = htonl(bytes);
 
             if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {

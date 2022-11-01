@@ -839,7 +839,7 @@ int main(int argc, char **argv) {
     printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
 
 
-int sizeCount = 100;
+//int sizeCount = 100;
 
     // Statistics & rate setting
     int64_t packetsSent=0;
@@ -923,9 +923,9 @@ int sizeCount = 100;
         char *buf = &event.getEventBuffer()[0];
         byteSize = event.getSize();
 
-        if (sizeCount-- > 0) {
-            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
-        }
+//        if (sizeCount-- > 0) {
+//            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
+//        }
 
         err = sendPacketizedBufferFast(buf, byteSize,
                                        maxUdpPayload, clientSocket,
