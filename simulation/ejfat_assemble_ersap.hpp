@@ -743,11 +743,8 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                     // Replace what was written over
                     memcpy(writeHeaderAt, headerStorage, HEADER_BYTES);
                 }
-if (outCount-- > 0)
-printf("packetTick = %" PRIu64 ", ex = %" PRIu64 ", prev = %" PRIu64 "\n", packetTick, expectedTick, prevTick);
 
-
-                //                if (packetTick != expectedTick) {
+//                if (packetTick != expectedTick) {
 //                    printf("Packet != expected tick, got %" PRIu64 ", ex = %" PRIu64 ", prev = %" PRIu64 "\n",
 //                           packetTick, expectedTick, prevTick);
 //                }

@@ -258,7 +258,7 @@ public class Clas12DTcpServer extends Thread {
 
                 int bufferSize = toInt(data[0], data[1], data[2], data[3], ByteOrder.LITTLE_ENDIAN);
 
-                System.out.println("size = " + bufferSize);
+                //System.out.println("size = " + bufferSize);
 
                 buf.clear();
                 buf.limit(bufferSize);
@@ -268,7 +268,7 @@ public class Clas12DTcpServer extends Thread {
                     bytesRead += channel.read(buf);
                 }
 
-                System.out.println("read buf, " + bytesRead + " bytes");
+                //System.out.println("read buf, " + bytesRead + " bytes");
             }
         }
         catch (java.lang.Exception e) {
