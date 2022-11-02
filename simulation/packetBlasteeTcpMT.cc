@@ -501,7 +501,7 @@ static void *sendingThread(void *arg) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        std::cerr << "Run assemble reading thd for source " <<  sourceId << " on core " << core << "\n";
+        std::cerr << "Run assemble reading thd on core " << core << "\n";
         CPU_SET(core, &cpuset);
 
         pthread_t current_thread = pthread_self();
