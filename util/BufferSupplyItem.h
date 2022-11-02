@@ -115,7 +115,7 @@ namespace ejfat {
                         eventFactory(int, const ByteOrder&, bool);
 
         BufferSupplyItem();
-        BufferSupplyItem(int bufferSize, const ByteOrder & order = ByteOrder::ENDIAN_LOCAL, bool release = false, int myId = 0);
+//        BufferSupplyItem(int bufferSize, const ByteOrder & order = ByteOrder::ENDIAN_LOCAL, bool release = false, int myId = 0);
         BufferSupplyItem(const BufferSupplyItem & item);
         ~BufferSupplyItem() = default;
 
