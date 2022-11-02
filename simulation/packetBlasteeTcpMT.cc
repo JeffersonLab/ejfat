@@ -839,10 +839,10 @@ int main(int argc, char **argv) {
 
 //        fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
 //
-//        diff = tick - prevTick;
-//        if (diff != 0) {
-//            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
-//        }
+        diff = tick - prevTick;
+        if (diff != tickPrescale) {
+            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
+        }
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;
