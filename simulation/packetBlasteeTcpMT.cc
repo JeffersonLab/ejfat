@@ -719,7 +719,7 @@ int main(int argc, char **argv) {
         // Supply in which each buf will hold reconstructed buffer.
         // Make these buffers sized as given on command line (100kB default) and expand as necessary.
         //---------------------------------------------------
-        int ringSize = 1024;
+        int ringSize = 16384;
         supply = std::make_shared<ejfat::BufferSupply>(ringSize, bufSize, ByteOrder::ENDIAN_LOCAL, true);
 
             // Connect to server
@@ -866,7 +866,7 @@ int main(int argc, char **argv) {
         if (sendToServer) {
             // Store data len in bytes
             item->setUserLong(((long)nBytes & 0xffffffffL));
-            // Return buffer to supply for reuse
+            // Make available to the sender thread
             supply->publish(item);
         }
         else {
