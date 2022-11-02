@@ -389,7 +389,7 @@ namespace ejfat {
             // delay if any
             if (delay > 0) {
                 if (--(*delayCounter) < 1) {
-                    fprintf(stderr, "****************** P DELAY ********************\n");
+//fprintf(stderr, "****************** P DELAY ********************\n");
                     std::this_thread::sleep_for(std::chrono::microseconds(delay));
                     *delayCounter = delayPrescale;
                 }
