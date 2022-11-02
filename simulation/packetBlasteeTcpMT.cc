@@ -748,27 +748,6 @@ int main(int argc, char **argv) {
             fprintf(stderr, "\n ******* error creating thread\n\n");
             return -1;
         }
-
-
-#ifdef __linux__
-
-        if (core > -1) {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        std::cerr << "Run assemble reading thd on core " << core << "\n";
-        CPU_SET(core, &cpuset);
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-    }
-
-#endif
-
     }
 
 
