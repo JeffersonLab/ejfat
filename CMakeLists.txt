@@ -119,6 +119,7 @@ set(DIS_EXEC_FILES
         simulation/packetBlasteeFast.cc
         simulation/packetBlasterFat.cc
         simulation/packetBlasteeFat.cc
+        simulation/packetBlasteeTcpMT.cc
         )
 
 set(UTIL_FILES
