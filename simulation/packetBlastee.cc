@@ -703,7 +703,8 @@ int main(int argc, char **argv) {
 
         diff = tick - prevTick;
         if (diff != 0) {
-            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
+            //fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
+            fprintf(stderr, "Expect %" PRIu64 ", got %" PRIu64 ", diff %" PRIu64 "\n", prevTick, tick, diff);
         }
 
         totalBytes   += nBytes;
