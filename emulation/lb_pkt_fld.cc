@@ -36,7 +36,7 @@ void   Usage(void)
         -m mtu size (default 9000)  \n\
         -n num repeats  \n\
         -v verbose mode (default is quiet)  \n\
-        -s event size (B)  \n\
+        -s event + remd size (B)  \n\
         -h help \n\n";
         cout<<usage_str;
         cout<<"Required: -i\n";
@@ -216,83 +216,83 @@ int main (int argc, char *argv[])
     *pDid     = htons(data_id);
 
     for(uint64_t i = 0; i < num_rpts; i++) {
-    for(uint64_t tick = 0; tick < num_tcks; tick++) {
-        *pTick = HTONLL(tick);
-	int64_t bytes_to_send = evnt_sz;
-        uint32_t seq_num = 0;
-	while(bytes_to_send > 0) {
-            *pSeq = htonl(seq_num);
-//cout<<"bytes_to_send: "<<bytes_to_send<<" evnt_sz: "<<evnt_sz<<" data_pyld_sz: "<<data_pyld_sz<<endl;
-            if(evnt_sz <= data_pyld_sz)   //first and last
-            {
-                pBufRe[1] = 0x3; //first and last
-            } else if(bytes_to_send == evnt_sz)   //first
-            {
-                t_start = std::chrono::steady_clock::now();
-                if(passedV) std::cout << "Interval: "
-                          << std::chrono::duration<double, std::micro>(t_start-t_end).count()
-                          << " us" << std::endl;
-                pBufRe[1] = 0x2;  // neither first nor last
-            } else if(bytes_to_send <= data_pyld_sz)  //last
-            {
-                pBufRe[1] = 0x1; //last
-            } else {
-                pBufRe[1] = 0x0;  // neither first nor last
-            }
+        for(uint64_t tick = 0; tick < num_tcks; tick++) {
+            *pTick = HTONLL(tick);
+            int64_t bytes_to_send = evnt_sz;
+            uint32_t seq_num = 0;
+            while(bytes_to_send > 0) {
+                *pSeq = htonl(seq_num);
+                //cout<<"bytes_to_send: "<<bytes_to_send<<" evnt_sz: "<<evnt_sz<<" data_pyld_sz: "<<data_pyld_sz<<endl;
+                if(evnt_sz <= data_pyld_sz)   //first and last
+                {
+                    pBufRe[1] = 0x3; //first and last
+                } else if(bytes_to_send == evnt_sz)   //first
+                {
+                    t_start = std::chrono::steady_clock::now();
+                    if(passedV) std::cout << "Interval: "
+                              << std::chrono::duration<double, std::micro>(t_start-t_end).count()
+                              << " us" << std::endl;
+                    pBufRe[1] = 0x2;  // neither first nor last
+                } else if(bytes_to_send <= data_pyld_sz)  //last
+                {
+                    pBufRe[1] = 0x1; //last
+                } else {
+                    pBufRe[1] = 0x0;  // neither first nor last
+                }
 
-            // forward data to LB
+                // forward data to LB
 
-            if(passedV) {
-                fprintf ( stdout, "\nLB Meta-data: ");
-                for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x", b, pBufLb[b]);
-                fprintf ( stdout, " entropy = %d", ntohs(*pEntrp));
-                fprintf ( stdout, " tick = %" PRIu64 " ", tick);
+                if(passedV) {
+                    fprintf ( stdout, "\nLB Meta-data: ");
+                    for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x", b, pBufLb[b]);
+                    fprintf ( stdout, " entropy = %d", ntohs(*pEntrp));
+                    fprintf ( stdout, " tick = %" PRIu64 " ", tick);
 
 /***
-                fprintf ( stdout, "\nLB Meta-data on the wire:\n");
-                for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x", b, pBufLb[b]);
-                fprintf ( stdout, " entropy = %d", (*pEntrp));
-                fprintf ( stdout, " for tick = %" PRIu64 " ", *pTick);
+                    fprintf ( stdout, "\nLB Meta-data on the wire:\n");
+                    for(uint8_t b = 0; b < lblen; b++) fprintf ( stdout, " [%d] = %x", b, pBufLb[b]);
+                    fprintf ( stdout, " entropy = %d", (*pEntrp));
+                    fprintf ( stdout, " for tick = %" PRIu64 " ", *pTick);
 ***/
 
-                fprintf ( stdout, "\nRE Meta-data: ");
-                for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
-		fprintf ( stdout, " for re_frst = %d / re_lst = %d",  (pBufRe[1] & 0x2)>>1, pBufRe[1] & 0x1); 
-                fprintf ( stdout, " / data_id = %d / re_seq = %d\n", data_id, seq_num);	
+                    fprintf ( stdout, "\nRE Meta-data: ");
+                    for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
+                    fprintf ( stdout, " for re_frst = %d / re_lst = %d",  (pBufRe[1] & 0x2)>>1, pBufRe[1] & 0x1); 
+                    fprintf ( stdout, " / data_id = %d / re_seq = %d\n", data_id, seq_num);	
 
 /***
-                fprintf ( stdout, "\nRE Meta-data on the wire:\n");
-		for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
-		fprintf ( stdout, " for re_frst = %d / re_lst = %d", pBufRe[1] == 0x2, pBufRe[1] == 0x1); 
-                fprintf ( stdout, " / data_id = %d / re_seq = %d\n", *pDid, *pSeq);	
+                    fprintf ( stdout, "\nRE Meta-data on the wire:\n");
+                    for(uint8_t b = 0; b < relen; b++) fprintf ( stdout, " [%d] = %x ", b, pBufRe[b]);
+                    fprintf ( stdout, " for re_frst = %d / re_lst = %d", pBufRe[1] == 0x2, pBufRe[1] == 0x1); 
+                    fprintf ( stdout, " / data_id = %d / re_seq = %d\n", *pDid, *pSeq);	
 ***/
-            }
+                }
 
-            ssize_t rtCd = 0;
-            /* now send a datagram */
-            if (passed6) {
-                if ((rtCd = sendto(dst_sckt, buffer, std::min(bytes_to_send+mdlen,mtu_pyld_sz), 0, 
-                        (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
-                    perror("sendto failed");
-                    exit(4);
+                ssize_t rtCd = 0;
+                /* now send a datagram */
+                if (passed6) {
+                    if ((rtCd = sendto(dst_sckt, buffer, std::min(bytes_to_send+mdlen,mtu_pyld_sz), 0, 
+                            (struct sockaddr *)&dst_addr6, sizeof dst_addr6)) < 0) {
+                        perror("sendto failed");
+                        exit(4);
+                    }
+                } else {
+                    if ((rtCd = sendto(dst_sckt, buffer, std::min(bytes_to_send+mdlen,mtu_pyld_sz), 0, 
+                            (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
+                        perror("sendto failed");
+                        exit(4);
+                    }
                 }
-            } else {
-                if ((rtCd = sendto(dst_sckt, buffer, std::min(bytes_to_send+mdlen,mtu_pyld_sz), 0, 
-                        (struct sockaddr *)&dst_addr, sizeof dst_addr)) < 0) {
-                    perror("sendto failed");
-                    exit(4);
+                if(passedV) fprintf ( stdout, "\nSending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+                if(bytes_to_send <= data_pyld_sz) //last
+                {
+                    t_end = std::chrono::steady_clock::now();
+                    usleep(lb_dly);
                 }
+                bytes_to_send -= uint16_t(rtCd-mdlen);
+                seq_num++;
             }
-            if(passedV) fprintf ( stdout, "\nSending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
-            if(bytes_to_send <= data_pyld_sz) //last
-            {
-                t_end = std::chrono::steady_clock::now();
-                usleep(lb_dly);
-            }
-            bytes_to_send -= uint16_t(rtCd-mdlen);
-            seq_num++;
         }
-    }
     }
     // `time_t` is an arithmetic time type
     time_t now;
