@@ -67,6 +67,7 @@ set(EXEC_FILES
         simulation/lb_emu2.cc
         emulation/lb_emu.cc
         emulation/lb_rcv.cc
+        emulation/lb_rcv-roc.cc
         emulation/pktzr_md.cc
         emulation/lb_pkt_fld.cc
         )
