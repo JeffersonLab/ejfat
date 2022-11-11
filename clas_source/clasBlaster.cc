@@ -923,9 +923,9 @@ int main(int argc, char **argv) {
         char *buf = &event.getEventBuffer()[0];
         byteSize = event.getSize();
 
-//        if (sizeCount-- > 0) {
-//            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
-//        }
+        if (byteSize < 80) {
+            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
+        }
 
         err = sendPacketizedBufferFast(buf, byteSize,
                                        maxUdpPayload, clientSocket,
