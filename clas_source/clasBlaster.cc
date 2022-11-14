@@ -843,6 +843,7 @@ int main(int argc, char **argv) {
     uint32_t loops = repeats;
 
     while(reader.next()) {
+        std::cerr << "Read event " <<  index << std::endl;
         reader.read(event);
 
         char *buf = &event.getEventBuffer()[0];
@@ -850,7 +851,8 @@ int main(int argc, char **argv) {
         if (bytes <= 200000) {
             memcpy(bufArray[index], buf, bytes);
             sizes[index] = bytes;
-            printf("Event %d = %d\n", index++, bytes);
+            std::cerr << "Event " <<  index << " = " << bytes << std::endl;
+            index++;
             evCount++;
         }
         totalBytes2 += bytes;
@@ -862,6 +864,7 @@ int main(int argc, char **argv) {
 
     avgBufBytes = totalBytes2 / counter;
     printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
+    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
 
 
 //int sizeCount = 100;
