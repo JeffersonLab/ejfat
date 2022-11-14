@@ -904,6 +904,7 @@ int main(int argc, char **argv) {
             }
             countDown = buffersAtOnce - 1;
         }
+        std::this_thread::sleep_for(std::chrono::nanoseconds(1));
 
         if (sendnocp) {
             err = sendPacketizedBufferFast(buf, bufSize,
