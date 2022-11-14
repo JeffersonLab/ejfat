@@ -816,7 +816,7 @@ int main(int argc, char **argv) {
     }
 
     for (int i=0; i < bufCount; i++) {
-        bufArray[i] = (char *) malloc(200000);
+        bufArray[i] = (char *) malloc(50000);
         if (bufArray == NULL) {
             fprintf(stderr, "cannot allocate buffer of 200kB\n");
             return -1;
@@ -852,7 +852,7 @@ int main(int argc, char **argv) {
 
         char *buf = &event.getEventBuffer()[0];
         int bytes = event.getSize();
-        if (bytes <= 200000) {
+        if (bytes <= 50000) {
             memcpy(bufArray[index], buf, bytes);
             sizes[index] = bytes;
             std::cerr << "Event " <<  index << " = " << bytes << std::endl;
