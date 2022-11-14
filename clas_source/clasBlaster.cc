@@ -873,12 +873,12 @@ int main(int argc, char **argv) {
 
 
     // For testing
-//    byteSize = 100000;
-//    char *buf = (char *) malloc(byteSize);
-//    if (buf == NULL) {
-//        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", 100000);
-//        return -1;
-//    }
+    //byteSize = 100000;
+    char *tempBuf = (char *) malloc(4000000);
+    if (tempBuf == NULL) {
+        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", 4000000ULL);
+        return -1;
+    }
 
     while (true) {
 
@@ -929,12 +929,9 @@ int main(int argc, char **argv) {
             reader.read(event);
         }
 
-        std::vector<char> & dataVector = event.getEventBuffer();
-        char * buf = dataVector.data();
+        char *buf = &event.getEventBuffer()[0];
         byteSize = event.getSize();
-
-//        char *buf = &event.getEventBuffer()[0];
-//        byteSize = event.getSize();
+        memcpy(tempBuf, buf, byteSize);
 
         if (byteSize < 80) {
             printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
@@ -943,7 +940,7 @@ int main(int argc, char **argv) {
             printf("event pointer is null\n");
         }
 
-        err = sendPacketizedBufferFast(buf, byteSize,
+        err = sendPacketizedBufferFast(tempBuf, byteSize,
                                        maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, dataId, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
