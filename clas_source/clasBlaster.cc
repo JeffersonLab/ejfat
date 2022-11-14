@@ -806,6 +806,24 @@ int main(int argc, char **argv) {
 
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
 
+    // For testing
+    int bufCount = 1000;
+    // Hold 1000 buffers (char *)
+    char **bufArray = (char **) malloc(bufCount);
+    if (bufArray == NULL) {
+        fprintf(stderr, "cannot allocate internal array memory of %d buffers\n", 1000);
+        return -1;
+    }
+
+    for (int i=0; i < bufCount; i++) {
+        bufArray[i] = (char *) malloc(200000);
+        if (bufArray == NULL) {
+            fprintf(stderr, "cannot allocate buffer of 200kB\n");
+            return -1;
+        }
+    }
+
+    size_t sizes[bufCount];
 
 
     // HIPO READING PART
@@ -819,21 +837,28 @@ int main(int argc, char **argv) {
     std::cerr << "Preparing to open file " <<  filename << std::endl;
     reader.open(filename);
 
-    int counter = 77159;
+    int counter = 0;
     int byteSize = 0;
-    int index = 0;
+    int index = 0, evCount = 0;
     uint32_t loops = repeats;
 
     while(reader.next()) {
         reader.read(event);
 
+        char *buf = &event.getEventBuffer()[0];
         int bytes = event.getSize();
-        //  printf("Event %d is siz e= %d\n", index++, bytes);
+        if (bytes <= 200000) {
+            memcpy(bufArray[index], buf, bytes);
+            sizes[index] = bytes;
+            printf("Event %d = %d\n", index++, bytes);
+            evCount++;
+        }
         totalBytes2 += bytes;
 
         counter++;
     }
-    reader.gotoEvent(0);
+    //reader.gotoEvent(0);
+    //reader.close();
 
     avgBufBytes = totalBytes2 / counter;
     printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
@@ -872,13 +897,7 @@ int main(int argc, char **argv) {
     }
 
 
-    // For testing
-    //byteSize = 100000;
-    char *tempBuf = (char *) malloc(4000000);
-    if (tempBuf == NULL) {
-        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", 4000000ULL);
-        return -1;
-    }
+    index = 0;
 
     while (true) {
 
@@ -919,28 +938,35 @@ int main(int argc, char **argv) {
             countDown = buffersAtOnce - 1;
         }
 
-        if (reader.next()) {
-            reader.read(event);
-//fprintf(stderr, "packetBlaster: read next event\n");
-        }
-        else {
-//            fprintf(stderr, "again\n");
-            reader.gotoEvent(0);
-            reader.read(event);
-        }
+//        if (reader.next()) {
+//            reader.read(event);
+////fprintf(stderr, "packetBlaster: read next event\n");
+//        }
+//        else {
+////            fprintf(stderr, "again\n");
+//            reader.gotoEvent(0);
+//            reader.read(event);
+//        }
+//
+//        char *buf = &event.getEventBuffer()[0];
+//        byteSize = event.getSize();
+//        memcpy(tempBuf, buf, byteSize);
+//
+//        if (byteSize < 80) {
+//            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
+//        }
+//        if (buf == nullptr) {
+//            printf("event pointer is null\n");
+//        }
 
-        char *buf = &event.getEventBuffer()[0];
-        byteSize = event.getSize();
-        memcpy(tempBuf, buf, byteSize);
-
-        if (byteSize < 80) {
-            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
+        if (index == bufCount) {
+            index = 0;
         }
-        if (buf == nullptr) {
-            printf("event pointer is null\n");
-        }
+        char *buf = bufArray[index];
+        byteSize = sizes[index];
+        index++;
 
-        err = sendPacketizedBufferFast(tempBuf, byteSize,
+        err = sendPacketizedBufferFast(buf, byteSize,
                                        maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, dataId, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
