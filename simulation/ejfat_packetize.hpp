@@ -366,7 +366,7 @@ namespace ejfat {
                     maxUdpPayload = maxUdpPayload * 8 / 10;
                     veryLastPacket = false;
                     packetCounter--;
-                    if (debug) fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
+                    fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
                     goto startAgain;
                 }
                 else {
