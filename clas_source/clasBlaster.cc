@@ -842,6 +842,10 @@ int main(int argc, char **argv) {
     int index = 0, evCount = 0;
     uint32_t loops = repeats;
 
+    bool haveNext = reader.next();
+    std::cerr << "File haveNext = " <<  haveNext << std::endl;
+
+
     while(reader.next()) {
         std::cerr << "Read event " <<  index << std::endl;
         reader.read(event);
