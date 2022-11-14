@@ -871,6 +871,14 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
+
+    byteSize = 100000;
+    char *buf = (char *) malloc(byteSize);
+    if (buf == NULL) {
+        fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", 100000);
+        return -1;
+    }
+
     while (true) {
 
         // If we're sending buffers at a constant rate AND we've sent the entire bunch
@@ -910,18 +918,18 @@ int main(int argc, char **argv) {
             countDown = buffersAtOnce - 1;
         }
 
-        if (reader.next()) {
-            reader.read(event);
-//fprintf(stderr, "packetBlaster: read next event\n");
-        }
-        else {
-//            fprintf(stderr, "again\n");
-            reader.gotoEvent(0);
-            reader.read(event);
-        }
+//        if (reader.next()) {
+//            reader.read(event);
+////fprintf(stderr, "packetBlaster: read next event\n");
+//        }
+//        else {
+////            fprintf(stderr, "again\n");
+//            reader.gotoEvent(0);
+//            reader.read(event);
+//        }
 
-        char *buf = &event.getEventBuffer()[0];
-        byteSize = event.getSize();
+//        char *buf = &event.getEventBuffer()[0];
+//        byteSize = event.getSize();
 
         if (byteSize < 80) {
             printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
