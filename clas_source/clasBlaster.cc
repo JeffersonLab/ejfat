@@ -929,8 +929,12 @@ int main(int argc, char **argv) {
             reader.read(event);
         }
 
-        char *buf = &event.getEventBuffer()[0];
+        std::vector<char> & dataVector = event.getEventBuffer();
+        char * buf = dataVector.data();
         byteSize = event.getSize();
+
+//        char *buf = &event.getEventBuffer()[0];
+//        byteSize = event.getSize();
 
         if (byteSize < 80) {
             printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
