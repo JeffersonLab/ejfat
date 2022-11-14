@@ -809,7 +809,7 @@ int main(int argc, char **argv) {
     // For testing
     int bufCount = 1000;
     // Hold 1000 buffers (char *)
-    char **bufArray = (char **) malloc(bufCount);
+    char **bufArray = (char **) calloc(bufCount, sizeof(char *));
     if (bufArray == NULL) {
         fprintf(stderr, "cannot allocate internal array memory of %d buffers\n", 1000);
         return -1;
