@@ -816,7 +816,7 @@ int main(int argc, char **argv) {
     }
 
     for (int i=0; i < bufCount; i++) {
-        bufArray[i] = (char *) malloc(50000);
+        bufArray[i] = (char *) malloc(65000);
         if (bufArray == NULL) {
             fprintf(stderr, "cannot allocate buffer of 200kB\n");
             return -1;
@@ -853,7 +853,7 @@ int main(int argc, char **argv) {
         int bytes = event.getSize();
 
         if (index < bufCount) {
-            if (bytes <= 50000) {
+            if (bytes <= 65000) {
                 memcpy(bufArray[index], buf, bytes);
                 sizes[index] = bytes;
                 if (counter == 8862) {
@@ -874,7 +874,6 @@ int main(int argc, char **argv) {
     //reader.close();
 
     avgBufBytes = totalBytes2 / counter;
-    printf("processed events = %d, avg buf size = %d\n", counter, avgBufBytes);
     std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
 
 
