@@ -881,9 +881,11 @@ int main(int argc, char **argv) {
 
 //    avgBufBytes = totalBytes2 / counter;
 //    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
-        badSize = sizes[8861];
-        memcpy(badEvent, bufArray[8861], badSize);
+        index = 8861;
+        badSize = sizes[index];
+        memcpy(badEvent, bufArray[index], badSize);
 
+    std::cerr << "Event index = " << index << ", size = " << badSize << std::endl;
 
 
 //int sizeCount = 100;
