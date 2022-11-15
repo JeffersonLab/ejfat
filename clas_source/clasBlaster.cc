@@ -993,7 +993,7 @@ int main(int argc, char **argv) {
 
 if (tick > 3) break;
 
-        err = sendPacketizedBufferFast(badEvent, badSize,
+        err = sendPacketizedBuffer(badEvent, badSize,
                                        maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, dataId, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
