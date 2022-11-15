@@ -381,6 +381,11 @@ namespace ejfat {
                 }
             }
 
+            if (err != ( bytesToWrite + HEADER_BYTES)) {
+                fprintf(stderr, "sendPacketizedBufferFast: wanted to send %d, but only sent %d\n",
+                        (int)(bytesToWrite + HEADER_BYTES), err);
+            }
+
             if (firstLoop) {
                 // Switch from local array to writing from dataBuffer for rest of packets
                 writeHeaderTo = dataBuffer - HEADER_BYTES;
