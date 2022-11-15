@@ -687,7 +687,7 @@ static int outCount = 100;
 fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         return nBytes;
                     }
-                    else if (nBytes == 0 && remainingLen > 0) {
+                    else if (nBytes == 0) {
                         // Something clearly wrong. There should be SOME data returned.
 fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = 0, remainingLen = %zu\n", remainingLen);
                         clearMap(outOfOrderPackets);
@@ -721,7 +721,7 @@ fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = 0, 
 
                     nBytes = bytesRead - HEADER_BYTES;
 
-                    if (nBytes == 0 && remainingLen > 0) {
+                    if (nBytes == 0) {
                         // Something clearly wrong. There should be SOME data besides header returned.
 fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         clearMap(outOfOrderPackets);
