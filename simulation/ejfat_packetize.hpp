@@ -381,7 +381,7 @@ namespace ejfat {
                 }
             }
 
-            if (err != ( bytesToWrite + HEADER_BYTES)) {
+            if (err != (bytesToWrite + HEADER_BYTES)) {
                 fprintf(stderr, "sendPacketizedBufferFast: wanted to send %d, but only sent %d\n",
                         (int)(bytesToWrite + HEADER_BYTES), err);
             }
