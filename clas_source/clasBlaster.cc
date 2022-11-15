@@ -856,7 +856,7 @@ int main(int argc, char **argv) {
             if (bytes <= 65000) {
                 memcpy(bufArray[index], buf, bytes);
                 sizes[index] = bytes;
-                if (counter == 8862) {
+                if (counter > 8859 && counter < 8870) {
                     std::cerr << "Event " << counter << " = " << bytes << std::endl;
                 }
                 index++;
@@ -866,15 +866,18 @@ int main(int argc, char **argv) {
                 std::cerr << "Skipping event " <<  counter << ", size " << bytes << std::endl;
             }
         }
-        totalBytes2 += bytes;
+        else {
+            break;
+        }
+        //totalBytes2 += bytes;
 
         counter++;
     }
     //reader.gotoEvent(0);
     //reader.close();
 
-    avgBufBytes = totalBytes2 / counter;
-    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
+//    avgBufBytes = totalBytes2 / counter;
+//    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
 
 
 //int sizeCount = 100;
