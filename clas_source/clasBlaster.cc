@@ -847,18 +847,24 @@ int main(int argc, char **argv) {
 
 
     while(reader.next()) {
-        std::cerr << "Read event " <<  index << std::endl;
         reader.read(event);
 
         char *buf = &event.getEventBuffer()[0];
         int bytes = event.getSize();
 
-        if (bytes <= 50000 && index < bufCount) {
-            memcpy(bufArray[index], buf, bytes);
-            sizes[index] = bytes;
-            std::cerr << "Event " <<  index << " = " << bytes << std::endl;
-            index++;
-            evCount++;
+        if (index < bufCount) {
+            if (bytes <= 50000) {
+                memcpy(bufArray[index], buf, bytes);
+                sizes[index] = bytes;
+                if (counter == 8862) {
+                    std::cerr << "Event " << counter << " = " << bytes << std::endl;
+                }
+                index++;
+                evCount++;
+            }
+            else {
+                std::cerr << "Skipping event " <<  counter << ", size " << bytes << std::endl;
+            }
         }
         totalBytes2 += bytes;
 
