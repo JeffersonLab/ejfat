@@ -775,7 +775,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
+    fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
     // To avoid having file reads contaminate our performance measurements,
     // place some data into a buffer and repeatedly read it.
