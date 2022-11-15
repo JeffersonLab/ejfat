@@ -807,11 +807,11 @@ int main(int argc, char **argv) {
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
 
     // For testing
-    int bufCount = 1000;
+    int bufCount = 10000;
     // Hold 1000 buffers (char *)
     char **bufArray = (char **) calloc(bufCount, sizeof(char *));
     if (bufArray == NULL) {
-        fprintf(stderr, "cannot allocate internal array memory of %d buffers\n", 1000);
+        fprintf(stderr, "cannot allocate internal array memory of 10000 buffers\n");
         return -1;
     }
 
