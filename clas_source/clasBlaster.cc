@@ -991,6 +991,7 @@ int main(int argc, char **argv) {
 //        index++;
 
 
+if (tick > 3) break;
 
         err = sendPacketizedBufferFast(badEvent, badSize,
                                        maxUdpPayload, clientSocket,
