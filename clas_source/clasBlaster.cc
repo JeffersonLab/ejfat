@@ -860,7 +860,7 @@ int main(int argc, char **argv) {
                 memcpy(bufArray[index], buf, bytes);
                 sizes[index] = bytes;
                 if (counter > 8859 && counter < 8870) {
-                    std::cerr << "Event " << counter << " = " << bytes << std::endl;
+                    std::cerr << "Event counter " << counter << ", index " << index << " = " << bytes << std::endl;
                 }
                 index++;
                 evCount++;
