@@ -823,6 +823,9 @@ int main(int argc, char **argv) {
         }
     }
 
+    char badEvent[65000];
+    int badSize = 0;
+
     size_t sizes[bufCount];
 
 
@@ -878,6 +881,9 @@ int main(int argc, char **argv) {
 
 //    avgBufBytes = totalBytes2 / counter;
 //    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
+        badSize = sizes[8862];
+        memcpy(badEvent, bufArray[8862], badSize);
+
 
 
 //int sizeCount = 100;
@@ -975,14 +981,16 @@ int main(int argc, char **argv) {
 //            printf("event pointer is null\n");
 //        }
 
-        if (index == bufCount) {
-            index = 0;
-        }
-        char *buf = bufArray[index];
-        byteSize = sizes[index];
-        index++;
+//        if (index == bufCount) {
+//            index = 0;
+//        }
+//        char *buf = bufArray[index];
+//        byteSize = sizes[index];
+//        index++;
 
-        err = sendPacketizedBufferFast(buf, byteSize,
+
+
+        err = sendPacketizedBufferFast(badEvent, badSize,
                                        maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, dataId, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
