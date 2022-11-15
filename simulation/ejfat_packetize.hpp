@@ -358,6 +358,7 @@ namespace ejfat {
             // In our case, the calling function connected the socket, so we call "send".
 
             // Send message to receiver
+            if (debug) fprintf(stderr, "sendPacketizedBufferFast: call send with len of %d\n", (int)(bytesToWrite + HEADER_BYTES));
             err = send(clientSocket, writeHeaderTo, bytesToWrite + HEADER_BYTES, 0);
             if (err == -1) {
                 if ((errno == EMSGSIZE) && (veryFirstPacket)) {
