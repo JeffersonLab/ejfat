@@ -33,7 +33,7 @@ using namespace std;
 #endif
 
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
-const size_t relen        = 8+8;          // 8 for flags, data_id, 8 for tick (event_id)
+const size_t relen        = 8;          // 8 for flags, data_id
 const size_t mdlen        = relen;
 const size_t max_pckts    = 100;          // support up to 100 packets
 
@@ -222,14 +222,12 @@ int main (int argc, char *argv[])
         // RE meta data is at front of in_buff
         uint8_t* pBufRe = in_buff[in_buff_idx];
 
-        uint32_t* pSeq    = (uint32_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-        uint16_t* pDid    = (uint16_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
-        uint64_t* pReTick = (uint64_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)];
+        uint32_t* pSeq    = (uint32_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint32_t)];
+        uint16_t* pDid    = (uint16_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
 
         // decode to host encoding
         uint32_t seq     = ntohl(*pSeq);
         uint16_t data_id = ntohs(*pDid);
-        uint64_t tick    = NTOHLL(*pReTick);
 
         uint8_t vrsn = pBufRe[0] & 0xf;
         uint8_t frst = (pBufRe[1] & 0x02) >> 1;
@@ -262,7 +260,7 @@ int main (int argc, char *argv[])
             rslg.write((char*)s, strlen(s));
             sprintf ( s, "frst = %d / lst = %d ", frst, lst);
             rslg.write((char*)s, strlen(s));
-            sprintf ( s, " / data_id = %d / seq = %d / tick = %ld\n", data_id, seq, tick);
+            sprintf ( s, " / data_id = %d / seq = %d \n", data_id, seq);
             rslg.write((char*)s, strlen(s));
             sprintf( s, "cpu\t%d\n", cpu);
             rslg.write((char*)s, strlen(s));
