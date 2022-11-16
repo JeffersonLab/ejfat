@@ -135,6 +135,7 @@ set(SIM_EXEC_FILES
         simulation/packetBlastee.cc
         simulation/packetBlasteeTcp.cc
         simulation/packetBlaster.cc
+        simulation/packetBlasterSmall.cc
         simulation/packetBlastee2.cc
         simulation/packetBlaster2.cc
         simulation/packetBlasterFat2.cc
