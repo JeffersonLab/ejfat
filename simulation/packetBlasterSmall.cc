@@ -609,7 +609,7 @@ int main(int argc, char **argv) {
         if (err == -1) {
             if (errno == EMSGSIZE) {
                 // The UDP packet is too big, so we need to reduce it.
-                if (debug) fprintf(stderr, "UDP packet is too big\n");
+                fprintf(stderr, "UDP packet is too big\n");
             }
             else {
                 // All other errors are unrecoverable
