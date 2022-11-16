@@ -582,8 +582,8 @@ int main(int argc, char **argv) {
 
     size_t sizes[bufCount];
     for (int i=0; i < bufCount; i++) {
-        bufArray[i] = (char *) malloc(i+1);
-        sizes[i] = i+1;
+        bufArray[i] = (char *) malloc(i+1 + 16);
+        sizes[i] = i+1 + 16;
         if (bufArray[i] == NULL) {
             fprintf(stderr, "cannot allocate buffer\n");
             return -1;
@@ -603,6 +603,8 @@ int main(int argc, char **argv) {
 //                                       0, 1, &delayCounter,
 //                                       firstBuffer, lastBuffer, debug, &packetsSent);
 
+        // Write LB meta data into buffer
+        setLbMetadata(bufArray[i], tick, version, protocol, entropy);
 
         // Send message to receiver
         err = send(clientSocket, bufArray[i], sizes[i], 0);
