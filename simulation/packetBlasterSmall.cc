@@ -624,6 +624,9 @@ int main(int argc, char **argv) {
             fprintf(stderr, "sent partial buffer\n");
         }
 
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+
         totalBytes   += sizes[i];
         totalPackets += packetsSent;
         offset = 0;
