@@ -573,7 +573,7 @@ int main(int argc, char **argv) {
 
 
     // For testing
-    int bufCount = 10;
+    int bufCount = 20;
     char **bufArray = (char **) calloc(bufCount, sizeof(char *));
     if (bufArray == NULL) {
         fprintf(stderr, "cannot allocate internal array of buffers\n");
@@ -582,8 +582,8 @@ int main(int argc, char **argv) {
 
     size_t sizes[bufCount];
     for (int i=0; i < bufCount; i++) {
-        bufArray[i] = (char *) malloc(33 + i);
-        sizes[i] = 33 + i;
+        bufArray[i] = (char *) malloc(i+1);
+        sizes[i] = i+1;
         if (bufArray[i] == NULL) {
             fprintf(stderr, "cannot allocate buffer\n");
             return -1;
