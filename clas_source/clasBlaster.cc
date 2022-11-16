@@ -817,7 +817,7 @@ int main(int argc, char **argv) {
 
     for (int i=0; i < bufCount; i++) {
         bufArray[i] = (char *) malloc(65000);
-        if (bufArray == NULL) {
+        if (bufArray[i] == NULL) {
             fprintf(stderr, "cannot allocate buffer of 200kB\n");
             return -1;
         }
