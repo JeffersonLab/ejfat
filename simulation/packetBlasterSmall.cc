@@ -444,68 +444,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cerr << "Initially running on cpu " << sched_getcpu() <<
-                  ", useFIFO = " << btoa(useFIFO)  << ", useRR = " << btoa(useRR) << "\n";
-
-    if (useFIFO || useRR) {
-        // Using the actual pid will set priority of main thd.
-        // Using 0 will set priority of calling thd.
-        pid_t myPid = getpid();
-        // myPid = 0;
-
-        struct sched_param param;
-        int policy = useFIFO ? SCHED_FIFO : SCHED_RR;
-
-        // Set process to correct priority for given scheduler
-        int priMax = sched_get_priority_max(policy);
-        int priMin = sched_get_priority_min(policy);
-
-        // If error
-        if (priMax == -1 || priMin == -1) {
-            perror("Error reading priority");
-            exit(EXIT_FAILURE);
-        }
-
-        if (rtPriority < 1 || rtPriority > priMax) {
-            rtPriority = priMax;
-        }
-        else if (rtPriority < priMin) {
-            rtPriority = priMin;
-        }
-
-        // Current scheduler policy
-        int currPolicy = sched_getscheduler(myPid);
-        if (currPolicy < 0) {
-            perror("Error reading policy");
-            exit(EXIT_FAILURE);
-        }
-        std::cerr << "Current Scheduling Policy: " << currPolicy <<
-                     " (RR = " << SCHED_RR << ", FIFO = " << SCHED_FIFO <<
-                     ", OTHER = " << SCHED_OTHER << ")" << std::endl;
-
-        // Set new scheduler policy
-        std::cerr << "Setting Scheduling Policy to: " << policy << ", pri = " << rtPriority << std::endl;
-        param.sched_priority = rtPriority;
-        int errr = sched_setscheduler(myPid, policy, &param);
-        if (errr < 0) {
-            perror("Error setting scheduler policy");
-            exit(EXIT_FAILURE);
-        }
-
-        errr = sched_getparam(myPid, &param);
-        if (errr < 0) {
-            perror("Error getting priority");
-            exit(EXIT_FAILURE);
-        }
-
-        currPolicy = sched_getscheduler(myPid);
-        if (currPolicy < 0) {
-            perror("Error reading policy");
-            exit(EXIT_FAILURE);
-        }
-
-        std::cerr << "New Scheduling Policy: " << currPolicy << ", pri = " <<  param.sched_priority <<std::endl;
-    }
+    std::cerr << "Initially running on cpu " << sched_getcpu() << "\n";
 
 #endif
 
