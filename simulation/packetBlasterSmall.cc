@@ -597,19 +597,30 @@ int main(int argc, char **argv) {
 
     for (int i=0; i < bufCount; i++) {
 
-        err = sendPacketizedBufferSend(bufArray[i], sizes[i],
-                                       maxUdpPayload, clientSocket,
-                                       tick, protocol, entropy, version, dataId, &offset,
-                                       0, 1, &delayCounter,
-                                       firstBuffer, lastBuffer, debug, &packetsSent);
+//        err = sendPacketizedBufferSend(bufArray[i], sizes[i],
+//                                       maxUdpPayload, clientSocket,
+//                                       tick, protocol, entropy, version, dataId, &offset,
+//                                       0, 1, &delayCounter,
+//                                       firstBuffer, lastBuffer, debug, &packetsSent);
 
-        if (err < 0) {
-            // Should be more info in errno
-            fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
-            exit(1);
+
+        // Send message to receiver
+        err = send(clientSocket, bufArray[i], sizes[i], 0);
+        if (err == -1) {
+            if (errno == EMSGSIZE) {
+                // The UDP packet is too big, so we need to reduce it.
+                if (debug) fprintf(stderr, "UDP packet is too big\n");
+            }
+            else {
+                // All other errors are unrecoverable
+                fprintf(stderr, "error: errno = %d, %s\n", errno, strerror(errno));
+                return (-1);
+            }
         }
 
-        // spin delay
+        if (err != (sizes[i])) {
+            fprintf(stderr, "sent partial buffer\n");
+        }
 
         totalBytes   += sizes[i];
         totalPackets += packetsSent;
