@@ -534,6 +534,11 @@ namespace ejfat {
                 }
             }
 
+            if (err != (bytesToWrite + HEADER_BYTES)) {
+                fprintf(stderr, "sendPacketizedBufferSend: wanted to send %d, but only sent %d\n",
+                        (int)(bytesToWrite + HEADER_BYTES), err);
+            }
+
             sentPackets++;
 
             // delay if any
