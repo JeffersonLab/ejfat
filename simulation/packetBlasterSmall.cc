@@ -573,7 +573,7 @@ int main(int argc, char **argv) {
 
 
     // For testing
-    int bufCount = 20;
+    int bufCount = 40;
     char **bufArray = (char **) calloc(bufCount, sizeof(char *));
     if (bufArray == NULL) {
         fprintf(stderr, "cannot allocate internal array of buffers\n");
