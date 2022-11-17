@@ -797,7 +797,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
+    if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
     int err;
     bool firstBuffer = true;
@@ -805,29 +805,6 @@ int main(int argc, char **argv) {
     delayCounter = delayPrescale;
 
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
-
-    // For testing
-    int bufCount = 10000;
-    // Hold 1000 buffers (char *)
-    char **bufArray = (char **) calloc(bufCount, sizeof(char *));
-    if (bufArray == NULL) {
-        fprintf(stderr, "cannot allocate internal array memory of 10000 buffers\n");
-        return -1;
-    }
-
-    for (int i=0; i < bufCount; i++) {
-        bufArray[i] = (char *) malloc(65000);
-        if (bufArray[i] == NULL) {
-            fprintf(stderr, "cannot allocate buffer of 200kB\n");
-            return -1;
-        }
-    }
-
-    char badEvent[65000];
-    int badSize = 0;
-
-    size_t sizes[bufCount];
-
 
     // HIPO READING PART
 
@@ -854,41 +831,14 @@ int main(int argc, char **argv) {
 
         char *buf = &event.getEventBuffer()[0];
         int bytes = event.getSize();
-
-        if (index < bufCount) {
-            if (bytes <= 65000) {
-                memcpy(bufArray[index], buf, bytes);
-                sizes[index] = bytes;
-                if (counter > 8859 && counter < 8870) {
-                    std::cerr << "Event counter " << counter << ", index " << index << " = " << bytes << std::endl;
-                }
-                index++;
-                evCount++;
-            }
-            else {
-                std::cerr << "Skipping event " <<  counter << ", size " << bytes << std::endl;
-            }
-        }
-        else {
-            break;
-        }
-        //totalBytes2 += bytes;
+        totalBytes2 += bytes;
 
         counter++;
     }
-    //reader.gotoEvent(0);
-    //reader.close();
+    reader.gotoEvent(0);
 
-//    avgBufBytes = totalBytes2 / counter;
-//    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
-        index = 8861;
-        badSize = sizes[index];
-        memcpy(badEvent, bufArray[index], badSize);
-
-    std::cerr << "Event index = " << index << ", size = " << badSize << std::endl;
-
-
-//int sizeCount = 100;
+    avgBufBytes = totalBytes2 / counter;
+    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
 
     // Statistics & rate setting
     int64_t packetsSent=0;
@@ -962,38 +912,20 @@ int main(int argc, char **argv) {
             countDown = buffersAtOnce - 1;
         }
 
-//        if (reader.next()) {
-//            reader.read(event);
-////fprintf(stderr, "packetBlaster: read next event\n");
-//        }
-//        else {
-////            fprintf(stderr, "again\n");
-//            reader.gotoEvent(0);
-//            reader.read(event);
-//        }
-//
-//        char *buf = &event.getEventBuffer()[0];
-//        byteSize = event.getSize();
-//        memcpy(tempBuf, buf, byteSize);
-//
-//        if (byteSize < 80) {
-//            printf("sending event size = %d, tick = %" PRIu64 "\n", byteSize, tick);
-//        }
-//        if (buf == nullptr) {
-//            printf("event pointer is null\n");
-//        }
+        if (reader.next()) {
+            reader.read(event);
+//fprintf(stderr, "packetBlaster: read next event\n");
+        }
+        else {
+//            fprintf(stderr, "again\n");
+            reader.gotoEvent(0);
+            reader.read(event);
+        }
 
-//        if (index == bufCount) {
-//            index = 0;
-//        }
-//        char *buf = bufArray[index];
-//        byteSize = sizes[index];
-//        index++;
+        char *buf = &event.getEventBuffer()[0];
+        byteSize = event.getSize();
 
-
-if (tick > 3) break;
-
-        err = sendPacketizedBufferSend(badEvent, badSize,
+        err = sendPacketizedBufferFast(buf, byteSize,
                                        maxUdpPayload, clientSocket,
                                        tick, protocol, entropy, version, dataId, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
