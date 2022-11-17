@@ -33,7 +33,8 @@ using namespace std;
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
 const size_t max_data_ids = 100;          // support up to 10 data_ids
 const size_t max_ooo_pkts = 1000;  // support up to 100 out of order packets
-const size_t relen        = 8+8;     // 8 for flags, data_id, 8 for tick (event_id)
+const size_t enet_pad     = 2;
+const size_t relen        = 8+8+enet_pad;     // 8 for flags, data_id, 8 for tick (event_id), 2bytes of pad to avoid ethernet packets < 64B
 const size_t mdlen        = relen;
 
 // set up some cachd buffers for out-of-sequence work
@@ -180,9 +181,9 @@ int main (int argc, char *argv[])
     }
     uint16_t num_data_ids = 0;  // number of data_ids encountered in this session
 
-    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
-    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-    uint64_t* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)];
+    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)-enet_pad];
+    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-enet_pad];
+    uint64_t* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)-enet_pad];
 
     do {
         // Try to receive any incoming UDP datagram. Address and port of

@@ -33,7 +33,8 @@ using namespace std;
 #endif
 
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
-const size_t relen        = 8+8;          // 8 for flags, data_id, 8 for tick (event_id)
+const size_t enet_pad     = 2;
+const size_t relen        = 8+8+enet_pad;     // 8 for flags, data_id, 8 for tick (event_id), 2bytes of pad to avoid ethernet packets < 64B
 const size_t mdlen        = relen;
 const size_t max_pckts    = 100;          // support up to 100 packets
 
@@ -222,9 +223,9 @@ int main (int argc, char *argv[])
         // RE meta data is at front of in_buff
         uint8_t* pBufRe = in_buff[in_buff_idx];
 
-        uint32_t* pSeq    = (uint32_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-        uint16_t* pDid    = (uint16_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
-        uint64_t* pReTick = (uint64_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)];
+        uint64_t* pReTick = (uint64_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-enet_pad];
+        uint32_t* pSeq    = (uint32_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)-enet_pad];
+        uint16_t* pDid    = (uint16_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)-enet_pad];
 
         // decode to host encoding
         uint32_t seq     = ntohl(*pSeq);

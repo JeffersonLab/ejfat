@@ -24,7 +24,8 @@
 
 const size_t max_pckt_sz = 9000-20-8;  // = MTU - IP header - UDP header
 const size_t lblen       = 16;
-const size_t relen       = 8+8;
+const size_t enet_pad    = 2;
+const size_t relen       = 8+8+enet_pad;   //2bytes of pad to avoid ethernet packets < 64B
 const size_t mdlen       = lblen + relen;
 
 
@@ -226,9 +227,9 @@ int main (int argc, char *argv[])
     uint8_t*  pBufRe = &buffer[lblen];
     uint16_t* pLbEntrp = (uint16_t*) &buffer[lblen-sizeof(uint16_t)-sizeof(uint64_t)];
     uint64_t* pLbTick  = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
-    uint16_t* pReDid   = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)];
-    uint32_t* pReSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
-    uint64_t* pReTick  = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
+    uint16_t* pReDid   = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)-enet_pad];
+    uint32_t* pReSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-enet_pad];
+    uint64_t* pReTick  = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)-enet_pad];
 
     while(1){
         // Try to receive any incoming UDP datagram. Address and port of
