@@ -43,9 +43,10 @@ void   Usage(void)
 }
 
 const int64_t max_pckt_sz = 9000-20-8;  // = max MTU - IP header - UDP header
-const int64_t  lblen       = 16;
-const int64_t  relen       = 8;
-const int64_t  mdlen       = lblen + relen;
+const int64_t lblen       = 16;
+const size_t  enet_pad    = 2+8;
+const size_t  relen       = 8+enet_pad;     // 8 for flags, data_id, (2+8) bytes of pad to avoid ethernet packets < 64B
+const int64_t mdlen       = lblen + relen;
 
 int main (int argc, char *argv[])
 {

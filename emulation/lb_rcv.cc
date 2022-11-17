@@ -33,7 +33,8 @@ using namespace std;
 #endif
 
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
-const size_t relen        = 8;          // 8 for flags, data_id
+const size_t enet_pad     = 2+8;
+const size_t relen        = 8+enet_pad;     // 8 for flags, data_id, (2+8) bytes of pad to avoid ethernet packets < 64B
 const size_t mdlen        = relen;
 const size_t max_data_ids = 100;          // support up to 10 data_ids
 
@@ -112,7 +113,7 @@ int main (int argc, char *argv[])
     ofstream rslg;
     char x[64];
 //  sprintf(x,"/tmp/rs_%d",lstn_prt);
-    sprintf(x,"/nvme/goodrich/rs_%d",lstn_prt);   // on ejfat-fs
+    sprintf(x,"/tmp/rs_%d",lstn_prt);   // on ejfat-fs
     rs.open(x,std::ios::binary | std::ios::out);
     char xlg[64];
 //  sprintf(xlg,"/tmp/rs_%d_log",lstn_prt);
@@ -188,8 +189,8 @@ int main (int argc, char *argv[])
     // RE meta data is at front of in_buff
     uint8_t* pBufRe = in_buff;
 
-    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint32_t)];
-    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint32_t)-sizeof(uint16_t)];
+    uint32_t* pSeq    = (uint32_t*) &in_buff[mdlen-sizeof(uint32_t)-enet_pad];
+    uint16_t* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint32_t)-sizeof(uint16_t)-enet_pad];
 
     auto t_start = std::chrono::steady_clock::now();
     auto t_start0 = t_start; //previous occurance of 'frst' flag
