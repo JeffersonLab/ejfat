@@ -640,7 +640,7 @@ static int outCount = 100;
             uint64_t packetTick;
             uint32_t sequence, prevSequence = 0, expectedSequence = 0;
 
-            bool packetFirst, packetLast;
+            bool packetFirst, packetLast, prevPacketLast = true;
             bool dumpTick = false;
             bool firstReadForBuf = false;
             bool takeStats = stats != nullptr;
@@ -770,6 +770,12 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                         continue;
                     }
 
+                    if (prevPacketLast != true) {
+                        // The last tick's buffer was not fully contructed
+                        // before this new tick showed up!
+                        printf("Discarding tick %llu, last %u packetd dropped\n", packetTick, (prevSequence + 1));
+                    }
+
                     // If here, new tick/buffer, sequence = 0.
                     // There's a chance we can construct a full buffer.
 
@@ -806,6 +812,7 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
 
                 prevTick = packetTick;
                 prevSequence = sequence;
+                prevPacketLast = packetLast;
 
 if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
                                    nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
