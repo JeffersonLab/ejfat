@@ -51,10 +51,10 @@
 
 #ifdef ADD_LB_HEADER
     #define LB_HEADER_BYTES 16
-    #define HEADER_BYTES    32
+    #define HEADER_BYTES    34
 #else
     #define LB_HEADER_BYTES 0
-    #define HEADER_BYTES    16
+    #define HEADER_BYTES    18
 #endif
 
 
@@ -219,9 +219,12 @@ namespace ejfat {
          * The first 16 bits go as ordered. The dataId is put in network byte order.
          * The offset and tick are also put into network byte order.</p>
          * Implemented <b>without</b> using C++ bit fields.
+         * The padding values are ignored and only there to circumvent
+         * a bug in the ESNet Load Balancer which otherwise filters out
+         * packets with data payload of 0 or 1 byte.
          *
          * <pre>
-         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32 Padding1:8, Padding2:8'
          *
          *  0                   1                   2                   3
          *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -234,6 +237,8 @@ namespace ejfat {
          *  +                              Tick                             +
          *  |                                                               |
          *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  *   Padding 1   |   Padding 2   |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
          * </pre>
          *
          * @param buffer  buffer in which to write the header.
@@ -256,6 +261,8 @@ namespace ejfat {
             *((uint16_t *)(buffer + 2)) = htons(dataId);
             *((uint32_t *)(buffer + 4)) = htonl(offset);
             *((uint64_t *)(buffer + 8)) = htonll(tick);
+            // Zero out padding
+            buffer[16] = buffer[17] = 0;
         }
 
 
@@ -358,7 +365,6 @@ namespace ejfat {
             // In our case, the calling function connected the socket, so we call "send".
 
             // Send message to receiver
-            if (debug) fprintf(stderr, "sendPacketizedBufferFast: call send with len of %d\n", (int)(bytesToWrite + HEADER_BYTES));
             err = send(clientSocket, writeHeaderTo, bytesToWrite + HEADER_BYTES, 0);
             if (err == -1) {
                 if ((errno == EMSGSIZE) && (veryFirstPacket)) {

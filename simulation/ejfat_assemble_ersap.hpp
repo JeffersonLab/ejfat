@@ -40,7 +40,7 @@
 #include <cctype>
 #endif
 
-#define HEADER_BYTES 16
+#define HEADER_BYTES 18
 
 #define btoa(x) ((x)?"true":"false")
 
@@ -282,9 +282,12 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer args.
+         * The padding values are ignored and only there to circumvent
+         * a bug in the ESNet Load Balancer which otherwise filters out
+         * packets with data payload of 0 or 1 byte.
          *
          * <pre>
-         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
+         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32 Padding1:8, Padding2:8'
          *
          *  0                   1                   2                   3
          *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -297,6 +300,8 @@ static inline uint64_t bswap_64(uint64_t x) {
          *  +                              Tick                             +
          *  |                                                               |
          *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  *   Padding 1   |   Padding 2   |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
          * </pre>
          *
          * @param buffer   buffer to parse.
@@ -326,6 +331,9 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer arg and array.
+         * The padding values are ignored and only there to circumvent
+         * a bug in the ESNet Load Balancer which otherwise filters out
+         * packets with data payload of 0 or 1 byte.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
@@ -341,6 +349,8 @@ static inline uint64_t bswap_64(uint64_t x) {
          *  +                              Tick                             +
          *  |                                                               |
          *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  *   Padding 1   |   Padding 2   |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
          * </pre>
          *
          * @param buffer    buffer to parse.
@@ -389,6 +399,9 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer args.
+         * The padding values are ignored and only there to circumvent
+         * a bug in the ESNet Load Balancer which otherwise filters out
+         * packets with data payload of 0 or 1 byte.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
@@ -404,6 +417,8 @@ static inline uint64_t bswap_64(uint64_t x) {
          *  +                              Tick                             +
          *  |                                                               |
          *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  *   Padding 1   |   Padding 2   |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
          * </pre>
          *
          * @param buffer   buffer to parse.
@@ -1037,7 +1052,7 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
             uint64_t packetTick;
             uint32_t sequence, prevSequence = 0, expectedSequence = 0;
 
-            bool packetFirst, packetLast;
+            bool packetFirst, packetLast, prevPacketLast = true;
             bool dumpTick = false;
             bool firstReadForBuf = false;
             bool takeStats = stats != nullptr;
@@ -1086,7 +1101,7 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                         fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         return nBytes;
                     }
-                    else if (nBytes == 0 && remainingLen > 0) {
+                    else if (nBytes == 0) {
                         // Something clearly wrong. There should be SOME data returned.
                         fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = 0, remainingLen = %zu\n", remainingLen);
                         clearMap(outOfOrderPackets);
@@ -1120,7 +1135,7 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
 
                     nBytes = bytesRead - HEADER_BYTES;
 
-                    if (nBytes == 0 && remainingLen > 0) {
+                    if (nBytes == 0) {
                         // Something clearly wrong. There should be SOME data besides header returned.
                         fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         clearMap(outOfOrderPackets);
@@ -1168,6 +1183,12 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                         continue;
                     }
 
+                    if (prevPacketLast != true) {
+                        // The last tick's buffer was not fully contructed
+                        // before this new tick showed up!
+                        printf("Discarding tick %llu, last %u packetd dropped\n", packetTick, (prevSequence + 1));
+                    }
+
                     // If here, new tick/buffer, sequence = 0.
                     // There's a chance we can construct a full buffer.
 
@@ -1204,6 +1225,7 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
 
                 prevTick = packetTick;
                 prevSequence = sequence;
+                prevPacketLast = packetLast;
 
                 if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
                                    nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
@@ -1394,12 +1416,14 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
          *
          * @return total bytes read.
          *         If there's an error in recvfrom, it will return RECV_MSG.
-         *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
          *         If the buffer is too small to receive a single packet's data, it will return BUF_TOO_SMALL.
          *         If a packet is out of order and no recovery is possible (e.g. duplicate sequence),
          *              it will return OUT_OF_ORDER.
          *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
          *         If cannot allocate memory, it will return OUT_OF_MEM.
+         *         If on a read no data is returned when buffer not filled, return INTERNAL_ERROR.
+         *         If on a read &lt; HEADER_BYTES data returned, not enough data to contain header.
+         *              Then some sort of internal error and will return INTERNAL_ERROR.
          */
         static ssize_t getPacketizedBufferFast(char* dataBuf, size_t bufLen, int udpSocket,
                                                bool debug, bool veryFirstRead, bool *last,
@@ -1414,8 +1438,8 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
             uint32_t sequence, prevSequence = 0, expectedSequence = *expSequence;
 
             bool dumpTick;
-            bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
-     //       bool takeStats = stats != nullptr;
+            bool packetFirst, packetLast, prevPacketLast=true;
+            bool firstReadForBuf = false, tooLittleRoom = false;
             int  version, nBytes, bytesRead;
             uint16_t dataId;
             uint32_t pktCount = 0;
@@ -1432,27 +1456,35 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
             struct timespec t1, t2;
 
 
-            if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
+            if (debug) fprintf(stderr, "getPacketizedBufferFast: remainingLen = %lu\n", remainingLen);
 
             while (true) {
 
-                dumpTick = false;
+                // Another packet of data will exceed buffer space, so quit
+                if (remainingLen <= HEADER_BYTES) {
+                    fprintf(stderr, "getPacketizedBufferFast: buffer too small?, remaining len <= header\n");
+                    return BUF_TOO_SMALL;
+                }
 
                 if (veryFirstRead) {
                     // Read in one packet, return value does NOT include RE header
                     nBytes = readPacketRecvFrom(putDataAt, remainingLen, udpSocket,
                                                 &packetTick, &sequence, &dataId, &version,
                                                 &packetFirst, &packetLast, debug);
-
-//                    if (takeStats) {
-//                        clock_gettime(CLOCK_MONOTONIC, &t1);
-//                        stats->startTime = 1000000000L*t1.tv_sec + t1.tv_nsec; // nanoseconds
-//                    }
-
                     // If error
                     if (nBytes < 0) {
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "getPacketizedBufferFast: on first read, buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
                         return nBytes;
                     }
+                    else if (nBytes == 0) {
+                        // Something clearly wrong. There should be SOME data returned.
+                        fprintf(stderr, "getPacketizedBufferFast: on first read, buf too small? nBytes = 0, remainingLen = %zu\n", remainingLen);
+                        clearMap(outOfOrderPackets);
+                        return INTERNAL_ERROR;
+                    }
+
+                    veryFirstRead = false;
                 }
                 else {
                     writeHeaderAt = putDataAt - HEADER_BYTES;
@@ -1462,10 +1494,23 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                     // Read data right into final buffer (including RE header)
                     bytesRead = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
                     if (bytesRead < 0) {
-                        fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
+                        fprintf(stderr, "getPacketizedBufferFast: recvmsg() failed: %s\n", strerror(errno));
                         return(RECV_MSG);
                     }
+                    else if (bytesRead < HEADER_BYTES) {
+                        fprintf(stderr, "getPacketizedBufferFast: not enough data to contain a header on read\n");
+                        clearMap(outOfOrderPackets);
+                        return(INTERNAL_ERROR);
+                    }
+
                     nBytes = bytesRead - HEADER_BYTES;
+
+                    if (nBytes == 0) {
+                        // Something clearly wrong. There should be SOME data besides header returned.
+                        fprintf(stderr, "getPacketizedBufferFast: buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
+                        clearMap(outOfOrderPackets);
+                        return INTERNAL_ERROR;
+                    }
 
                     // Parse header
                     parseReHeader(writeHeaderAt, &version, &packetFirst, &packetLast, &dataId, &sequence, &packetTick);
@@ -1476,23 +1521,36 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
 
                 // This if-else statement is what enables the packet reading/parsing to keep
                 // up an input rate that is too high (causing dropped packets) and still salvage
-                // much of what is coming in.
+                // some of what is coming in.
                 if (packetTick != prevTick) {
+                    // If we're here, either we've just read the very first legitimate packet,
+                    // or we've dropped some packets and advanced to another tick in the process.
+
                     expectedSequence = 0;
-                    veryFirstRead = true;
 
                     if (sequence != 0) {
-                        // Already have trouble, looks like we dropped the first packet of a tick.
+                        // Already have trouble, looks like we dropped the first packet of a tick,
+                        // and possibly others after it.
                         // So go ahead and dump the rest of the tick in an effort to keep up.
-                        //printf("Skip id %hu, t %llu, s %u\n", dataId, packetTick, sequence);
+                        printf("Skip pkt from %hu, %llu - %u, expected seq 0\n", dataId, packetTick, sequence);
+                        putDataAt = dataBuf;
+                        remainingLen = bufLen;
+                        veryFirstRead = true;
                         continue;
                     }
 
-                    // If here, new record, seq = 0
+                    if (prevPacketLast != true) {
+                        // The last tick's buffer was not fully contructed
+                        // before this new tick showed up!
+                        printf("Discarding tick %llu, last %u packetd dropped\n", packetTick, (prevSequence + 1));
+                    }
+
+                    // If here, new tick/buffer, sequence = 0.
+                    // There's a chance we can construct a full buffer.
 
                     // Dump everything we saved from previous tick.
                     // Delete all out-of-seq packets.
-                    outOfOrderPackets.clear();
+                    clearMap(outOfOrderPackets);
                     dumpTick = false;
                 }
                     // Same tick as last packet
@@ -1503,14 +1561,27 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                         // so drop rest of packets for record.
                         // This branch of the "if" will no longer
                         // be executed once the next record shows up.
+                        putDataAt = dataBuf;
+                        remainingLen = bufLen;
                         veryFirstRead = true;
                         expectedSequence = 0;
                         dumpTick = true;
                         prevSequence = sequence;
-                        //printf("Dump id %hu, t %llu, s %u\n", dataId, packetTick, sequence);
+                        //printf("Dump pkt from %hu, %llu - %u\n", dataId, packetTick, sequence);
                         continue;
                     }
                 }
+
+                // TODO: What if we get a zero-length packet???
+
+                if (sequence == 0) {
+                    firstReadForBuf = true;
+                }
+
+                prevTick = packetTick;
+                prevSequence = sequence;
+                prevPacketLast = packetLast;
+
 
                 // TODO: What if we get a zero-length packet???
 
@@ -1609,9 +1680,9 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                             break;
                         }
                     }
-                        // If there were previous packets out-of-order, they may now be in order.
-                        // If so, write them into buffer.
-                        // Remember the map already sorts them into proper sequence.
+                    // If there were previous packets out-of-order, they may now be in order.
+                    // If so, write them into buffer.
+                    // Remember the map already sorts them into proper sequence.
                     else {
                         if (debug) fprintf(stderr, "We also have stored packets\n");
                         // Go to first stored packet
@@ -1646,7 +1717,7 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
                 }
             }
 
-            if (debug) fprintf(stderr, "getPacketizedBuffer: passing offset = %u\n\n", expectedSequence);
+            if (debug) fprintf(stderr, "getPacketizedBufferFast: passing offset = %u\n\n", expectedSequence);
 
             *last = packetLast;
             *tick = packetTick;
