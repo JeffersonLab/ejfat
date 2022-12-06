@@ -716,11 +716,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Start with offset 0 in very first packet to be read
-    uint64_t tick = 0L;
-    uint16_t dataId;
-
-    // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
+     // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
     char *dataBuf = (char *) malloc(bufSize);
     if (dataBuf == NULL) {
         fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
@@ -757,6 +753,11 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Start with offset 0 in very first packet to be read
+    uint64_t tick = 0L;
+    uint16_t dataId;
+    bool firstLoop = true;
+
     char fakeData[12];
     std::memset(fakeData, 1, 12);
 
@@ -785,12 +786,21 @@ int main(int argc, char **argv) {
             return (0);
         }
 
-//        fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
-//
-//        diff = tick - prevTick;
-//        if (diff != 0) {
-//            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
-//        }
+        // The first tick received may be any value depending on # of backends receiving
+        // packets from load balancer. Use the first tick received and subsequent ticks
+        // to check the prescale. Took prescale-checking logic out of ejfat_assemble_ersap.hpp
+        // code. Checking it here makes more sense.
+        if (firstLoop) {
+            prevTick = tick;
+            firstLoop = false;
+        }
+
+        //fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
+
+        diff = tick - prevTick;
+        if (diff != 0) {
+            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
+        }
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;

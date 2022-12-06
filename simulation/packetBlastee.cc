@@ -650,10 +650,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Start with offset 0 in very first packet to be read
-    uint64_t tick = 0L;
-    uint16_t dataId;
-
     // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
     char *dataBuf = (char *) malloc(bufSize);
     if (dataBuf == NULL) {
@@ -680,6 +676,10 @@ int main(int argc, char **argv) {
     droppedTicks.store(0);
     droppedPackets.store(0);
 
+    // Start with offset 0 in very first packet to be read
+    uint64_t tick = 0L;
+    uint16_t dataId;
+    bool firstLoop = true;
 
 
     while (true) {
@@ -699,6 +699,15 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
             }
             return (0);
+        }
+
+        // The first tick received may be any value depending on # of backends receiving
+        // packets from load balancer. Use the first tick received and subsequent ticks
+        // to check the prescale. Took prescale-checking logic out of ejfat_assemble_ersap.hpp
+        // code. Checking it here makes more sense.
+        if (firstLoop) {
+            prevTick = tick;
+            firstLoop = false;
         }
 
         diff = tick - prevTick;

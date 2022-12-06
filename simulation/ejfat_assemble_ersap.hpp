@@ -788,7 +788,7 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                     if (prevPacketLast != true) {
                         // The last tick's buffer was not fully contructed
                         // before this new tick showed up!
-                        printf("Discarding tick %llu, last %u packetd dropped\n", packetTick, (prevSequence + 1));
+                        printf("Discarding tick %llu, last %u packet dropped\n", packetTick, (prevSequence + 1));
                     }
 
                     // If here, new tick/buffer, sequence = 0.
@@ -912,16 +912,17 @@ if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, la
                                 uint32_t droppedTicks = 0;
                                 if (knowExpectedTick) {
                                     diff = packetTick - expectedTick;
-                                    if (diff % tickPrescale != 0) {
-                                        // Error in the way we set things up
-                                        // This should always be 0.
-                                        clearMap(outOfOrderPackets);
-                                        fprintf(stderr, "getPacketizedBuffer: using wrong value for tick prescale, %u\n", tickPrescale);
-                                        return INTERNAL_ERROR;
-                                    }
-                                    else {
-                                        droppedTicks = diff / tickPrescale;
-                                    }
+                                    droppedTicks = diff / tickPrescale;
+//                                    if (diff % tickPrescale != 0) {
+//                                        // Error in the way we set things up
+//                                        // This should always be 0.
+//                                        clearMap(outOfOrderPackets);
+//                                        fprintf(stderr, "getPacketizedBuffer: using wrong value for tick prescale, %u\n", tickPrescale);
+//                                        return INTERNAL_ERROR;
+//                                    }
+//                                    else {
+//                                        droppedTicks = diff / tickPrescale;
+//                                    }
                                 }
 
                                 // Total microsec to read buffer
