@@ -782,6 +782,10 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                         putDataAt = dataBuf;
                         remainingLen = bufLen;
                         veryFirstRead = true;
+
+                        dumpTick = true;
+                        prevSequence = sequence;
+
                         continue;
                     }
 
@@ -801,7 +805,7 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                 }
                 // Same tick as last packet
                 else {
-                    if (dumpTick || (std::abs((int)(sequence - prevSequence)) > 1)) {
+                    if (dumpTick || (sequence - prevSequence > 1)) {
                         // If here, the sequence hopped by at least 2,
                         // probably dropped at least 1,
                         // so drop rest of packets for record.
