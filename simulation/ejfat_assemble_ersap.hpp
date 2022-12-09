@@ -645,7 +645,7 @@ static int outCount = 100;
          *         If on a read &lt; HEADER_BYTES data returned, not enough data to contain header.
          *              Then some sort of internal error and will return INTERNAL_ERROR.
          */
-        static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
+        static ssize_t getCompletePacketizedBufferOld(char* dataBuf, size_t bufLen, int udpSocket,
                                                    bool debug, uint64_t *tick, uint16_t *dataId,
                                                    std::shared_ptr<packetRecvStats> stats, uint32_t tickPrescale,
                                                    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
@@ -1003,6 +1003,440 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
             clearMap(outOfOrderPackets);
             return totalBytesRead;
         }
+
+
+
+        /**
+  * <p>
+  * Assemble incoming packets into the given buffer.
+  * It will read entire buffer or return an error.
+  * This routine allows for out-of-order packets.
+  * </p>
+  *
+  * <p>
+  * If the given tick value is <b>NOT</b> 0xffffffffffffffff, then it is the next expected tick.
+  * And in this case, this method makes a number of assumptions:
+  * <ul>
+  * <li>Each incoming buffer/tick is split up into the same # of packets.</li>
+  * <li>Each successive tick differs by tickPrescale.</li>
+  * <li>If the sequence changes by more than 1, then a dropped packet is assumed.
+  *     This results from the observation that for a simple network,
+  *     there are never out-of-order packets.</li>
+  * </ul>
+  * </p>
+  * <p>
+  * This routine uses recvfrom to read in packets, but minimizes the copying of data
+  * by copying as much data as possible, directly to dataBuf. This involves storing
+  * what temporarily gets overwritten by a RE header and then restoring it once the
+  * read of a packet is complete.
+  *</p>
+  *
+  * <p>
+  * A note on statistics. The raw counts are <b>ADDED</b> to what's already
+  * in the stats structure. It's up to the user to clear stats before calling
+  * this method if desired.
+  * </p>
+  *
+  * @param dataBuf           place to store assembled packets.
+  * @param bufLen            byte length of dataBuf.
+  * @param udpSocket         UDP socket to read.
+  * @param debug             turn debug printout on & off.
+  * @param tick              value-result parameter which gives the next expected tick
+  *                          and returns the tick that was built. If it's passed in as
+  *                          0xffff ffff ffff ffff, then ticks are coming in no particular order.
+  * @param dataId            to be filled with data ID from RE header.
+  * @param stats             to be filled packet statistics.
+  * @param tickPrescale      add to current tick to get next expected tick.
+  * @param outOfOrderPackets map for holding out-of-order packets between calls to this function.
+  *
+  * @return total bytes read.
+  *         If there's an error in recvfrom, it will return RECV_MSG.
+  *         If the buffer is too small to receive a single tick's data, it will return BUF_TOO_SMALL.
+  *         If a packet is out of order and no recovery is possible (e.g. duplicate sequence),
+  *              it will return OUT_OF_ORDER.
+  *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
+  *         If cannot allocate memory, it will return OUT_OF_MEM.
+  *         If on a read no data is returned when buffer not filled, return INTERNAL_ERROR.
+  *         If on a read &lt; HEADER_BYTES data returned, not enough data to contain header.
+  *              Then some sort of internal error and will return INTERNAL_ERROR.
+  */
+        static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
+                                                   bool debug, uint64_t *tick, uint16_t *dataId,
+                                                   std::shared_ptr<packetRecvStats> stats, uint32_t tickPrescale,
+                                                   std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
+
+            int64_t  prevTick = -1;
+            uint64_t expectedTick = *tick;
+            uint64_t packetTick;
+            uint32_t sequence, prevSequence = 0, expectedSequence = 0;
+
+            bool packetFirst, packetLast, prevPacketLast = true;
+            bool dumpTick = false;
+            bool firstReadForBuf = false;
+            bool takeStats = stats != nullptr;
+            bool veryFirstRead = true;
+
+            bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
+
+            int  version, nBytes, bytesRead;
+            uint16_t packetDataId;
+            size_t  maxPacketBytes = 0;
+            ssize_t totalBytesRead = 0;
+
+            char headerStorage[HEADER_BYTES];
+
+            char *writeHeaderAt, *putDataAt = dataBuf;
+            size_t remainingLen = bufLen;
+            struct timespec now;
+
+
+            if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu, take stats = %d, %p\n",
+                               remainingLen, takeStats, stats.get());
+
+            while (true) {
+
+                // Another packet of data will exceed buffer space, so quit
+                if (remainingLen <= HEADER_BYTES) {
+                    if (takeStats && stats->droppedPackets > 0) {
+                        fprintf(stderr, "getPacketizedBuffer: dropping packets?, remaining len <= header\n");
+                    }
+                    else {
+                        fprintf(stderr, "getPacketizedBuffer: buffer too small?, remaining len <= header\n");
+                    }
+                    return BUF_TOO_SMALL;
+                }
+
+                if (veryFirstRead) {
+
+                    maxPacketBytes   = 0;
+                    totalBytesRead   = 0;
+                    expectedSequence = 0;
+                    putDataAt        = dataBuf;
+                    remainingLen     = bufLen;
+
+                    // Read in one packet, return value does NOT include RE header
+                    nBytes = readPacketRecvFrom(putDataAt, remainingLen, udpSocket,
+                                                &packetTick, &sequence, &packetDataId, &version,
+                                                &packetFirst, &packetLast, debug);
+                    // If error
+                    if (nBytes < 0) {
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
+                        return nBytes;
+                    }
+                    else if (nBytes == 0) {
+                        // Something clearly wrong. There should be SOME data returned.
+                        fprintf(stderr, "getPacketizedBuffer: on first read, buf too small? nBytes = 0, remainingLen = %zu\n", remainingLen);
+                        clearMap(outOfOrderPackets);
+                        return INTERNAL_ERROR;
+                    }
+
+                    //                    if (takeStats) {
+                    //                        clock_gettime(CLOCK_MONOTONIC, &now);
+                    //                        stats->startTime = 1000000L * now.tv_sec + now.tv_nsec/1000L; // microseconds
+                    //                    }
+
+                    veryFirstRead = false;
+                }
+                else {
+                    writeHeaderAt = putDataAt - HEADER_BYTES;
+                    // Copy part of buffer that we'll temporarily overwrite
+                    memcpy(headerStorage, writeHeaderAt, HEADER_BYTES);
+
+                    // Read data right into final buffer (including RE header)
+                    bytesRead = recvfrom(udpSocket, writeHeaderAt, remainingLen, 0, NULL, NULL);
+                    if (bytesRead < 0) {
+                        fprintf(stderr, "getPacketizedBuffer: recvfrom failed: %s\n", strerror(errno));
+                        clearMap(outOfOrderPackets);
+                        return(RECV_MSG);
+                    }
+                    else if (bytesRead < HEADER_BYTES) {
+                        fprintf(stderr, "getPacketizedBuffer: not enough data to contain a header on read\n");
+                        clearMap(outOfOrderPackets);
+                        return(INTERNAL_ERROR);
+                    }
+
+                    nBytes = bytesRead - HEADER_BYTES;
+
+                    if (nBytes == 0) {
+                        // Something clearly wrong. There should be SOME data besides header returned.
+                        fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen = %zu\n", nBytes, remainingLen);
+                        clearMap(outOfOrderPackets);
+                        return INTERNAL_ERROR;
+                    }
+
+                    // Parse header
+                    parseReHeader(writeHeaderAt, &version, &packetFirst, &packetLast, &packetDataId, &sequence, &packetTick);
+
+                    //                    if (takeStats && packetLast) {
+                    //                        // This may or may not be the actual last packet.
+                    //                        // (A whole buffer may have been dropped after last received packet.)
+                    //                        // So, for now, just record time in interest of getting a good time value.
+                    //                        // This may be overwritten later if it turns out we had some dropped packets.
+                    //                        clock_gettime(CLOCK_MONOTONIC, &now);
+                    //                        stats->endTime = 1000000L * now.tv_sec + now.tv_nsec/1000L;
+                    //                    }
+
+                    // Replace what was written over
+                    memcpy(writeHeaderAt, headerStorage, HEADER_BYTES);
+                }
+
+                //                if (packetTick != expectedTick) {
+                //                    printf("Packet != expected tick, got %" PRIu64 ", ex = %" PRIu64 ", prev = %" PRIu64 "\n",
+                //                           packetTick, expectedTick, prevTick);
+                //                }
+
+                // This if-else statement is what enables the packet reading/parsing to keep
+                // up an input rate that is too high (causing dropped packets) and still salvage
+                // some of what is coming in.
+                if (packetTick != prevTick) {
+                    // If we're here, either we've just read the very first legitimate packet,
+                    // or we've dropped some packets and advanced to another tick in the process.
+
+                    expectedSequence = 0;
+
+                    if (sequence != 0) {
+                        // Already have trouble, looks like we dropped the first packet of a tick,
+                        // and possibly others after it.
+                        // So go ahead and dump the rest of the tick in an effort to keep up.
+                        printf("Skip pkt from id%hu, %llu - %u, expected seq 0\n", packetDataId, packetTick, sequence);
+                        //putDataAt = dataBuf;
+                        //remainingLen = bufLen;
+                        veryFirstRead = true;
+
+                        dumpTick = true;
+                        prevTick = packetTick;
+                        prevSequence = sequence;
+                        prevPacketLast = packetLast;
+
+                        continue;
+                    }
+
+                    if (prevPacketLast != true) {
+                        // The last tick's buffer was not fully contructed
+                        // before this new tick showed up!
+                        printf("Discard tick %llu\n", packetTick);
+
+                        // We have a problem here, the first packet of this tick, unfortunately,
+                        // is at the end of the buffer storing the previous tick. We must move it
+                        // to the front of the buffer and overwrite the previous tick.
+                        // This can happen if the end of the previous tick is completely dropped
+                        // and the first packet of the new tick is read.
+                        memcpy(dataBuf, putDataAt, nBytes);
+
+                        maxPacketBytes   = 0;
+                        totalBytesRead   = 0;
+                        putDataAt        = dataBuf;
+                        remainingLen     = bufLen;
+                    }
+
+                    // If here, new tick/buffer, sequence = 0.
+                    // There's a chance we can construct a full buffer.
+
+                    // Dump everything we saved from previous tick.
+                    // Delete all out-of-seq packets.
+                    clearMap(outOfOrderPackets);
+                    dumpTick = false;
+                }
+                    // Same tick as last packet
+                else {
+
+                    if (sequence - prevSequence == 0) {
+                        printf("GOT SAME Sequence, %u, twice in a row !!!\n", sequence);
+                        continue;
+                    }
+                    else if (sequence - prevSequence < 0) {
+                        printf("GOT DECREASING Sequence,     %u, from %u !!!\n", sequence, prevSequence);
+                        continue;
+                    }
+
+                    if (dumpTick || (sequence - prevSequence > 1)) {
+                        // If here, the sequence hopped by at least 2,
+                        // probably dropped at least 1,
+                        // so drop rest of packets for record.
+                        // This branch of the "if" will no longer
+                        // be executed once the next record shows up.
+
+                        //putDataAt = dataBuf;
+                        //remainingLen = bufLen;
+                        veryFirstRead = true;
+
+                        dumpTick = true;
+                        prevSequence = sequence;
+                        prevPacketLast = packetLast;
+
+                        printf("Dump pkt from id%hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                        continue;
+                    }
+                }
+
+                // TODO: What if we get a zero-length packet???
+
+                if (sequence == 0) {
+                    firstReadForBuf = true;
+                    totalBytesRead = 0;
+                }
+
+                prevTick = packetTick;
+                prevSequence = sequence;
+                prevPacketLast = packetLast;
+
+                if (debug) fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
+                                   nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
+
+                // Check to see if packet is out-of-sequence
+                if (sequence != expectedSequence) {
+                    fprintf(stderr, "\n    Got seq %u, expecting %u\n", sequence, expectedSequence);
+
+                    // If we get one that we already received, ERROR!
+                    if (sequence < expectedSequence) {
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "getPacketizedBuffer: already got seq %u, id %hu, t %" PRIu64 "\n", sequence, packetDataId, packetTick);
+                        return OUT_OF_ORDER;
+                    }
+
+                    // Set a limit on how much we're going to store (200 packets) while we wait
+                    if (outOfOrderPackets.size() >= 200 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "getPacketizedBuffer: reached size limit of stored packets!\n");
+                        return OUT_OF_ORDER;
+                    }
+
+                    // Since it's out of order, what was written into dataBuf will need to be
+                    // copied and stored. And that written data will eventually need to be
+                    // overwritten with the correct packet data.
+                    char *tempBuf = (char *) malloc(nBytes);
+                    if (tempBuf == nullptr) {
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "getPacketizedBuffer: ran out of memory storing packets!\n");
+                        return OUT_OF_MEM;
+                    }
+                    memcpy(tempBuf, putDataAt, nBytes);
+
+                    // Put it into map
+                    if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s\n", sequence, btoa(packetLast));
+                    outOfOrderPackets.emplace(sequence, std::tuple<char *, uint32_t, bool, bool>{tempBuf, nBytes, packetLast, packetFirst});
+                    // Read next packet
+                    continue;
+                }
+
+                while (true) {
+                    if (debug) fprintf(stderr, "Packet %u in proper order, last = %s\n", sequence, btoa(packetLast));
+
+                    // Packet was in proper order. Get ready to look for next in sequence.
+                    putDataAt += nBytes;
+                    remainingLen -= nBytes;
+                    totalBytesRead += nBytes;
+                    expectedSequence++;
+
+                    // If it's the first read of a sequence, and there are more reads to come,
+                    // the # of bytes it read will be max possible. Remember that.
+                    if (firstReadForBuf) {
+                        maxPacketBytes = nBytes;
+                        firstReadForBuf = false;
+                        //maxPacketsInBuf = bufLen / maxPacketBytes;
+                        if (debug) fprintf(stderr, "In first read, max bytes/packet = %lu\n", maxPacketBytes);
+
+                        // Error check
+                        if (!packetFirst) {
+                            fprintf(stderr, "getPacketizedBuffer: expecting first bit to be set on very first read but wasn't\n");
+                            clearMap(outOfOrderPackets);
+                            return BAD_FIRST_LAST_BIT;
+                        }
+                    }
+                    else if (packetFirst) {
+                        fprintf(stderr, "getPacketizedBuffer: expecting first bit NOT to be set on read but was\n");
+                        clearMap(outOfOrderPackets);
+                        return BAD_FIRST_LAST_BIT;
+                    }
+
+                    if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s, OUTofOrder = %lu\n\n",
+                                       remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast),
+                                       outOfOrderPackets.size());
+
+                    // If no stored, out-of-order packets ...
+                    if (outOfOrderPackets.empty()) {
+                        // If very last packet, quit
+                        if (packetLast) {
+                            // Finish up some stats
+                            if (takeStats) {
+                                int64_t diff = 0;
+                                uint32_t droppedTicks = 0;
+                                if (knowExpectedTick) {
+                                    diff = packetTick - expectedTick;
+                                    droppedTicks = diff / tickPrescale;
+                                    //                                    if (diff % tickPrescale != 0) {
+                                    //                                        // Error in the way we set things up
+                                    //                                        // This should always be 0.
+                                    //                                        clearMap(outOfOrderPackets);
+                                    //                                        fprintf(stderr, "getPacketizedBuffer: using wrong value for tick prescale, %u\n", tickPrescale);
+                                    //                                        return INTERNAL_ERROR;
+                                    //                                    }
+                                    //                                    else {
+                                    //                                        droppedTicks = diff / tickPrescale;
+                                    //                                    }
+                                }
+
+                                // Total microsec to read buffer
+                                //                                stats->readTime += stats->endTime - stats->startTime;
+                                stats->acceptedBytes += totalBytesRead;
+                                stats->acceptedPackets += sequence + 1;
+                                //fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, sequence);
+                                stats->droppedTicks   += droppedTicks;
+                                // This works if all the buffers coming in are exactly the same size.
+                                // If they're not, then the sequence (# of packets - 1) of this buffer
+                                // is used to guess at how many packets were dropped for the dropped tick(s).
+                                stats->droppedPackets += droppedTicks * (sequence + 1);
+                                //if (droppedTicks != 0) printf("Dropped %u ticks, tick diff %" PRId64 ", packets = %" PRIu64 ", seq#s = %u\n",
+                                //                              droppedTicks, diff, stats->droppedPackets, (sequence + 1));
+                            }
+                            break;
+                        }
+                        if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remainingLen);
+                    }
+                        // If there were previous packets out-of-order, they may now be in order.
+                        // If so, write them into buffer.
+                        // Remember the map already sorts them into proper sequence.
+                    else {
+                        if (debug) fprintf(stderr, "We also have stored packets\n");
+                        // Go to first stored packet
+                        auto it = outOfOrderPackets.begin();
+
+                        // If it's truly the next packet ...
+                        if (it->first == expectedSequence) {
+                            char *data  = std::get<0>(it->second);
+                            nBytes      = std::get<1>(it->second);
+                            packetLast  = std::get<2>(it->second);
+                            packetFirst = std::get<3>(it->second);
+                            sequence = expectedSequence;
+
+                            memcpy(putDataAt, data, nBytes);
+                            free(data);
+
+                            // Remove packet from map
+                            it = outOfOrderPackets.erase(it);
+                            if (debug) fprintf(stderr, "Go and add stored packet %u, size of map = %lu, last = %s\n",
+                                               expectedSequence, outOfOrderPackets.size(), btoa(packetLast));
+                            continue;
+                        }
+                    }
+
+                    break;
+                }
+
+                veryFirstRead = false;
+
+                if (packetLast) {
+                    break;
+                }
+            }
+
+            *tick   = packetTick;
+            *dataId = packetDataId;
+            clearMap(outOfOrderPackets);
+            return totalBytesRead;
+        }
+
 
 
         /**
