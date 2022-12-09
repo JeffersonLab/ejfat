@@ -777,15 +777,16 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                         // Already have trouble, looks like we dropped the first packet of a tick,
                         // and possibly others after it.
                         // So go ahead and dump the rest of the tick in an effort to keep up.
-                        printf("Skip pkt from %hu, %llu - %u, expected seq 0\n", packetDataId, packetTick, sequence);
-                        //printf("S %llu - %u\n", packetTick, sequence);
+                        printf("Skip pkt from id%hu, %llu - %u, expected seq 0\n", packetDataId, packetTick, sequence);
                         putDataAt = dataBuf;
                         remainingLen = bufLen;
                         veryFirstRead = true;
+                        totalBytesRead = 0;
 
                         dumpTick = true;
-                        prevSequence = sequence;
                         prevTick = packetTick;
+                        prevSequence = sequence;
+                        prevPacketLast = packetLast;
 
                         continue;
                     }
@@ -793,7 +794,7 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                     if (prevPacketLast != true) {
                         // The last tick's buffer was not fully contructed
                         // before this new tick showed up!
-                        printf("Discarding tick %llu, last %u packet dropped\n", packetTick, (prevSequence + 1));
+                        printf("Discard tick %llu\n", packetTick);
                     }
 
                     // If here, new tick/buffer, sequence = 0.
@@ -825,11 +826,14 @@ fprintf(stderr, "getPacketizedBuffer: buf too small? nBytes = %d, remainingLen =
                         putDataAt = dataBuf;
                         remainingLen = bufLen;
                         veryFirstRead = true;
+                        totalBytesRead = 0;
                         expectedSequence = 0;
+
                         dumpTick = true;
                         prevSequence = sequence;
-                        printf("Dump pkt from %hu, %llu - %u\n", packetDataId, packetTick, sequence);
-                        //printf("D %llu - %u\n", packetTick, sequence);
+                        prevPacketLast = packetLast;
+
+                        printf("Dump pkt from id%hu, %llu - %u\n", packetDataId, packetTick, sequence);
                         continue;
                     }
                 }
