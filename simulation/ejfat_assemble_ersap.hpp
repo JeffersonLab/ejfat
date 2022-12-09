@@ -645,7 +645,7 @@ static int outCount = 100;
          *         If on a read &lt; HEADER_BYTES data returned, not enough data to contain header.
          *              Then some sort of internal error and will return INTERNAL_ERROR.
          */
-        static ssize_t getCompletePacketizedBufferOld(char* dataBuf, size_t bufLen, int udpSocket,
+        static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
                                                    bool debug, uint64_t *tick, uint16_t *dataId,
                                                    std::shared_ptr<packetRecvStats> stats, uint32_t tickPrescale,
                                                    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
@@ -1060,7 +1060,7 @@ if (remainingLen < 1) fprintf(stderr, "        remaining len = %zu\n", remaining
   *         If on a read &lt; HEADER_BYTES data returned, not enough data to contain header.
   *              Then some sort of internal error and will return INTERNAL_ERROR.
   */
-        static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
+static ssize_t getCompletePacketizedBufferNew(char* dataBuf, size_t bufLen, int udpSocket,
                                                    bool debug, uint64_t *tick, uint16_t *dataId,
                                                    std::shared_ptr<packetRecvStats> stats, uint32_t tickPrescale,
                                                    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
