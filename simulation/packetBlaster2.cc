@@ -13,9 +13,9 @@
  * @file Send a single data buffer (full of random data) repeatedly
  * to an ejfat router (FPGA-based or simulated) which then passes it
  * to a receiving program (possibly packetBlastee.cc or packetBlastee2.cc).
- * Because the buffer being sent has both first and last bit set in the
+ * Because the buffer (1 MTU) being sent has both first and last bit set in the
  * reassembly header, it is not reassembled on the receiving end but is
- * already complete.
+ * already complete. Tick is not changed
  * </p>
  */
 
@@ -33,7 +33,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -45,12 +45,12 @@ static void printHelp(char *programName) {
             "        [-id <data id>]",
             "        [-pro <protocol>]",
             "        [-e <entropy>]",
-            "        [-b <buffer size>]",
             "        [-s <UDP send buffer size>]",
             "        [-d <delay in microsec between packets>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send file repeatedly and get stats\n");
-    fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
+    fprintf(stderr, "        By default, 1 MTU of data is copied into buffer and \"send()\" is used (connect is called).\n");
+    fprintf(stderr, "        Tick is not incremented.\n");
 }
 
 
@@ -58,7 +58,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
-                      uint32_t *bufsize, uint32_t *sendBufSize, int *spins,
+                      uint32_t *sendBufSize, int *spins,
                       bool *debug, bool *useIPv6, char* host, char *interface) {
 
     *mtu = 0;
@@ -106,18 +106,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
-                    exit(-1);
-                }
-                break;
-
-            case 'b':
-                // BUFFER SIZE
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 500) {
-                    *bufsize = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -b, buf size >= 500\n");
                     exit(-1);
                 }
                 break;
@@ -343,7 +331,7 @@ static void *thread(void *arg) {
 int main(int argc, char **argv) {
 
     int spins = 0, err;
-    uint32_t offset = 0, delay = 0, bufsize = 0, sendBufSize = 0;
+    uint32_t offset = 0, delay = 0, bufsize, sendBufSize = 0;
     uint16_t port = 0x4c42; // FPGA port is default
     uint64_t tick = 1;
     int mtu, version = 2, protocol = 1, entropy = 0;
@@ -358,7 +346,7 @@ int main(int argc, char **argv) {
     strcpy(interface, "lo0");
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
-              &delay, &bufsize, &sendBufSize, &spins, &debug, &useIPv6,
+              &delay, &sendBufSize, &spins, &debug, &useIPv6,
               host, interface);
 
 
