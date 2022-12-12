@@ -51,6 +51,7 @@ void   Usage(void)
         -p listen port  \n\
         -n num events  \n\
         -v verbose mode (default is quiet)  \n\
+        -x omit event size prefix  \n\
         -h help \n\n";
         cerr<<usage_str;
         cerr<<"Required: -i -p\n";
@@ -65,13 +66,13 @@ int main (int argc, char *argv[])
     extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false, passedN=false;
-    bool passedV=false;
+    bool passedV=false, passedX=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;                  // listening port
     uint32_t num_evnts;                 // number of events to recv
 
-    while ((optc = getopt(argc, argv, "hi:p:6n:v")) != -1)
+    while ((optc = getopt(argc, argv, "hi:p:6n:vx")) != -1)
     {
         switch (optc)
         {
@@ -100,6 +101,10 @@ int main (int argc, char *argv[])
         case 'v':
             passedV = true;
             fprintf(stderr, "-v ");
+            break;
+        case 'x':
+            passedX = true;
+            fprintf(stderr, "-x ");
             break;
         case '?':
             fprintf (stderr, "Unrecognised option: %d\n", optopt);
@@ -272,7 +277,7 @@ int main (int argc, char *argv[])
         in_buff_idx++;
         if(lst) 
         {
-            std:cerr << "Event_size: "<<evnt_sz<<" data_id: "<<lstn_prt<<'\n';
+            if(passedV) std:cerr << "Event_size: "<<evnt_sz<<" data_id: "<<lstn_prt<<'\n';
             xseq = 0;
             ++evnt_num;
             t_end = std::chrono::steady_clock::now();
@@ -280,7 +285,7 @@ int main (int argc, char *argv[])
 //            ltncy_mn += std::chrono::duration<double, std::micro>(t_end-t_start).count()/evnt_num; //incremental formula
 
             // first four bytes must be event size for ERSAP
-            rs.write((char*)&evnt_sz, sizeof(evnt_sz));
+            if(!passedX) rs.write((char*)&evnt_sz, sizeof(evnt_sz));
 
 
             for(size_t i=0;i<in_buff_idx;i++) {
