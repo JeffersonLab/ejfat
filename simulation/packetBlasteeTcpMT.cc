@@ -9,9 +9,14 @@
 
 
 /**
- * @file Receive generated data sent by clasBlaster.c program.
- * This assumes there is an emulator or FPGA between this and the sending program.
- */
+* @file Receive generated data sent by clasBlaster.c program.
+* This assumes there is an emulator or FPGA between this and the sending program.
+* Take the reassembled buffers and send to a TCP server so ERSAP can grab them.
+ * This differs from packetBlasteeTCP in that it puts an extra thread in its
+ * operation. It uses a BuffSupply as a ring buffer. So reassembled buffers
+ * in the supply are taken by another thread and sent to TCP server.
+*/
+
 
 #include <cstdlib>
 #include <iostream>
@@ -76,6 +81,7 @@ static void printHelp(char *programName) {
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with clasBlaster and send data to TCP server.\n");
+    fprintf(stderr, "        This uses a BufferSupply ring buffer of reassembled events with another thread to talk over TCP.\n");
 }
 
 

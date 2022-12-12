@@ -13,6 +13,8 @@
  * @file Send a single data buffer (full of random data) repeatedly
  * to an ejfat router (FPGA-based or simulated) which then passes it
  * to the receiving program packetBlastee.cc.
+ * Same as packetBlasterFat but with more options and knobs to tweak.
+ * Like can set # of streams.
  * </p>
  */
 

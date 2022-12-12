@@ -11,6 +11,7 @@
 /**
  * @file Receive generated data sent by clasBlaster.c program.
  * This assumes there is an emulator or FPGA between this and the sending program.
+ * Take the reassembled buffers and send to a TCP server so ERSAP can grab them.
  */
 
 #include <cstdlib>

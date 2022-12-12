@@ -9,7 +9,7 @@
 
 
 /**
- * @file Receive locally generated data sent by udp_send.c program.
+ * @file Receive locally generated data sent by udp_send_order.c program.
  * This program handles sequentially numbered packets that may arrive out-of-order.
  * This assumes there is an emulator or FPGA between this and the sending program.
  */

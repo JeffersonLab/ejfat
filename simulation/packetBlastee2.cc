@@ -12,6 +12,7 @@
  * @file Receive generated data sent by packetBlaster2.c program which
  * sends each packet as a complete buffer (i.e. no assembly is required).
  * This assumes there is an emulator or FPGA between this and the sending program.
+ * This program just reads packets, nothing else. No parsing or reassembly.
  */
 
 #include "time.h"
@@ -45,6 +46,7 @@ static void printHelp(char *programName) {
             "        [-r <UDP receive buffer byte size]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver to be used with packetBlaster2.\n");
+    fprintf(stderr, "        Just reads packets, nothing else. No parsing/reassembly.\n");
 }
 
 

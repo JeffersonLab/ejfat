@@ -10,9 +10,9 @@
 
 /**
  * <p>
- * @file Send a single data buffer (full of random data) repeatedly
- * to an ejfat router (FPGA-based or simulated) which then passes it
- * to the receiving program packetBlastee.cc.
+ * @file Send small packets to a packetBlastee in order to test the LB.
+ * Check with tcpdump how many packets are sent to LB and how many to the blastee.
+ * Used to find runt TCP frame bug in LB.
  * </p>
  */
 
@@ -27,9 +27,6 @@
 #include <iostream>
 #include <cinttypes>
 #include "ejfat_packetize.hpp"
-
-// HIPO reading
-#include "reader.h"
 
 
 #ifdef __linux__
