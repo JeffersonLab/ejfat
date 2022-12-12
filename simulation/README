@@ -32,17 +32,17 @@ I doubt if we'll ever deal with this so UDP header = 8 bytes on our networks.
 
 IPv6 fixes the IP header size at 40 bytes.
 
-So I think we can set payload size = MTU(1024) - 20 - 8 -LB -RE = 1024 - 28 - 28 = 968.
+So I think we can set payload size = MTU(1024) - 20 - 8 -LB -RE = 1024 - 28 - 34 = 962.
 
 
 Michael's code does the following:
 
 My components current recv 1024 bytes off the wire (not including udp/ip headers);
 so udp payload = (sender payload + 12 + 16).
-Thus max(sender payload) = udp payload- 28 = 1024 - 28 = 996
+Thus max(sender payload) = udp payload - 34 = 1024 - 34 = 990
 
 
-That means the programmatically in Carl's code, the MTU can be set by hand to 1024 + (996 - 968) = 1052.
+That means the programmatically in Carl's code, the MTU can be set by hand to 1024 + (990 - 962) = 1052.
 
 Switching to IPv6 means decreasing payload by 20 additiona bytes.
 

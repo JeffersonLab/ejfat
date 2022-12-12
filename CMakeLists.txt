@@ -150,7 +150,6 @@ set(CLAS_EXEC_FILES
         )
 
 set(TEST_FILES
-        simulation/re_header_test.cc
         )
 
 set(CPP_HEADER_FILES

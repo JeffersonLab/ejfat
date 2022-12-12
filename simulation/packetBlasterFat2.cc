@@ -995,7 +995,7 @@ fprintf(stderr, "packetBlaster: elapsed = %lld, this excessT = %lld, last excess
 
             if (setRate && --countDown < 1) {
                 startingStream = (index + 1) % streams;
-                fprintf(stderr, "countdown = %d, starting stream = %d\n", countDown, startingStream);
+                fprintf(stderr, "countdown = %" PRId64 ", starting stream = %d\n", countDown, startingStream);
                 break;
             }
         }
