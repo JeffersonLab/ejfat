@@ -248,7 +248,7 @@
                 // Set true when all buffers of a tick have received the lastPacket
                 tickCompleted = false;
 
-                if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
+                if (debug) fprintf(stderr, "getBuffers: remainingLen = %lu\n", remainingLen);
 
                 while (true) {
 

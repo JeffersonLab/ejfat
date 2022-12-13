@@ -587,7 +587,7 @@ static void *threadAssemble(void *arg) {
 #endif
 
 
-    if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
+    if (debug) fprintf(stderr, "remainingLen = %lu\n", remainingLen);
 
     while (true) {
 
