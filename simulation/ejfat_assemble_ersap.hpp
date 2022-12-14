@@ -1770,7 +1770,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          *                      If false, an internal buffer is allocated and returned in the userBuf arg.
          * @param debug         turn debug printout on & off.
          *
-         * @return 0 if success.
+4         * @return 0 if success.
          *         If there's an error in recvmsg, it will return RECV_MSG.
          *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
          *         If the buffer is too small to receive a single packet's data, it will return BUF_TOO_SMALL.
