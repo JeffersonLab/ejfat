@@ -697,8 +697,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cerr << "Tick prescale = " << tickPrescale << "\n";
-
     // Start thread to do rate printout
     threadStruct *targ = (threadStruct *)malloc(sizeof(threadStruct));
     if (targ == nullptr) {
@@ -759,11 +757,6 @@ int main(int argc, char **argv) {
     uint16_t dataId;
     bool firstLoop = true;
 
-    char fakeData[12];
-    std::memset(fakeData, 1, 12);
-
-    std::cerr << "Tick prescale = " << tickPrescale << "\n";
-
     while (true) {
 
         clearStats(stats);
@@ -823,28 +816,6 @@ int main(int argc, char **argv) {
 
         // Send to server if desired
         if (sendToServer) {
-
-
-//            // We first send the size of the buffer in bytes (in BIG endian).
-//            int32_t bytes = 12;
-//
-//            if (tcpWrite(tcpSocket, (void *) &bytes, 4) != 4) {
-//                close(udpSocket);
-//                close(tcpSocket);
-//                fprintf(stderr, "Error writing size\n");
-//                perror("bad write");
-//                return(-1);
-//            }
-//
-//            // Then we send the buffer itself
-//            if (tcpWrite(tcpSocket, (void *) fakeData, bytes) != bytes) {
-//                close(udpSocket);
-//                close(tcpSocket);
-//                fprintf(stderr, "Error writing buffer\n");
-//                perror("bad buf write");
-//                return(-1);
-//            }
-
 
             // We first send the size of the buffer in bytes (in BIG endian).
             int32_t bytes = nBytes;
