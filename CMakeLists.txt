@@ -106,6 +106,7 @@ set(EMU_EXEC_FILES
         )
 
 set(ET_EXEC_FILES
+        simulation/packetBlasteeEtFifo.cc
         simulation/udp_rcv_et.cc
         simulation/ersap_et_consumer.cc
         ersap_engine/ejfat/legacy/src/main/cpp/ejfat_assemble_et_engine.cpp
