@@ -50,6 +50,7 @@ void   Usage(void)
         -i listen address  \n\
         -p listen port  \n\
         -n num events  \n\
+        -l simulated extra latency (loop count)  \n\
         -v verbose mode (default is quiet)  \n\
         -x omit event size prefix  \n\
         -h help \n\n";
@@ -66,13 +67,14 @@ int main (int argc, char *argv[])
     extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false, passedN=false;
-    bool passedV=false, passedX=false;
+    bool passedV=false, passedX=false, passedL=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
     uint16_t lstn_prt;                  // listening port
-    uint32_t num_evnts;                 // number of events to recv
+    uint32_t num_evnts = 1;             // number of events to recv
+    uint64_t lat_lps = 0;               // loop count to simulate extra latency
 
-    while ((optc = getopt(argc, argv, "hi:p:6n:vx")) != -1)
+    while ((optc = getopt(argc, argv, "hi:p:6n:vxl:")) != -1)
     {
         switch (optc)
         {
@@ -92,6 +94,11 @@ int main (int argc, char *argv[])
             lstn_prt = (uint16_t) atoi((const char *) optarg) ;
             passedP = true;
             fprintf(stderr, "-p %d ", lstn_prt);
+            break;
+        case 'l':
+            lat_lps = (uint64_t) atoll((const char *) optarg) ;
+            passedL = true;
+		    fprintf(stderr, "-l %" PRIu64 " ", lat_lps);
             break;
         case 'n':
             num_evnts = (uint32_t) atoi((const char *) optarg) ;
@@ -300,6 +307,8 @@ int main (int argc, char *argv[])
 
             in_buff_idx = 0; //assuming packet marked as last really is last
             evnt_sz = 0;
+            
+            if(passedL) for(size_t i=0;i<lat_lps;i++) i++; //simulated extra latency
             
             if(passedV)
             {
