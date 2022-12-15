@@ -272,18 +272,60 @@ static void parseArgs(int argc, char **argv,
 
 
 
+// structure for passing args to thread
+typedef struct threadStruct_t {
+    et_sys_id id;
+} threadStruct;
+
+
+// Thread to monitor the ET system, run PID loop and report back to control plane
+static void *pidThread(void *arg) {
+
+    threadStruct *targ = static_cast<threadStruct *>(arg);
+    et_sys_id id = targ->id;
+    int status, numEvents, inputListCount;
+    size_t eventSize;
+    status = et_system_getnumevents(id, &numEvents);
+    status = et_system_geteventsize(id, &eventSize);
+
+    int64_t totalT = 0, time;
+    struct timespec t1, t2, firstT;
+    // Get the current time
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    firstT = t1;
+
+    while (true) {
+
+        // Delay 1 milliseconds between data points
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        // Get the number of available events (# sitting in Grandcentral's input list)
+        status = et_station_getinputcount(id, ET_GRANDCENTRAL, &inputListCount);
+
+        // Read time
+        clock_gettime(CLOCK_MONOTONIC, &t2);
+        // Microseconds
+        time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
+        if (time >= 1000000) {
+            printf(" ET system %d%% filled\n", inputListCount/numEvents);
+            t1 = t2;
+        }
+    }
+
+    return (nullptr);
+}
+
+
+
+
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
 static volatile int cpu=-1;
 static std::atomic<uint32_t> droppedPackets;
 static std::atomic<uint32_t> droppedTicks;
-typedef struct threadStruct_t {
-    char filename[101];
-} threadStruct;
-
 
 // Thread to send to print out rates
-static void *thread(void *arg) {
+static void *rateThread(void *arg) {
 
     uint64_t packetCount, byteCount;
     uint64_t prevTotalPackets, prevTotalBytes;
@@ -291,26 +333,8 @@ static void *thread(void *arg) {
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
-
     // File writing stuff
-    bool writeToFile = false;
     threadStruct *targ = static_cast<threadStruct *>(arg);
-    char *filename = targ->filename;
-    FILE *fp;
-    if (strlen(filename) > 0) {
-        // open file
-        writeToFile = true;
-        fp = fopen (filename, "w");
-        // validate file open for writing
-        if (!fp) {
-            fprintf(stderr, "file open failed: %s\n", strerror(errno));
-            return (NULL);
-        }
-
-        // Write column headers
-        fprintf(fp, "Sec,PacketRate(kHz),DataRate(MB/s),Dropped,TotalDropped,CPU\n");
-    }
-
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
     int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
@@ -386,17 +410,10 @@ static void *thread(void *arg) {
         totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
         printf(" Total:    %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
 
-        if (writeToFile) {
-            fprintf(fp, "%" PRId64 ",%d,%d,%" PRId64 ",%" PRId64 ",%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
-                    droppedPkts, totalDroppedPkts, cpu);
-            fflush(fp);
-        }
-
         t1 = t2;
     }
 
-    fclose(fp);
-    return (NULL);
+    return (nullptr);
 }
 
 
@@ -550,18 +567,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Start thread to do rate printout
-    threadStruct *targ = (threadStruct *)malloc(sizeof(threadStruct));
-    if (targ == nullptr) {
-        fprintf(stderr, "out of mem\n");
-        return -1;
-    }
-    std::memset(targ, 0, sizeof(threadStruct));
-
     pthread_t thd;
-    int status = pthread_create(&thd, NULL, thread, (void *) targ);
+    int status = pthread_create(&thd, NULL, rateThread, (void *) nullptr);
     if (status != 0) {
-        fprintf(stderr, "\n ******* error creating thread\n\n");
+        fprintf(stderr, "\n ******* error creating RATE thread\n\n");
         return -1;
     }
 
@@ -652,6 +661,23 @@ int main(int argc, char **argv) {
         if (entry == NULL) {
             fprintf(stderr, "et_fifo_entryCreate: out of mem\n");
             exit(1);
+        }
+
+
+        // Start thread to do rate printout
+        threadStruct *targ = (threadStruct *)malloc(sizeof(threadStruct));
+        if (targ == nullptr) {
+            fprintf(stderr, "out of mem\n");
+            return -1;
+        }
+        std::memset(targ, 0, sizeof(threadStruct));
+        targ->id = id;
+
+        pthread_t thd1;
+        status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
+        if (status != 0) {
+            fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
+            return -1;
         }
     }
 
