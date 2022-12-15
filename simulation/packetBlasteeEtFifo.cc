@@ -624,20 +624,24 @@ int main(int argc, char **argv) {
         et_open_config_setcast(openconfig, ET_DIRECT);
         et_open_config_sethost(openconfig, ET_HOST_LOCAL);
         et_open_config_gethost(openconfig, host);
-        printf("Direct connection to %s\n", host);
+        fprintf(stderr, "Direct connection to %s\n", host);
 
         /* debug level */
         et_open_config_setdebugdefault(openconfig, debugLevel);
+        fprintf(stderr, "1\n");
 
         et_open_config_setwait(openconfig, ET_OPEN_WAIT);
+        fprintf(stderr, "2\n");
         if (et_open(&id, filename, openconfig) != ET_OK) {
-            printf("et_open problems\n");
+            fprintf(stderr, "et_open problems\n");
             exit(1);
         }
+        fprintf(stderr, "3\n");
         et_open_config_destroy(openconfig);
 
         /*-------------------------------------------------------*/
 
+        fprintf(stderr, "4\n");
         /* set level of debug output (everything) */
         et_system_setdebug(id, debugLevel);
 
@@ -646,18 +650,19 @@ int main(int argc, char **argv) {
         /***********************/
         status = et_fifo_openProducer(id, &fid, ids, idCount);
         if (status != ET_OK) {
-            printf("et_fifo_open problems\n");
+            fprintf(stderr, "et_fifo_open problems\n");
             exit(1);
         }
+        fprintf(stderr, "5\n");
 
         /* no error here */
         int numRead = et_fifo_getEntryCapacity(fid);
 
-        printf("Fifo capacity = %d, idCount = %d\n", numRead, idCount);
+        fprintf(stderr, "Fifo capacity = %d, idCount = %d\n", numRead, idCount);
 
         entry = et_fifo_entryCreate(fid);
         if (entry == NULL) {
-            printf("et_fifo_entryCreate: out of mem\n");
+            fprintf(stderr, "et_fifo_entryCreate: out of mem\n");
             exit(1);
         }
     }
