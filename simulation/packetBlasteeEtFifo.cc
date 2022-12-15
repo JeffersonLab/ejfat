@@ -557,9 +557,9 @@ int main(int argc, char **argv) {
         return -1;
     }
     std::memset(targ, 0, sizeof(threadStruct));
-    if (strlen(filename) > 0) {
-        std::memcpy(targ->filename, filename, sizeof(filename));
-    }
+//    if (strlen(filename) > 0) {
+//        std::memcpy(targ->filename, filename, sizeof(filename));
+//    }
 
     pthread_t thd;
     int status = pthread_create(&thd, NULL, thread, (void *) targ);
