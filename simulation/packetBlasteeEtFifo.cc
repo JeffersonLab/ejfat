@@ -300,7 +300,7 @@ static void *pidThread(void *arg) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         // Get the number of available events (# sitting in Grandcentral's input list)
-        status = et_station_getinputcount(id, ET_GRANDCENTRAL, &inputListCount);
+        status = et_station_getinputcount_rt(id, ET_GRANDCENTRAL, &inputListCount);
 
         // Read time
         clock_gettime(CLOCK_MONOTONIC, &t2);
