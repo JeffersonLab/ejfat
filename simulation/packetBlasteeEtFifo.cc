@@ -604,37 +604,61 @@ int main(int argc, char **argv) {
     et_event **pe;
 
     // This ET fifo is only 1 event wide
-    int ids[1];
     int idCount = 1;
+    int ids[idCount];
+    int debugLevel = ET_DEBUG_INFO;
+    char host[256];
     /////////////////
 
     if (sendToEt) {
-        // Connect to local ET system
+
+        /******************/
+        /* open ET system */
+        /******************/
         et_open_config_init(&openconfig);
+
+        if (port == 0) {
+            port = ET_SERVER_PORT;
+        }
+        et_open_config_setserverport(openconfig, port);
+        et_open_config_setcast(openconfig, ET_DIRECT);
         et_open_config_sethost(openconfig, ET_HOST_LOCAL);
+        et_open_config_gethost(openconfig, host);
+        printf("Direct connection to %s\n", host);
+
+        /* debug level */
+        et_open_config_setdebugdefault(openconfig, debugLevel);
+
         et_open_config_setwait(openconfig, ET_OPEN_WAIT);
         if (et_open(&id, filename, openconfig) != ET_OK) {
-            fprintf(stderr, "et_open problems\n");
-            return -1;
+            printf("et_open problems\n");
+            exit(1);
         }
         et_open_config_destroy(openconfig);
 
-        // Use FIFO interface (be sure to start ET system with et_start_fifo)
+        /*-------------------------------------------------------*/
+
+        /* set level of debug output (everything) */
+        et_system_setdebug(id, debugLevel);
+
+        /***********************/
+        /* Use FIFO interface  */
+        /***********************/
         status = et_fifo_openProducer(id, &fid, ids, idCount);
         if (status != ET_OK) {
-            fprintf(stderr, "et_fifo_open problems\n");
-            return -1;
+            printf("et_fifo_open problems\n");
+            exit(1);
         }
 
-        // no error here
+        /* no error here */
         int numRead = et_fifo_getEntryCapacity(fid);
 
-        printf("%s: cap = %d, idCount = %d\n", argv[0], numRead, idCount);
+        printf("Fifo capacity = %d, idCount = %d\n", numRead, idCount);
 
         entry = et_fifo_entryCreate(fid);
         if (entry == NULL) {
-            fprintf(stderr, "et_fifo_entryCreate: out of mem\n");
-            return -1;
+            printf("et_fifo_entryCreate: out of mem\n");
+            exit(1);
         }
     }
 
@@ -642,7 +666,6 @@ int main(int argc, char **argv) {
     uint64_t tick = 0L;
     uint16_t dataId;
     bool firstLoop = true;
-
 
     while (true) {
 
