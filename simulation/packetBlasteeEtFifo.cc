@@ -557,9 +557,6 @@ int main(int argc, char **argv) {
         return -1;
     }
     std::memset(targ, 0, sizeof(threadStruct));
-//    if (strlen(filename) > 0) {
-//        std::memcpy(targ->filename, filename, sizeof(filename));
-//    }
 
     pthread_t thd;
     int status = pthread_create(&thd, NULL, thread, (void *) targ);
@@ -617,31 +614,23 @@ int main(int argc, char **argv) {
         /******************/
         et_open_config_init(&openconfig);
 
-        if (port == 0) {
-            port = ET_SERVER_PORT;
-        }
-        et_open_config_setserverport(openconfig, port);
         et_open_config_setcast(openconfig, ET_DIRECT);
         et_open_config_sethost(openconfig, ET_HOST_LOCAL);
         et_open_config_gethost(openconfig, host);
-        fprintf(stderr, "Direct connection to %s\n", host);
+        fprintf(stderr, "Direct ET connection to %s\n", host);
 
         /* debug level */
         et_open_config_setdebugdefault(openconfig, debugLevel);
-        fprintf(stderr, "1\n");
 
         et_open_config_setwait(openconfig, ET_OPEN_WAIT);
-        fprintf(stderr, "Try opening et system %s\n", filename);
         if (et_open(&id, filename, openconfig) != ET_OK) {
             fprintf(stderr, "et_open problems\n");
             exit(1);
         }
-        fprintf(stderr, "3\n");
         et_open_config_destroy(openconfig);
 
         /*-------------------------------------------------------*/
 
-        fprintf(stderr, "4\n");
         /* set level of debug output (everything) */
         et_system_setdebug(id, debugLevel);
 
@@ -653,12 +642,11 @@ int main(int argc, char **argv) {
             fprintf(stderr, "et_fifo_open problems\n");
             exit(1);
         }
-        fprintf(stderr, "5\n");
 
         /* no error here */
         int numRead = et_fifo_getEntryCapacity(fid);
 
-        fprintf(stderr, "Fifo capacity = %d, idCount = %d\n", numRead, idCount);
+        fprintf(stderr, "Et fifo capacity = %d, idCount = %d\n", numRead, idCount);
 
         entry = et_fifo_entryCreate(fid);
         if (entry == NULL) {
@@ -733,7 +721,7 @@ int main(int argc, char **argv) {
             /* Grab new/empty buffers */
             status = et_fifo_newEntry(fid, entry);
             if (status != ET_OK) {
-                fprintf(stderr, "et_fifo_newBufs error\n");
+                fprintf(stderr, "et_fifo_newEntry error\n");
                 return -1;
             }
 
@@ -753,7 +741,7 @@ int main(int argc, char **argv) {
             /* put events back into the ET system */
             status = et_fifo_putEntry(entry);
             if (status != ET_OK) {
-                fprintf(stderr, "et_fifo_putBufs error\n");
+                fprintf(stderr, "et_fifo_putEntry error\n");
                 return -1;
             }
         }
