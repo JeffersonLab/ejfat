@@ -308,7 +308,7 @@ static void *pidThread(void *arg) {
         time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
         if (time >= 1000000) {
             printf("Total cnt %d, GC in list cnt %d, %d%% filled\n",
-                   numEvents, inputListCount, (numEvents-inputListCount)/numEvents);
+                   numEvents, inputListCount, (numEvents-inputListCount)*100/numEvents);
             t1 = t2;
         }
     }
