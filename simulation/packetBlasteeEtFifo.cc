@@ -631,7 +631,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "1\n");
 
         et_open_config_setwait(openconfig, ET_OPEN_WAIT);
-        fprintf(stderr, "2\n");
+        fprintf(stderr, "Try opening et system %s\n", filename);
         if (et_open(&id, filename, openconfig) != ET_OK) {
             fprintf(stderr, "et_open problems\n");
             exit(1);
