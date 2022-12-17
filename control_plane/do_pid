@@ -1,0 +1,10 @@
+ #!/bin/bash
+# do_pid <num_events>
+
+t=$(mktemp)
+bin/pid -n $1 >$t
+gnuplot -p \
+	-e "set yrange [-1.1:1.1]" \
+	-e "set title 'pv/cv'" \
+	-e "p '$t' u 1 w l lc 'black' notitle, '$t' u 2 w l lc 'red' notitle,0.5 w l lc 'green'"
+rm $t
