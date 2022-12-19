@@ -104,7 +104,7 @@ int main (int argc, char *argv[])
     std::random_device rd; 
     // Mersenne twister PRNG, initialized with seed from previous random device instance
     std::mt19937 gen(rd()); 
-    std::gamma_distribution<double> d(2.0,1.0);
+    std::gamma_distribution<float> d(2.0,1.0);
 
     float ns_gain = 0.5; //noise gain
     //process and control values for host
@@ -126,7 +126,6 @@ int main (int argc, char *argv[])
 //        pv[i+1] = std::clamp(pv[i+1], float(0), float(1) );
         cout << pv[i] << '\t' << cv[i] << '\n'; 
     } 
-
 
     return 0;
 }
