@@ -42,6 +42,6 @@ if(NOT TARGET libet)
 endif()
 
 include ( FindPackageHandleStandardArgs )
-# handle the QUIETLY and REQUIRED arguments and set Et_FOUND to TRUE
+# handle the QUIETLY and REQUIRED arguments and set ET_FOUND to TRUE
 # if all listed variables are TRUE
 find_package_handle_standard_args ( ET DEFAULT_MSG ET_LIBRARIES ET_INCLUDE_DIRS )

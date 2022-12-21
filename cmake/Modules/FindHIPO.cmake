@@ -48,6 +48,6 @@ if(NOT TARGET libhipo4)
 endif()
 
 include ( FindPackageHandleStandardArgs )
-# handle the QUIETLY and REQUIRED arguments and set Et_FOUND to TRUE
+# handle the QUIETLY and REQUIRED arguments and set HIPO_FOUND to TRUE
 # if all listed variables are TRUE
 find_package_handle_standard_args ( HIPO DEFAULT_MSG HIPO_LIBRARIES HIPO_INCLUDE_DIRS )

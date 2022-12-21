@@ -38,7 +38,7 @@ if(NOT TARGET libDisruptor)
 endif()
 
 include ( FindPackageHandleStandardArgs )
-# handle the QUIETLY and REQUIRED arguments and set Disruptor_FOUND to TRUE
+# handle the QUIETLY and REQUIRED arguments and set DISRUPTOR_FOUND to TRUE
 # if all listed variables are TRUE
 find_package_handle_standard_args ( DISRUPTOR DEFAULT_MSG DISRUPTOR_LIBRARIES DISRUPTOR_INCLUDE_DIRS )
 
