@@ -8,40 +8,60 @@ set(PKG_CONFIG_USE_CMAKE_PREFIX_PATH ON)
 find_package(PkgConfig)
 pkg_check_modules(PC_LIBGRPC QUIET libgrpc)
 
-set(ET_VERSION ${PC_LIBET_VERSION})
+set(GRPC_VERSION ${PC_LIBGRPC_VERSION})
 
-find_path(ET_INCLUDE_DIR et.h
-        PATHS $ENV{CODA}/common/include)
+find_path(GRPC_INCLUDE_DIR grpc/grpc.h
+        PATHS $ENV{GRPC_INSTALL_DIR}/include)
 
-find_library(ET_LIBRARY
-        NAMES et
-        PATHS $ENV{CODA}/*/lib)
+find_library(GRPC_LIBRARY
+        NAMES grpc
+        PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
-find_library(ET_REMOTE_LIBRARY
-        NAMES et_remote
-        PATHS $ENV{CODA}/*/lib)
+find_library(GRPC++_LIBRARY
+        NAMES grpc++
+        PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
-if(ET_LIBRARY)
-    set(ET_FOUND ON)
+find_library(GRPC++_REFLECTION_LIBRARY
+        NAMES grpc++_reflection
+        PATHS $ENV{GRPC_INSTALL_DIR}/lib)
+
+find_library(PROTOBUF_LIBRARY
+        NAMES protobuf
+        PATHS $ENV{GRPC_INSTALL_DIR}/lib)
+
+
+if(GRPC_LIBRARY)
+    set(GRPC_FOUND ON)
 endif()
 
-set ( ET_LIBRARIES  ${ET_LIBRARY} )
-set ( ET_INCLUDE_DIRS  ${ET_INCLUDE_DIR} )
+set ( GRPC_LIBRARIES ${GRPC_LIBRARY} ${GRPC++_LIBRARY} ${GRPC++_REFLECTION_LIBRARY} ${PROTOBUF_LIBRARY})
+set ( GRPC_INCLUDE_DIRS  ${GRPC_INCLUDE_DIR} )
 
-if(NOT TARGET libet)
-    add_library(libet UNKNOWN IMPORTED)
-    add_library(libet_remote UNKNOWN IMPORTED)
+if(NOT TARGET libgrpc)
+    add_library(libgrpc UNKNOWN IMPORTED)
+    add_library(libgrpc++ UNKNOWN IMPORTED)
+    add_library(libgrpc++_reflection UNKNOWN IMPORTED)
+    add_library(libprotobuf UNKNOWN IMPORTED)
 
-    set_target_properties(libet PROPERTIES
-            IMPORTED_LOCATION ${ET_LIBRARY}
-            INTERFACE_INCLUDE_DIRECTORIES ${ET_INCLUDE_DIRS})
+    set_target_properties(libgrpc PROPERTIES
+            IMPORTED_LOCATION ${GRPC_LIBRARY}
+            INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
-    set_target_properties(libet_remote PROPERTIES
-            IMPORTED_LOCATION ${ET_REMOTE_LIBRARY}
-            INTERFACE_INCLUDE_DIRECTORIES ${ET_INCLUDE_DIRS})
+    set_target_properties(libgrpc++ PROPERTIES
+            IMPORTED_LOCATION ${GRPC++_LIBRARY}
+            INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
+
+    set_target_properties(libgrpc++_reflection PROPERTIES
+            IMPORTED_LOCATION ${GRPC++_LIBRARY}
+            INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
+
+    set_target_properties(libprotobuf PROPERTIES
+            IMPORTED_LOCATION ${GRPC++_LIBRARY}
+            INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
+
 endif()
 
 include ( FindPackageHandleStandardArgs )
-# handle the QUIETLY and REQUIRED arguments and set Et_FOUND to TRUE
+# handle the QUIETLY and REQUIRED arguments and set GRPC_FOUND to TRUE
 # if all listed variables are TRUE
-find_package_handle_standard_args ( ET DEFAULT_MSG ET_LIBRARIES ET_INCLUDE_DIRS )
+find_package_handle_standard_args ( GRPC DEFAULT_MSG GRPC_LIBRARIES GRPC_INCLUDE_DIRS )
