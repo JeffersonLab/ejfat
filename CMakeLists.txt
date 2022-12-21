@@ -241,26 +241,12 @@ if (BUILD_GRPC)
     endif()
 
     find_package(GRPC)
-    if (GRPC_FOUND)
-        set(EXEC_FILES ${EXEC_FILES} ${GRPC_EXEC_FILES})
-    else()
+    if (NOT GRPC_FOUND)
         message(STATUS "GRPC cannot be found, compile without it")
     endif()
 else()
     message(STATUS "Compile without GRPC")
 endif()
-
-set(GRPC_INCLUDE_DIRS
-        $GRPC_INSTALL_DIR/include
-        $GRPC_INSTALL_DIR/include/absl
-        $GRPC_INSTALL_DIR/include/re2
-        $GRPC_INSTALL_DIR/include/google
-        $GRPC_INSTALL_DIR/include/grpc
-        )
-
-set(GRPC_LIBRARIES libgrpc++_reflection libgrpc++ libprotobuf)
-
-#####/daqfs/home/timmer/ejfatDevel/gRPC/installation
 
 
 # Ersap build is optional and set it to OFF by default
