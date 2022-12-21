@@ -105,8 +105,11 @@ set(EMU_EXEC_FILES
         emulation/pktzr_md.cc
         )
 
-set(ET_EXEC_FILES
+set(GRPC_EXEC_FILES
         simulation/packetBlasteeEtFifo.cc
+        )
+
+set(ET_EXEC_FILES
         simulation/udp_rcv_et.cc
         simulation/ersap_et_consumer.cc
         ersap_engine/ejfat/legacy/src/main/cpp/ejfat_assemble_et_engine.cpp
@@ -222,8 +225,42 @@ if (BUILD_ET)
         message(STATUS "Et cannot be found, compile without it")
     endif()
 else()
-    message(STATUS "Compile without zeromq")
+    message(STATUS "Compile without ET")
 endif()
+
+
+# GRPC build is optional and set it to OFF by default
+option(BUILD_GRPC "Build grpc-related code" OFF)
+
+if (BUILD_GRPC)
+    # Finding ET libs and includes involve looking at CODA install directory
+    if (DEFINED ENV{GRPC_INSTALL_DIR})
+        message(STATUS "GRPC_INSTALL_DIR = " $ENV{GRPC_INSTALL_DIR})
+    else()
+        message(FATAL_ERROR "Set the \"GRPC_INSTALL_DIR\" env var so that GRPC libs and includes can be found!")
+    endif()
+
+    find_package(GRPC)
+    if (GRPC_FOUND)
+        set(EXEC_FILES ${EXEC_FILES} ${GRPC_EXEC_FILES})
+    else()
+        message(STATUS "GRPC cannot be found, compile without it")
+    endif()
+else()
+    message(STATUS "Compile without GRPC")
+endif()
+
+set(GRPC_INCLUDE_DIRS
+        $GRPC_INSTALL_DIR/include
+        $GRPC_INSTALL_DIR/include/absl
+        $GRPC_INSTALL_DIR/include/re2
+        $GRPC_INSTALL_DIR/include/google
+        $GRPC_INSTALL_DIR/include/grpc
+        )
+
+set(GRPC_LIBRARIES libgrpc++_reflection libgrpc++ libprotobuf)
+
+#####/daqfs/home/timmer/ejfatDevel/gRPC/installation
 
 
 # Ersap build is optional and set it to OFF by default
@@ -394,6 +431,34 @@ if (DEFINED MAKE_EXEC)
                     ${ET_INCLUDE_DIRS})
             # Needs these libs
             target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
+
+            # Only install if installation directory has been defined
+            if (DEFINED INSTALL_DIR_DEFINED)
+                # Install into bin dir
+                install(TARGETS ${execName} RUNTIME DESTINATION bin)
+            endif()
+        endforeach(fileName)
+    endif()
+
+    if (GRPC_FOUND)
+        message(STATUS "TRY GRPC CODE:")
+
+        # This files need util files added to executable
+        foreach(fileName ${GRPC_EXEC_FILES})
+            # Get file name with no directory or extension as executable name
+            get_filename_component(execName ${fileName} NAME_WE)
+            # Create executable from file
+            message(STATUS "Create grpc-related executable " ${execName})
+            add_executable(${execName} ${fileName} ${UTIL_FILES})
+            # Put debug extension on if applicable
+            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+            # Location of include files
+            target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                    ${CMAKE_SOURCE_DIR}/util
+                    ${GRPC_INCLUDE_DIRS}
+                    ${ET_INCLUDE_DIRS})
+            # Needs these libs
+            target_link_libraries(${execName} pthread ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)

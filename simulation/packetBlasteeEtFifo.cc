@@ -25,6 +25,8 @@
 #include <cstring>
 #include <errno.h>
 #include <cinttypes>
+#include <memory>
+#include <string>
 
 #include "ejfat_assemble_ersap.hpp"
 #include "ejfat_network.hpp"
@@ -40,6 +42,8 @@
     #include <pthread.h>
 #endif
 
+// GRPC stuff
+#include "lbControl.h"
 
 
 using namespace ejfat;
@@ -275,6 +279,8 @@ static void parseArgs(int argc, char **argv,
 // structure for passing args to thread
 typedef struct threadStruct_t {
     et_sys_id id;
+    uint16_t grpcServicePort;
+    BackendStateServiceImpl *pGrpcService;
 } threadStruct;
 
 
@@ -282,14 +288,18 @@ typedef struct threadStruct_t {
 static void *pidThread(void *arg) {
 
     threadStruct *targ = static_cast<threadStruct *>(arg);
+    BackendStateServiceImpl *pGrpcService = targ->pGrpcService;
     et_sys_id id = targ->id;
-    int status, numEvents, inputListCount;
+    int status, numEvents, inputListCount, pidError = 5, fillPercent;
     size_t eventSize;
     status = et_system_getnumevents(id, &numEvents);
     status = et_system_geteventsize(id, &eventSize);
 
     int64_t totalT = 0, time;
     struct timespec t1, t2, firstT;
+
+    pGrpcService->setName("ERSAP_backend");
+
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
     firstT = t1;
@@ -307,8 +317,10 @@ static void *pidThread(void *arg) {
         // Microseconds
         time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
         if (time >= 1000000) {
+            fillPercent = (numEvents-inputListCount)*100/numEvents;
             printf("Total cnt %d, GC in list cnt %d, %d%% filled\n",
-                   numEvents, inputListCount, (numEvents-inputListCount)*100/numEvents);
+                   numEvents, inputListCount, fillPercent);
+            pGrpcService->setState(numEvents, (int32_t)eventSize, fillPercent, pidError)
             t1 = t2;
         }
     }
@@ -316,6 +328,18 @@ static void *pidThread(void *arg) {
     return (nullptr);
 }
 
+
+// Thread to listen to requests from the control plane and respond
+static void *grpcServerThread(void *arg) {
+
+    threadStruct *targ = static_cast<threadStruct *>(arg);
+    BackendStateServiceImpl *pGrpcService = targ->pGrpcService;
+
+    std::cout << "About to run GRPC server in its own thread" << std::endl;
+    pGrpcService->runServer(targ->grpcServicePort, pGrpcService);
+
+    return (nullptr);
+}
 
 
 
@@ -615,7 +639,13 @@ int main(int argc, char **argv) {
     int ids[idCount];
     int debugLevel = ET_DEBUG_INFO;
     char host[256];
-    /////////////////
+    ////////////////////////////
+    /// Control Plane  Stuff ///
+    ////////////////////////////
+    bool reportToCP = true && sendToEt;
+    BackendStateServiceImpl service;
+    BackendStateServiceImpl *pGrpcService = &service;
+
 
     if (sendToEt) {
 
@@ -679,6 +709,25 @@ int main(int argc, char **argv) {
         if (status != 0) {
             fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
             return -1;
+        }
+
+        if (reportToCP) {
+            // Start up grpc server listening thread
+            threadStruct *targ2 = (threadStruct *)malloc(sizeof(threadStruct));
+            if (targ2 == nullptr) {
+                fprintf(stderr, "out of mem\n");
+                return -1;
+            }
+            std::memset(targ2, 0, sizeof(threadStruct));
+            targ2->grpcServicePort = 50051;
+            targ2->pGrpcService = pGrpcService;
+
+            pthread_t thd2;
+            status = pthread_create(&thd2, NULL, grpcServerThread, (void *) targ);
+            if (status != 0) {
+                fprintf(stderr, "\n ******* error creating GRPC server thread ********\n\n");
+                return -1;
+            }
         }
     }
 
@@ -776,4 +825,6 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
+
 
