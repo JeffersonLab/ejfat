@@ -25,10 +25,11 @@ find_library(GRPC++_REFLECTION_LIBRARY
         NAMES grpc++_reflection
         PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
+# Use No_DEFAULT_PATH to avoid picking up the protobuf lib already installed
 find_library(PROTOBUF_LIBRARY
         NAMES protobuf
-        PATHS $ENV{GRPC_INSTALL_DIR}/lib)
-
+        PATHS $ENV{GRPC_INSTALL_DIR}/lib
+        NO_DEFAULT_PATH)
 
 if(GRPC_LIBRARY)
     set(GRPC_FOUND ON)
