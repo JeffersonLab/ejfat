@@ -438,7 +438,7 @@ if (DEFINED MAKE_EXEC)
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
             message(STATUS "Create grpc-related executable " ${execName})
-            add_executable(${execName} ${fileName} ${UTIL_FILES})
+            add_executable(${execName} ${fileName})
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
