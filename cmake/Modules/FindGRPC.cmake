@@ -6,7 +6,7 @@
 
 set(PKG_CONFIG_USE_CMAKE_PREFIX_PATH ON)
 find_package(PkgConfig)
-pkg_check_modules(PC_LIBGRPC QUIET libgrpc)
+pkg_check_modules(PC_LIBGRPC QUIET libejfatGrpcLib)
 
 set(GRPC_VERSION ${PC_LIBGRPC_VERSION})
 
@@ -39,13 +39,13 @@ set ( GRPC_INCLUDE_DIRS  ${GRPC_INCLUDE_DIR} )
 message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
 message(STATUS "GRPC_INCLUDE_DIRS = " ${GRPC_INCLUDE_DIRS})
 
-if(NOT TARGET libgrpc)
-    add_library(libgrpc UNKNOWN IMPORTED)
+if(NOT TARGET libejfatGrpcLib)
+    add_library(libejfatGrpcLib UNKNOWN IMPORTED)
     add_library(libgrpc++ UNKNOWN IMPORTED)
     add_library(libgrpc++_reflection UNKNOWN IMPORTED)
     add_library(libprotobuf UNKNOWN IMPORTED)
 
-    set_target_properties(libgrpc PROPERTIES
+    set_target_properties(libejfatGrpcLib PROPERTIES
             IMPORTED_LOCATION ${GRPC_LIBRARY}
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
@@ -54,11 +54,11 @@ if(NOT TARGET libgrpc)
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
     set_target_properties(libgrpc++_reflection PROPERTIES
-            IMPORTED_LOCATION ${GRPC++_LIBRARY}
+            IMPORTED_LOCATION ${GRPC++_REFLECTION_LIBRARY}
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
     set_target_properties(libprotobuf PROPERTIES
-            IMPORTED_LOCATION ${GRPC++_LIBRARY}
+            IMPORTED_LOCATION ${PROTOBUF_LIBRARY}
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
 endif()
