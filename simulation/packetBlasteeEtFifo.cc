@@ -43,7 +43,7 @@
 #endif
 
 // GRPC stuff
-#include "lbControl.h"
+#include "lbcontrol.h"
 
 
 using namespace ejfat;
