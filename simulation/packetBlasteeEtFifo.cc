@@ -320,7 +320,7 @@ static void *pidThread(void *arg) {
             fillPercent = (numEvents-inputListCount)*100/numEvents;
             printf("Total cnt %d, GC in list cnt %d, %d%% filled\n",
                    numEvents, inputListCount, fillPercent);
-            pGrpcService->setState(numEvents, (int32_t)eventSize, fillPercent, pidError)
+            pGrpcService->setState(numEvents, (int32_t)eventSize, fillPercent, pidError);
             t1 = t2;
         }
     }
