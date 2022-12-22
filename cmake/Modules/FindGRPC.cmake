@@ -14,7 +14,7 @@ find_path(GRPC_INCLUDE_DIR grpc/grpc.h
         PATHS $ENV{GRPC_INSTALL_DIR}/include)
 
 find_library(GRPC_LIBRARY
-        NAMES grpc
+        NAMES ejfatGrpcLib
         PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
 find_library(GRPC++_LIBRARY
