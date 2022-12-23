@@ -314,6 +314,7 @@ static void *pidThread(void *arg) {
 
         // Read time
         clock_gettime(CLOCK_MONOTONIC, &t2);
+
         // Microseconds
         time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
         if (time >= 1000000) {
@@ -357,9 +358,6 @@ static void *rateThread(void *arg) {
     uint64_t currTotalPackets, currTotalBytes;
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
-
-    // File writing stuff
-    threadStruct *targ = static_cast<threadStruct *>(arg);
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
     int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
@@ -723,7 +721,7 @@ int main(int argc, char **argv) {
             targ2->pGrpcService = pGrpcService;
 
             pthread_t thd2;
-            status = pthread_create(&thd2, NULL, grpcServerThread, (void *) targ);
+            status = pthread_create(&thd2, NULL, grpcServerThread, (void *) targ2);
             if (status != 0) {
                 fprintf(stderr, "\n ******* error creating GRPC server thread ********\n\n");
                 return -1;
