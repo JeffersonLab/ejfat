@@ -702,6 +702,8 @@ int main(int argc, char **argv) {
         }
         std::memset(targ, 0, sizeof(threadStruct));
         targ->id = id;
+        targ->grpcServicePort = 50051;
+        targ->pGrpcService = pGrpcService;
 
         pthread_t thd1;
         status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
@@ -717,12 +719,9 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "out of mem\n");
                 return -1;
             }
-            std::memset(targ2, 0, sizeof(threadStruct));
-            targ2->grpcServicePort = 50051;
-            targ2->pGrpcService = pGrpcService;
 
             pthread_t thd2;
-            status = pthread_create(&thd2, NULL, grpcServerThread, (void *) targ2);
+            status = pthread_create(&thd2, NULL, grpcServerThread, (void *) targ);
             if (status != 0) {
                 fprintf(stderr, "\n ******* error creating GRPC server thread ********\n\n");
                 return -1;
