@@ -336,8 +336,9 @@ static void *grpcServerThread(void *arg) {
     threadStruct *targ = static_cast<threadStruct *>(arg);
     BackendStateServiceImpl *pGrpcService = targ->pGrpcService;
 
-    std::cout << "About to run GRPC server in its own thread" << std::endl;
+    std::cout << "About to run GRPC server in its own thread on port " << targ->grpcServicePort << std::endl;
     pGrpcService->runServer(targ->grpcServicePort, pGrpcService);
+    std::cout << "Should never print this message!!!" << std::endl;
 
     return (nullptr);
 }
@@ -711,7 +712,7 @@ int main(int argc, char **argv) {
 
         if (reportToCP) {
             // Start up grpc server listening thread
-            threadStruct *targ2 = (threadStruct *)malloc(sizeof(threadStruct));
+            threadStruct *targ2 = (threadStruct *)calloc(1, sizeof(threadStruct));
             if (targ2 == nullptr) {
                 fprintf(stderr, "out of mem\n");
                 return -1;
