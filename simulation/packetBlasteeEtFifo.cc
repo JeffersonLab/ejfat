@@ -327,7 +327,7 @@ static void *pidThread(void *arg) {
     int64_t totalT = 0, time;
     struct timespec t1, t2, firstT;
 
-    pGrpcService->setName("ERSAP_backend");
+    pGrpcService->setName("FOOfoo_backend");
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
