@@ -350,8 +350,8 @@ static void *pidThread(void *arg) {
         time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
         if (time >= 1000000) {
             fillPercent = (numEvents-inputListCount)*100/numEvents;
-            printf("Total cnt %d, GC in list cnt %d, %d%% filled\n",
-                   numEvents, inputListCount, fillPercent);
+            printf("Total cnt %d, GC in list cnt %d, %d%% filled, error %f\n",
+                   numEvents, inputListCount, fillPercent, pidError);
             pGrpcService->setState(numEvents, (int32_t)eventSize, fillPercent, pidError);
             t1 = t2;
         }
