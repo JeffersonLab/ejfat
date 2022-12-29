@@ -341,7 +341,8 @@ static void *pidThread(void *arg) {
         // Get the number of available events (# sitting in Grandcentral's input list)
         status = et_station_getinputcount_rt(id, ET_GRANDCENTRAL, &inputListCount);
 
-        pidError = pid(pidSetPoint, (float)inputListCount, deltaT, Kp, Ki, Kd);
+        fillPercent = (numEvents-inputListCount)*100/numEvents;
+        pidError = pid(pidSetPoint, (float)fillPercent, deltaT, Kp, Ki, Kd);
 
         // Read time
         clock_gettime(CLOCK_MONOTONIC, &t2);
@@ -349,7 +350,6 @@ static void *pidThread(void *arg) {
         // Microseconds
         time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
         if (time >= 1000000) {
-            fillPercent = (numEvents-inputListCount)*100/numEvents;
             printf("Total cnt %d, GC in list cnt %d, %d%% filled, error %f\n",
                    numEvents, inputListCount, fillPercent, pidError);
             pGrpcService->setState(numEvents, (int32_t)eventSize, fillPercent, pidError);
