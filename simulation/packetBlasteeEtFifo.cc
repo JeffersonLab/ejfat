@@ -57,6 +57,27 @@ using namespace ejfat;
 #define INPUT_LENGTH_MAX 256
 
 
+template<class X>
+X pid(          // Proportional, Integrative, Derivative Controller
+        const X& setPoint, // Desired Operational Set Point
+        const X& prcsVal,  // Measure Process Value
+        const X& delta_t,  // Time delta between determination of last control value
+        const X& Kp,       // Konstant for Proprtional Control
+        const X& Ki,       // Konstant for Integrative Control
+        const X& Kd        // Konstant for Derivative Control
+)
+{
+    static X previous_error = 0; // for Derivative
+    static X integral_acc = 0;   // For Integral (Accumulated Error)
+    X error = setPoint - prcsVal;
+    integral_acc += error * delta_t;
+    X derivative = (error - previous_error) / delta_t;
+    previous_error = error;
+    return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
+}
+
+
+
 /**
  * Print out help.
  * @param programName name to use for this program.
