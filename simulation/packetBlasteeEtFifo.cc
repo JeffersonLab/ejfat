@@ -311,10 +311,18 @@ static void *pidThread(void *arg) {
     threadStruct *targ = static_cast<threadStruct *>(arg);
     BackendStateServiceImpl *pGrpcService = targ->pGrpcService;
     et_sys_id id = targ->id;
-    int status, numEvents, inputListCount, pidError = 5, fillPercent;
+    int status, numEvents, inputListCount, fillPercent;
     size_t eventSize;
     status = et_system_getnumevents(id, &numEvents);
     status = et_system_geteventsize(id, &eventSize);
+
+    float pidError;
+    float pidSetPoint = 50.0; // Try to keep fifo 1/2 full
+    const float Kp = 0.5;
+    const float Ki = 0.0;
+    const float Kd = 0.00;
+    const float deltaT = 1.0; // 1 millisec
+
 
     int64_t totalT = 0, time;
     struct timespec t1, t2, firstT;
@@ -332,6 +340,8 @@ static void *pidThread(void *arg) {
 
         // Get the number of available events (# sitting in Grandcentral's input list)
         status = et_station_getinputcount_rt(id, ET_GRANDCENTRAL, &inputListCount);
+
+        pidError = pid(pidSetPoint, (float)inputListCount, deltaT, Kp, Ki, Kd);
 
         // Read time
         clock_gettime(CLOCK_MONOTONIC, &t2);
