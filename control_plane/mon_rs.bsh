@@ -1,12 +1,14 @@
 #!/bin/bash 
+# monitor for changes to the runsim.txt file
+# invocation:  mon_rs runsim.txt
 while true; do
    date=$(stat -c %y "$1")
    while sleep 1e-1; do 
       date2=$(stat -c %y "$1")
       if [[ $date2 != $date ]]; then 
-         sn-cli -p $REGIO_SELECT -c runsim.txt p4-config-apply 2> runsim.log
-         grep ERR runsim.log|wc -l
-         grep OK runsim.log|wc -l
+         sn-cli -p $REGIO_SELECT -c $1 p4-config-apply 2> $1.log
+         grep ERR $1.log|wc -l
+         grep OK $1.log|wc -l
          break; 
       fi
      # possibly exit [status] instead of break
