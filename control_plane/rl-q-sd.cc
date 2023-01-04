@@ -138,7 +138,9 @@ int main (int argc, char *argv[])
     std::mt19937 gen(rd()); 
     std::normal_distribution<float> d(0, 0.1); 
 
+    //Betting Odds
     vector<double> BO;   BO.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) BO[h] = 0;
+    //Num  Successes
     vector<uint32_t> NS; NS.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) NS[h] = 0;
 
     uint32_t trl=0;   // loop counter
