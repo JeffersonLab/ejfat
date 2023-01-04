@@ -74,6 +74,7 @@ set(EXEC_FILES
         emulation/pktzr_lbmd.cc
         control_plane/rl-q-sd.cc
         control_plane/pid.cc
+        control_plane/sched.cc
         )
 
 set(C_HEADER_FILES

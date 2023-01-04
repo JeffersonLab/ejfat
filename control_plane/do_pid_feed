@@ -1,0 +1,21 @@
+#!/bin/bash
+#set -x
+set -u
+# simulate feeding random pid values for <num_nodes>
+# do_pid_feed <num_nodes>
+max_node_num=$(($1 - 1))
+t=$(mktemp);
+echo "t = $t" #use this file (periodically overwritten) to adjust schedule
+RMX=32767
+while true; do
+    cp /dev/null $t
+    for j in $(seq 0 $max_node_num); do 
+	    x=$(bc <<< "scale=3; 0.5-$RANDOM/$RMX"); 
+	    echo -n $j >> $t; 
+	    echo -n " " >> $t; 
+	    echo $x >> $t; 
+    done; 
+    sleep 1 #0.01
+done
+#to=/tmp/tmp.ZpO2oUwykX; tg=$(mktemp);grep density: $to|head -10|sed 's/density: //'>$tg|gnuplot -p -e "set title 'density'; p '$tg' u 1 w l notitle, '$tg' u 2 w l notitle, '$tg' u 3 w l notitle, '$tg' u 4 w l notitle, '$tg' u 5 w l notitle, '$tg' u 6 w l notitle"
+#for n in {0..9}; do grep table_add /tmp/tmp.V2ybx8oWoW|grep "=> 0x$n"|wc -l;done
