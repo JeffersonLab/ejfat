@@ -1,6 +1,7 @@
-//      PID Controller for Control Plane - Volkswagon  Quality
+//      PID Controller Simulation - Volkswagon  Quality
 //
-// reads feedback from compute farm and adjusts scheduling density
+// reads feedback from compute farm and provides 
+// control signal to adjust scheduling density
 // 
 
 #include <unistd.h>
@@ -30,7 +31,7 @@ void   Usage(void)
         -d debug mode \n\
         -h help \n\n";
         cout<<usage_str;
-        cout<<"Required: -i -p\n";
+        cout<<"Required: (none)\n";
 }
 
 template<class X>
