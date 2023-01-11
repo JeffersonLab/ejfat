@@ -848,6 +848,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 if (sequence == 0) {
                     firstReadForBuf = true;
                     totalBytesRead = 0;
+                    putDataAt = dataBuf;
                 }
 
                 prevTick = packetTick;
@@ -1151,7 +1152,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
             while (true) {
 
-                // Another packet of data will exceed buffer space, so expand
+                // Another packet of data might exceed buffer space, so expand
                 if (remainingLen < 9000) {
                     // double buffer size here
                     bufLen *= 2;
@@ -1319,11 +1320,10 @@ static inline uint64_t bswap_64(uint64_t x) {
                     }
                 }
 
-                // TODO: What if we get a zero-length packet???
-
                 if (sequence == 0) {
                     firstReadForBuf = true;
                     totalBytesRead = 0;
+                    putDataAt = dataBuf;
                 }
 
                 prevTick = packetTick;
