@@ -54,7 +54,7 @@ using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
 
-using lbControlPlane::BackEnd;
+using lbControlPlane::BackEndReport;
 using lbControlPlane::ServerReply;
 using lbControlPlane::RegistrationRequest;
 using lbControlPlane::UnRegistrationRequest;
@@ -218,50 +218,17 @@ static void parseArgs(int argc, char **argv,
 }
 
 
-
 // structure for passing args to thread
 typedef struct threadStruct_t {
-    uint16_t grpcServicePort;
-    BackendStateServiceImpl *pGrpcService;
+    BackendReportServiceImpl *pGrpcService;
 } threadStruct;
-
-
-
-///** Class implementing logic and data behind the control plane / server's behavior. */
-//class BackendReportServiceImpl final : public BackendReport::Service {
-//
-//public:
-//
-//    Status SendState  (ServerContext* context, const CurrentState* state, ServerReply* reply);
-//    Status Register   (ServerContext* context, const RegistrationRequest* request, ServerReply* reply);
-//    Status UnRegister (ServerContext* context, const UnRegistrationRequest* request, ServerReply* reply);
-//
-//    std::shared_ptr<std::unordered_map<std::string, BackEnd>> getBackEnds();
-//
-//    static void runServer(uint16_t port, BackendReportServiceImpl *service);
-//
-//private:
-//
-//    // Another instance when java is soooo much easier, C++ has no thread-safe containers :(
-//    // Since the control plane will be accessing this map while potentially multiple threads are
-//    // writing to it SIMULTANEOUSLY, we'll need to protect its access.
-//    // Easiest to protect writing into it (only in the SendState, Register, and UnRegister methods
-//    // above) with a mutex. For the control plane reading it, we can return a copy when asked for
-//    // it in getBackEnds()
-//
-//    // Store data reported from backends to this server
-//    std::unordered_map<std::string, BackEnd> data;
-//    std::mutex map_mutex;
-//};
-
-
 
 
 // Thread to monitor all the info coming in from backends and update the control plane
 static void *controlThread(void *arg) {
 
     threadStruct *targ = static_cast<threadStruct *>(arg);
-    BackendStateServiceImpl *service = targ->pGrpcService;
+    BackendReportServiceImpl *service = targ->pGrpcService;
     int status, fillPercent;
 
     int64_t totalT = 0, time;
@@ -286,22 +253,6 @@ static void *controlThread(void *arg) {
 
     return (nullptr);
 }
-
-
-
-// Thread to listen to requests from the back end and respond
-static void *grpcServerThread(void *arg) {
-
-    threadStruct *targ = static_cast<threadStruct *>(arg);
-    BackendReportServiceImpl *pGrpcService = targ->pGrpcService;
-
-    std::cout << "About to run GRPC server in its own thread on port " << targ->grpcServicePort << std::endl;
-    pGrpcService->runServer(targ->grpcServicePort, pGrpcService);
-    std::cout << "Should never print this message!!!" << std::endl;
-
-    return (nullptr);
-}
-
 
 
 int main(int argc, char **argv) {
@@ -356,8 +307,8 @@ int main(int argc, char **argv) {
     uint16_t dataId;
     bool firstLoop = true;
 
-    BackendStateServiceImpl service;
-    BackendStateServiceImpl *pGrpcService = &service;
+    BackendReportServiceImpl service;
+    BackendReportServiceImpl *pGrpcService = &service;
 
     // Start thread to do run pid loop
     threadStruct *targ = (threadStruct *)calloc(1, sizeof(threadStruct));
@@ -366,7 +317,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    targ->grpcServicePort = 50051;
     targ->pGrpcService = pGrpcService;
 
     pthread_t thd1;
@@ -376,46 +326,13 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Start up grpc server listening thread
-    threadStruct *targ2 = (threadStruct *)calloc(1, sizeof(threadStruct));
-    if (targ2 == nullptr) {
-        fprintf(stderr, "out of mem\n");
-        return -1;
-    }
-
-    pthread_t thd2;
-    status = pthread_create(&thd2, NULL, grpcServerThread, (void *) targ);
-    if (status != 0) {
-        fprintf(stderr, "\n ******* error creating GRPC server thread ********\n\n");
-        return -1;
-    }
-
-
     while (true) {
-
-        int32_t err = client.GetState();
-        if (err != 0) {
-            std::cerr << "Error calling GetState()" << std::endl;
-        }
-        client.printBackendState();
-
-        // Delay 2 seconds between printouts
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::cout << "About to run GRPC server in its own thread on port " << targ->grpcServicePort << std::endl;
+        pGrpcService->runServer(50051, pGrpcService);
+        std::cout << "Should never print this message!!!" << std::endl;
     }
 
     return 0;
 }
-
-
-
-// Getters
-//std::string LoadBalancerControlClient::getIP()        const   {return ipAddr;}
-//uint16_t LoadBalancerControlClient::getPort()         const   {return port;}
-
-//std::string LoadBalancerControlClient::getName()      const   {return backendName;}
-//int32_t  LoadBalancerControlClient::getBufferCount()  const   {return bufferCount;}
-//int32_t  LoadBalancerControlClient::getBufferSize()   const   {return bufferSize;}
-//int32_t  LoadBalancerControlClient::getFillPercent()  const   {return fillPercent;}
-//int32_t  LoadBalancerControlClient::getPidError()     const   {return pidError;}
 
 
