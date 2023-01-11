@@ -108,6 +108,8 @@ set(EMU_EXEC_FILES
 set(GRPC_EXEC_FILES
         simulation/packetBlasteeEtFifo.cc
         simulation/control_plane.cc
+        simulation/packetBlasteeEtFifoClient.cc
+        simulation/control_plane_server.cc
         )
 
 set(ET_EXEC_FILES
