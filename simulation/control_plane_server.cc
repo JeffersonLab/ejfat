@@ -245,7 +245,7 @@ static void *controlThread(void *arg) {
 
         // This needs to be called each loop since it gets a COPY of the current data (for thread safety)
         auto pDataMap = service->getBackEnds();
-        for (const auto& n : pDataMap) {
+        for (const auto& n : *(pDataMap.get())) {
             n.second.printBackendState();
         }
     }
