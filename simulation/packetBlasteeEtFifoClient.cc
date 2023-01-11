@@ -400,7 +400,7 @@ static void *pidThread(void *arg) {
 
     et_sys_id etId = targ->etId;
     bool reportToCp = targ->report;
-    int status, numEvents, inputListCount, fillPercent;
+    int status, numEvents, inputListCount = 0, fillPercent = 0;
     size_t eventSize;
     status = et_system_getnumevents(etId, &numEvents);
     status = et_system_geteventsize(etId, &eventSize);
@@ -410,7 +410,7 @@ static void *pidThread(void *arg) {
     const float Kp = 0.5;
     const float Ki = 0.0;
     const float Kd = 0.00;
-    const float deltaT = 1000.0; // 1 millisec
+    const float deltaT = 1.0; // 1 millisec
 
     int loopMax   = 1000;
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
@@ -431,7 +431,7 @@ static void *pidThread(void *arg) {
     while (true) {
 
         // Delay 1 milliseconds between data points
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         // Get the number of available events (# sitting in Grandcentral's input list)
         status = et_station_getinputcount_rt(etId, ET_GRANDCENTRAL, &inputListCount);
