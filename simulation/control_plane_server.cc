@@ -54,7 +54,7 @@ using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
 
-using lbControlPlane::BackEndReport;
+using lbControlPlane::BackendReport;
 using lbControlPlane::ServerReply;
 using lbControlPlane::RegistrationRequest;
 using lbControlPlane::UnRegistrationRequest;
