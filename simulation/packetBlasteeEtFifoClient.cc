@@ -432,7 +432,6 @@ static void *pidThread(void *arg) {
 
         // Delay 1 milliseconds between data points
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        printf("    get GC input list size\n");
 
         // Get the number of available events (# sitting in Grandcentral's input list)
         status = et_station_getinputcount_rt(etId, ET_GRANDCENTRAL, &inputListCount);
@@ -442,7 +441,6 @@ static void *pidThread(void *arg) {
 
         // Every "loopMax" loops
         if (reportToCp && --loopCount <= 0) {
-            printf("    update client\n");
             // Update the changing variables
             client.update(fillPercent, pidError);
             // Send to server
@@ -461,14 +459,14 @@ static void *pidThread(void *arg) {
 
             loopCount = loopMax;
         }
-
-        // Unregister this client with the grpc server
-        err = client.UnRegister();
-        if (err == 1) {
-            printf("GRPC client %s communication error with server when unregistering, exit!\n", targ->myName.c_str());
-        }
-        exit(1);
     }
+
+    // Unregister this client with the grpc server
+    err = client.UnRegister();
+    if (err == 1) {
+        printf("GRPC client %s communication error with server when unregistering, exit!\n", targ->myName.c_str());
+    }
+    exit(1);
 
     return (nullptr);
 }
