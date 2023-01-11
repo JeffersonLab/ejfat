@@ -279,7 +279,7 @@ static void parseArgs(int argc, char **argv,
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                strcpy(filename, optarg);
+                strcpy(etFilename, optarg);
                 break;
 
             case 1:
@@ -783,8 +783,8 @@ int main(int argc, char **argv) {
     /// Control Plane  Stuff ///
     ////////////////////////////
     bool reportToCP = true && sendToEt;
-    BackendStateServiceImpl service;
-    BackendStateServiceImpl *pGrpcService = &service;
+    BackendReportServiceImpl service;
+    BackendReportServiceImpl *pGrpcService = &service;
 
 
     if (sendToEt) {
