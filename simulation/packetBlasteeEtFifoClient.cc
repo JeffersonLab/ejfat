@@ -410,7 +410,7 @@ static void *pidThread(void *arg) {
     const float Kp = 0.5;
     const float Ki = 0.0;
     const float Kd = 0.00;
-    const float deltaT = 1.0; // 1 millisec
+    const float deltaT = 1000.0; // 1 millisec
 
     int loopMax   = 1000;
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
@@ -431,7 +431,8 @@ static void *pidThread(void *arg) {
     while (true) {
 
         // Delay 1 milliseconds between data points
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        printf("    get GC input list size\n");
 
         // Get the number of available events (# sitting in Grandcentral's input list)
         status = et_station_getinputcount_rt(etId, ET_GRANDCENTRAL, &inputListCount);
@@ -441,10 +442,10 @@ static void *pidThread(void *arg) {
 
         // Every "loopMax" loops
         if (reportToCp && --loopCount <= 0) {
+            printf("    update client\n");
             // Update the changing variables
             client.update(fillPercent, pidError);
             // Send to server
-            //* @return 0 if successful, -2 if not registered w/ control plane, 1 if error in grpc communication
             err = client.SendState();
             if (err == -2) {
                 printf("GRPC client %s cannot send data since it is not registered with server!\n", targ->myName.c_str());
@@ -877,10 +878,10 @@ int main(int argc, char **argv) {
                                              tickPrescale, outOfOrderPackets);
         if (nBytes < 0) {
             if (nBytes == BUF_TOO_SMALL) {
-                fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
+                fprintf(stderr, "Receiving buffer is too small (%d), exit\n", bufSize);
             }
             else {
-                fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
+                fprintf(stderr, "Error in getCompletePacketizedBuffer (%ld), exit\n", nBytes);
             }
             et_close(id);
             return -1;
