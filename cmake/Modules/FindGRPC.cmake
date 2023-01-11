@@ -18,7 +18,7 @@ find_library(GRPC_LIBRARY
         PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
 find_library(GRPC_LIBRARY2
-        NAMES grpc_cb
+        NAMES grpc_cp
         PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
 find_library(GRPC++_LIBRARY
@@ -46,7 +46,7 @@ message(STATUS "GRPC_INCLUDE_DIRS = " ${GRPC_INCLUDE_DIRS})
 
 if(NOT TARGET libejfatGrpcLib)
     add_library(libejfatGrpcLib UNKNOWN IMPORTED)
-    add_library(libgrpc_cb UNKNOWN IMPORTED)
+    add_library(libgrpc_cp UNKNOWN IMPORTED)
     add_library(libgrpc++ UNKNOWN IMPORTED)
     add_library(libgrpc++_reflection UNKNOWN IMPORTED)
     add_library(libprotobuf UNKNOWN IMPORTED)
@@ -55,7 +55,7 @@ if(NOT TARGET libejfatGrpcLib)
             IMPORTED_LOCATION ${GRPC_LIBRARY}
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
-    set_target_properties(libgrpc_cb PROPERTIES
+    set_target_properties(libgrpc_cp PROPERTIES
             IMPORTED_LOCATION ${GRPC_LIBRARY2}
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
