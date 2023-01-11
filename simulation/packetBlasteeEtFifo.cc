@@ -725,7 +725,7 @@ int main(int argc, char **argv) {
         }
 
 
-        // Start thread to do rate printout
+        // Start thread to do run pid loop
         threadStruct *targ = (threadStruct *)malloc(sizeof(threadStruct));
         if (targ == nullptr) {
             fprintf(stderr, "out of mem\n");
