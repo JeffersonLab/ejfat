@@ -78,8 +78,7 @@ static void printHelp(char *programName) {
             "\nusage: %s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v]",
-            "        [-a <backend IP address>]",
-            "        [-p <backend port>]",
+            "        [-p <grpc server port>]",
             "        [-cores <comma-separated list of cores to run on>]");
 
     fprintf(stderr, "        This is a gRPC client sending requests for status to a reasembly backend's gRPC server.\n");
@@ -94,11 +93,10 @@ static void printHelp(char *programName) {
  * @param cores         array of core ids on which to run assembly thread.
  * @param port          filled with port of gRPC server ERSAP reassembly backend).
  * @param debug         filled with debug flag.
- * @param ipAddr        filled with IP address of gRPC server.
  */
 static void parseArgs(int argc, char **argv,
                       int *cores, uint16_t* port,
-                      bool *debug, char *ipAddr) {
+                      bool *debug) {
 
     int c, i_tmp;
     bool help = false;
@@ -128,16 +126,6 @@ static void parseArgs(int argc, char **argv,
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                break;
-
-            case 'a':
-                // LISTENING IP ADDRESS
-                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "listening IP address is bad\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(ipAddr, optarg);
                 break;
 
             case 1:
@@ -261,14 +249,11 @@ int main(int argc, char **argv) {
     int cores[10];
     bool debug = false;
 
-    char ipAddr[16];
-    memset(ipAddr, 0, 16);
-
     for (int i=0; i < 10; i++) {
         cores[i] = -1;
     }
 
-    parseArgs(argc, argv, cores, &port, &debug, ipAddr);
+    parseArgs(argc, argv, cores, &port, &debug);
 
 #ifdef __linux__
 
@@ -327,7 +312,7 @@ int main(int argc, char **argv) {
 
     while (true) {
         std::cout << "About to run GRPC server on port 50051" << std::endl;
-        pGrpcService->runServer(50051, pGrpcService);
+        pGrpcService->runServer(port, pGrpcService);
         std::cout << "Should never print this message!!!" << std::endl;
     }
 
