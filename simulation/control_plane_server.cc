@@ -244,8 +244,7 @@ static void *controlThread(void *arg) {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         // This needs to be called each loop since it gets a COPY of the current data (for thread safety)
-        auto pDataMap = service->getData();
-
+        auto pDataMap = service->getBackEnds();
         for (const auto& n : pDataMap) {
             n.second.printBackendState();
         }
