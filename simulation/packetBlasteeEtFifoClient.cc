@@ -193,7 +193,7 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
 
-                if (sp >= 0. && i_tmp <= 100.) {
+                if (sp >= 0. && sp <= 100.) {
                     *setPt = sp;
                 }
                 else {
