@@ -6,7 +6,7 @@
 
 set(PKG_CONFIG_USE_CMAKE_PREFIX_PATH ON)
 find_package(PkgConfig)
-pkg_check_modules(PC_LIBGRPC QUIET libejfatGrpcLib)
+pkg_check_modules(PC_LIBGRPC QUIET ejfat_grpc)
 
 set(GRPC_VERSION ${PC_LIBGRPC_VERSION})
 
@@ -14,11 +14,7 @@ find_path(GRPC_INCLUDE_DIR grpc/grpc.h
         PATHS $ENV{GRPC_INSTALL_DIR}/include)
 
 find_library(GRPC_LIBRARY
-        NAMES ejfatGrpcLib
-        PATHS $ENV{GRPC_INSTALL_DIR}/lib)
-
-find_library(GRPC_LIBRARY2
-        NAMES grpc_cp
+        NAMES ejfat_grpc
         PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
 find_library(GRPC++_LIBRARY
@@ -39,24 +35,19 @@ if(GRPC_LIBRARY)
     set(GRPC_FOUND ON)
 endif()
 
-set ( GRPC_LIBRARIES ${GRPC_LIBRARY} ${GRPC_LIBRARY2} ${GRPC++_LIBRARY} ${GRPC++_REFLECTION_LIBRARY} ${PROTOBUF_LIBRARY})
+set ( GRPC_LIBRARIES ${GRPC_LIBRARY} ${GRPC++_LIBRARY} ${GRPC++_REFLECTION_LIBRARY} ${PROTOBUF_LIBRARY})
 set ( GRPC_INCLUDE_DIRS  ${GRPC_INCLUDE_DIR} )
 message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
 message(STATUS "GRPC_INCLUDE_DIRS = " ${GRPC_INCLUDE_DIRS})
 
 if(NOT TARGET libejfatGrpcLib)
-    add_library(libejfatGrpcLib UNKNOWN IMPORTED)
-    add_library(libgrpc_cp UNKNOWN IMPORTED)
+    add_library(ejfat_grpc UNKNOWN IMPORTED)
     add_library(libgrpc++ UNKNOWN IMPORTED)
     add_library(libgrpc++_reflection UNKNOWN IMPORTED)
     add_library(libprotobuf UNKNOWN IMPORTED)
-
-    set_target_properties(libejfatGrpcLib PROPERTIES
+    
+    set_target_properties(ejfat_grpc PROPERTIES
             IMPORTED_LOCATION ${GRPC_LIBRARY}
-            INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
-
-    set_target_properties(libgrpc_cp PROPERTIES
-            IMPORTED_LOCATION ${GRPC_LIBRARY2}
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
 
     set_target_properties(libgrpc++ PROPERTIES
