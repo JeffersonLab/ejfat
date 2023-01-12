@@ -228,7 +228,7 @@ static void *controlThread(void *arg) {
 
     while (true) {
 
-        // Delay 1 seconds between data points
+        // Delay 2 seconds between data points
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         // This needs to be called each loop since it gets a COPY of the current data (for thread safety)
