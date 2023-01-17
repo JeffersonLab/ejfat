@@ -93,7 +93,7 @@ set(CPP_LIB_FILES
         )
 
 set(GRPC_EXEC_FILES
-        control/sched_new.cc
+        control_plane/sched_new.cc
         )
 
 
