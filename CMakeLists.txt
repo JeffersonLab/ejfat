@@ -91,6 +91,32 @@ set(CPP_HEADER_FILES
 set(CPP_LIB_FILES
         )
 
+set(GRPC_EXEC_FILES
+        control/sched_new.cc
+        )
+
+
+# GRPC build is optional and set it to OFF by default
+option(BUILD_GRPC "Build grpc-related code" OFF)
+
+if (BUILD_GRPC)
+    # Finding ET libs and includes involve looking at CODA install directory
+    if (DEFINED ENV{GRPC_INSTALL_DIR})
+        message(STATUS "GRPC_INSTALL_DIR = " $ENV{GRPC_INSTALL_DIR})
+    else()
+        message(FATAL_ERROR "Set the \"GRPC_INSTALL_DIR\" env var so that GRPC libs and includes can be found!")
+    endif()
+
+    find_package(GRPC)
+    if (NOT GRPC_FOUND)
+        message(STATUS "GRPC cannot be found, compile without it")
+    else()
+        message(STATUS "GRPC_INCLUDE_DIRS = " ${GRPC_INCLUDE_DIRS})
+        message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
+    endif()
+else()
+    message(STATUS "Compile without GRPC")
+endif()
 
 #include(FindPackageHandleStandardArgs)
 #
@@ -182,6 +208,24 @@ if (DEFINED MAKE_EXAMPLES)
             install(TARGETS ${execName} RUNTIME DESTINATION bin)
         endif()
     endforeach(fileName)
+
+
+
+    if (GRPC_FOUND)
+        message(STATUS "TRY GRPC CODE:")
+        foreach(fileName ${GRPC_EXEC_FILES})
+            get_filename_component(execName ${fileName} NAME_WE)
+            message(STATUS "Create grpc-related executable " ${execName})
+            add_executable(${execName} ${fileName})
+            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+            target_include_directories(${execName} PUBLIC ${GRPC_INCLUDE_DIRS})
+            target_link_libraries(${execName} pthread ${GRPC_LIBRARIES})
+
+            if (DEFINED INSTALL_DIR_DEFINED)
+                install(TARGETS ${execName} RUNTIME DESTINATION bin)
+            endif()
+        endforeach(fileName)
+    endif()
 endif()
 
 
