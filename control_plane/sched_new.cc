@@ -174,11 +174,11 @@ int main (int argc, char *argv[])
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         // This needs to be called each loop since it gets a COPY of the current data (for thread safety)
-        std::shared_ptr<std::unordered_map<std::string, BackEnd>> pDataMap = service.getBackEnds();
+        std::shared_ptr<std::unordered_map<int32_t, BackEnd>> pDataMap = service.getBackEnds();
         size_t num_bes = pDataMap->size(); //number of backends giving feed back this reporting interval
 
         // Loop over all backends
-        for (const std::pair<const std::string, BackEnd>& entry : *(pDataMap.get())) {
+        for (const std::pair<int32_t, BackEnd>& entry : *(pDataMap.get())) {
             BackEnd & backend = entry.second;
 
             // read node feedback: an array of health metrics
