@@ -5,8 +5,9 @@
 #   % make (install)
 #
 # To only build C libraries and executables, replace the 3rd cammand above with
-#   % cmake .. -DCMAKE_BUILD_TYPE=release -DC_ONLY=1
-#
+#   % cmake .. -DBUILD_GRPC=1
+# Be sure to set the home dir of GRPC w/
+#   setenv GRPC_INSTALL_DIR <...>
 # After doing this once can do the following to recompile
 #  % cd <top level evio dir>
 #  % cmake --build build (--target install)
@@ -85,8 +86,8 @@ set(C_LIB_FILES
         )
 
 set(CPP_HEADER_FILES
-        simulation/ejfat_packetizer.hpp
-        simulation/ejfat_assemble.hpp
+        simulation/ejfat_packetizer_ersap.hpp
+        simulation/ejfat_assemble_ersap.hpp
         )
 
 set(CPP_LIB_FILES

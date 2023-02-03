@@ -178,7 +178,7 @@ int main (int argc, char *argv[])
         size_t num_bes = pDataMap->size(); //number of backends giving feed back this reporting interval
 
         // Loop over all backends
-        for (std::pair<const std::string, BackEnd>& entry : *(pDataMap.get())) {
+        for (const std::pair<const std::string, BackEnd>& entry : *(pDataMap.get())) {
             BackEnd & backend = entry.second;
 
             // read node feedback: an array of health metrics
