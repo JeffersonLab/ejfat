@@ -179,7 +179,7 @@ int main (int argc, char *argv[])
 
         // Loop over all backends
         for (const std::pair<int32_t, BackEnd>& entry : *(pDataMap.get())) {
-            BackEnd & backend = entry.second;
+            const BackEnd & backend = entry.second;
 
             // read node feedback: an array of health metrics
             uint16_t n = 0;
