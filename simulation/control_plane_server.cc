@@ -9,8 +9,8 @@
 
 /**
  * @file
- * Simulate a load balancer's control plane by sending gRPC messages and
- * receiving responses sent by the packetBlasteeEtFifo.c program.
+ * Simulate a load balancer's control plane by receiving gRPC messages from an ERSAP (simulated) backend --
+ * packetBlasteeEtFifoClient.c and control_plane_tester.c programs.
  */
 
 #include <memory>
@@ -28,6 +28,9 @@
 #include <errno.h>
 #include <cinttypes>
 #include <getopt.h>
+#include <random>
+#include <map>
+#include <unordered_map>
 
 #ifdef __linux__
     #ifndef _GNU_SOURCE
@@ -42,24 +45,32 @@
 #include <grpcpp/grpcpp.h>
 
 #ifdef BAZEL_BUILD
-#include "examples/protos/lbControlPlane.grpc.pb.h"
+#include "examples/protos/lbControlPlaneEsnet.grpc.pb.h"
 #else
-#include "lbControlPlane.grpc.pb.h"
+#include "lbControlPlaneEsnet.grpc.pb.h"
 #endif
 
-#include "lb_control_plane.h"
+#include "lb_cplane_esnet.h"
 
 
-using grpc::Channel;
-using grpc::ClientContext;
-using grpc::Status;
+//using grpc::Channel;
+//using grpc::ClientContext;
+//using grpc::Status;
+//
+//using grpc::Server;
+//using grpc::ServerBuilder;
+//using grpc::ServerContext;
+//using grpc::Status;
+//
+//using lbControlPlaneEsnet::BackendReport;
+//using lbControlPlaneEsnet::ServerReply;
+//using lbControlPlaneEsnet::ErrorCode;
+//using lbControlPlaneEsnet::RegistrationRequest;
+//using lbControlPlaneEsnet::AuthenticationType;
+//using lbControlPlaneEsnet::UnRegistrationRequest;
+//using lbControlPlaneEsnet::CurrentState;
 
-using lbControlPlane::BackendReport;
-using lbControlPlane::ServerReply;
-using lbControlPlane::RegistrationRequest;
-using lbControlPlane::UnRegistrationRequest;
-using lbControlPlane::CurrentState;
-
+using namespace std;
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -75,13 +86,13 @@ using lbControlPlane::CurrentState;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v]",
             "        [-p <grpc server port>]",
             "        [-cores <comma-separated list of cores to run on>]");
 
-    fprintf(stderr, "        This is a gRPC client sending requests for status to a reasembly backend's gRPC server.\n");
+    fprintf(stderr, "        This is a gRPC server getting requests/data from an ERSAP reasembly backend's gRPC client.\n");
 }
 
 
@@ -218,9 +229,24 @@ static void *controlThread(void *arg) {
     threadStruct *targ = static_cast<threadStruct *>(arg);
     BackendReportServiceImpl *service = targ->pGrpcService;
     int status, fillPercent;
+    bool debug = true;
 
     int64_t totalT = 0, time;
     struct timespec t1, t2, firstT;
+
+    // random device class instance, source of 'true' randomness for initializing random seed
+    std::random_device rd;
+    // Mersenne twister PRNG, initialized with seed from previous random device instance
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dist(0.0, 1.0);
+
+    // control (PID error) values from node
+    std::map<uint16_t, float> control;
+    for(size_t n=0; n < 1024; n++) {control[n] = 0;}
+    // schedule density for node
+    std::map<uint16_t, float> sched;
+    for(size_t n=0; n < 1024; n++) {sched[n] = 0;}
+    uint64_t epoch = 0; //for now
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
@@ -232,9 +258,82 @@ static void *controlThread(void *arg) {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         // This needs to be called each loop since it gets a COPY of the current data (for thread safety)
-        auto pDataMap = service->getBackEnds();
-        for (const auto& n : *(pDataMap.get())) {
-            n.second.printBackendState();
+        std::shared_ptr<std::unordered_map<int32_t, BackEnd>> pDataMap = service.getBackEnds();
+        //number of backends giving feed back this reporting interval
+        size_t num_bes = pDataMap->size();
+
+        // Loop over all backends
+        for (const std::pair<int32_t, BackEnd> &entry: *(pDataMap.get())) {
+            const BackEnd &backend = entry.second;
+
+            // read node feedback: an array of health metrics
+            uint16_t n = 0;
+            control[n] = backend.getPidError();
+            sched[n] = sched[n] == 0 ? 1e-6 : sched[n]; //activate node if not active
+
+            if (debug) cout << "Received pid err " << n << ", " << control[n] << " from backend\n";
+            if (debug) cout << "sched[" << n << "] = " << sched[n] << " ...\n";
+
+            // update weighting for node from control signal
+            sched[n] *= (1.0f + control[n]);
+            if (debug) cout << "adjusting sched[" << n << "] = " << sched[n] << " ...\n";
+        }
+
+        if (debug) { cout << "read " << num_bes << " controls\n"; }
+        if (debug) {
+            cout << "control: ";
+            for (size_t n = 0; n < num_bes; n++) { cout << control[n] << '\t'; }
+            cout << '\n';
+        }
+        if (debug) { cout << "normalizing ...\n"; }
+
+        // normalize schedule density
+        float nrm_sum;
+        nrm_sum = 0;
+        for (size_t n = 0; n < num_bes; n++) {
+            nrm_sum += sched[n];
+        }
+        nrm_sum = nrm_sum == 0 ? 1 : nrm_sum;
+        if (debug) { cout << "nrm_sum = " << nrm_sum << '\n'; }
+        // ///////////
+
+        for (size_t n = 0; n < num_bes; n++) {
+            sched[n] /= nrm_sum;
+        }
+
+        if (debug) {
+            cout << "density: ";
+            for (size_t n = 0; n < num_bes; n++) { cout << sched[n] << '\t'; }
+            cout << '\n';
+        }
+
+        if (debug) { cout << "write revised tick schedule ...\n"; }
+        // write revised tick schedule
+        std::map<uint16_t, uint32_t> lb_calendar_table;
+
+        for (uint16_t t = 0; t < 512; t++) {
+            // random # between 0 & 1
+            float r = dist(gen);
+            if (debug) { cout << "sample = " << r << '\n'; }
+
+            // cumulative distribution from iterating over sched weights
+            float cd = 0.f;
+            uint16_t n;
+            n = 0;
+            for (size_t ni = 0; ni < num_bes; ni++) {
+                cd += sched[ni];
+                if (debug) cout << "testing = " << r << " against " << cd << " n = " << n << '\n';
+                if (r <= cd) break;
+                n++;
+            }
+
+            lb_calendar_table[t] = n;
+
+            if (debug) {
+                cout << "sampled index = " << n << '\n';
+                cout << "table_add load_balance_calendar_table do_assign_member 0x" << std::hex << epoch << " 0x"
+                     << std::hex << t << " => 0x" << std::hex << n << '\n';
+            }
         }
     }
 

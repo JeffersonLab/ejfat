@@ -9,9 +9,9 @@
 
 
 /**
- * @file Receive generated data sent by clasBlaster.c program.
- * This assumes there is an emulator or FPGA between this and the sending program.
- * Take the reassembled buffers and send to an ET system so ERSAP can grab them.
+ * @file
+ * Send simulated requests/data to the control_plane_server program.
+ * Behaves like an ERSAP backend.
  */
 
 #include <cstdlib>
@@ -44,7 +44,7 @@
 #endif
 
 // GRPC stuff
-#include "lb_control_plane.h"
+#include "lb_cplane_esnet.h"
 
 
 using namespace ejfat;
@@ -57,25 +57,25 @@ using namespace ejfat;
 
 #define INPUT_LENGTH_MAX 256
 
-
-template<class X>
-X pid(          // Proportional, Integrative, Derivative Controller
-        const X& setPoint, // Desired Operational Set Point
-        const X& prcsVal,  // Measure Process Value
-        const X& delta_t,  // Time delta between determination of last control value
-        const X& Kp,       // Konstant for Proprtional Control
-        const X& Ki,       // Konstant for Integrative Control
-        const X& Kd        // Konstant for Derivative Control
-)
-{
-    static X previous_error = 0; // for Derivative
-    static X integral_acc = 0;   // For Integral (Accumulated Error)
-    X error = setPoint - prcsVal;
-    integral_acc += error * delta_t;
-    X derivative = (error - previous_error) / delta_t;
-    previous_error = error;
-    return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
-}
+//
+//template<class X>
+//X pid(          // Proportional, Integrative, Derivative Controller
+//        const X& setPoint, // Desired Operational Set Point
+//        const X& prcsVal,  // Measure Process Value
+//        const X& delta_t,  // Time delta between determination of last control value
+//        const X& Kp,       // Konstant for Proprtional Control
+//        const X& Ki,       // Konstant for Integrative Control
+//        const X& Kd        // Konstant for Derivative Control
+//)
+//{
+//    static X previous_error = 0; // for Derivative
+//    static X integral_acc = 0;   // For Integral (Accumulated Error)
+//    X error = setPoint - prcsVal;
+//    integral_acc += error * delta_t;
+//    X derivative = (error - previous_error) / delta_t;
+//    previous_error = error;
+//    return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
+//}
 
 
 
@@ -85,23 +85,17 @@ X pid(          // Proportional, Integrative, Derivative Controller
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]",
-            "        [-p <data receiving port>]",
-            "        [-a <data receiving address>]",
             "        [-gaddr <grpc server IP address>]",
             "        [-gport <grpc server port>]",
             "        [-gname <grpc name>]",
             "        [-gid <grpc id#>]",
-            "        [-s <PID fifo set point>]",
-            "        [-b <internal buffer byte size>]",
-            "        [-r <UDP receive buffer byte size>]",
-            "        [-cores <comma-separated list of cores to run on>]",
-            "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
+            "        [-s <PID fifo set point>]");
 
-    fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with clasBlaster and send data to an ET system.\n");
+    fprintf(stderr, "        This is a gRPC program that simulates an ERSAP backend by sending messages to a simulated control plane.\n");
 }
 
 
@@ -126,11 +120,8 @@ static void printHelp(char *programName) {
  * @param grpcName      filled with name of this grpc client (backend) to send to control plane.
  */
 static void parseArgs(int argc, char **argv,
-                      int* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *cores, int *grpcId, float *setPt,
-                      uint16_t* port, uint16_t* grpcPort,
-                      bool *debug, bool *useIPv6,
-                      char *listenAddr, char *grpcAddr, char *etFilename, char *grpcName) {
+                      int *grpcId, float *setPt, uint16_t* grpcPort,
+                      bool *debug, char *grpcAddr, char *grpcName) {
 
     int c, i_tmp;
     bool help = false;
@@ -138,8 +129,7 @@ static void parseArgs(int argc, char **argv,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {             {"tpre",  1, NULL, 1},
-                          {"ip6",  0, NULL, 2},
+            {             {"ip6",  0, NULL, 2},
                           {"cores",  1, NULL, 3},
                           {"gaddr",  1, NULL, 4},
                           {"gport",  1, NULL, 5},
@@ -149,25 +139,12 @@ static void parseArgs(int argc, char **argv,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:s:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhs:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
 
         switch (c) {
-
-            case 'p':
-                // Data PORT
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
-                    *port = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
 
             case 5:
                 // grpc server PORT
@@ -203,32 +180,6 @@ static void parseArgs(int argc, char **argv,
                 }
                 break;
 
-            case 'b':
-                // BUFFER SIZE
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 10000) {
-                    *bufSize = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -b, internal buf size >= 10kB\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
-            case 'r':
-                // UDP RECEIVE BUFFER SIZE
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 220000) {
-                    *recvBufSize = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -r, UDP recv buf size >= 220kB\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
             case 7:
                 // grpc client id
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -240,16 +191,6 @@ static void parseArgs(int argc, char **argv,
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                break;
-
-            case 'a':
-                // LISTENING IP ADDRESS
-                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "listening IP address is bad\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(listenAddr, optarg);
                 break;
 
             case 4:
@@ -270,90 +211,6 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
                 strcpy(grpcName, optarg);
-                break;
-
-            case 'f':
-                // ET file
-                if (strlen(optarg) > 100 || strlen(optarg) < 1) {
-                    fprintf(stderr, "ET file name too long/short, %s\n\n", optarg);
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(etFilename, optarg);
-                break;
-
-            case 1:
-                // Tick prescale
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 1) {
-                    *tickPrescale = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -tpre, tpre >= 1\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
-            case 2:
-                // use IP version 6
-                fprintf(stderr, "SETTING TO IP version 6\n");
-                *useIPv6 = true;
-                break;
-
-            case 3:
-                // Cores to run on
-                if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-
-
-                {
-                    // split into ints
-                    std::string s = optarg;
-                    std::string delimiter = ",";
-
-                    size_t pos = 0;
-                    std::string token;
-                    char *endptr;
-                    int index = 0;
-                    bool oneMore = true;
-
-                    while ((pos = s.find(delimiter)) != std::string::npos) {
-                        //fprintf(stderr, "pos = %llu\n", pos);
-                        token = s.substr(0, pos);
-                        errno = 0;
-                        cores[index] = (int) strtol(token.c_str(), &endptr, 0);
-
-                        if ((token.c_str() - endptr) == 0) {
-                            //fprintf(stderr, "two commas next to eachother\n");
-                            oneMore = false;
-                            break;
-                        }
-                        index++;
-                        //std::cout << token << std::endl;
-                        s.erase(0, pos + delimiter.length());
-                        if (s.length() == 0) {
-                            //fprintf(stderr, "break on zero len string\n");
-                            oneMore = false;
-                            break;
-                        }
-                    }
-
-                    if (oneMore) {
-                        errno = 0;
-                        cores[index] = (int) strtol(s.c_str(), nullptr, 0);
-                        if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
-                            printHelp(argv[0]);
-                            exit(-1);
-                        }
-                        index++;
-                        //std::cout << s << std::endl;
-                    }
-                }
                 break;
 
             case 'v':
@@ -473,315 +330,31 @@ static void *pidThread(void *arg) {
 
 
 
-// Statistics
-static volatile uint64_t totalBytes=0, totalPackets=0;
-static volatile int cpu=-1;
-static std::atomic<uint32_t> droppedPackets;
-static std::atomic<uint32_t> droppedTicks;
-
-// Thread to send to print out rates
-static void *rateThread(void *arg) {
-
-    uint64_t packetCount, byteCount;
-    uint64_t prevTotalPackets, prevTotalBytes;
-    uint64_t currTotalPackets, currTotalBytes;
-    // Ignore first rate calculation as it's most likely a bad value
-    bool skipFirst = true;
-
-    double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
-    int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
-    struct timespec t1, t2, firstT;
-
-    // Get the current time
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    firstT = t1;
-
-    while (true) {
-
-        prevTotalBytes   = totalBytes;
-        prevTotalPackets = totalPackets;
-
-        // Delay 4 seconds between printouts
-        std::this_thread::sleep_for(std::chrono::seconds(4));
-
-        // Read time
-        clock_gettime(CLOCK_MONOTONIC, &t2);
-        time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
-        totalT = (1000000L * (t2.tv_sec - firstT.tv_sec)) + ((t2.tv_nsec - firstT.tv_nsec)/1000L);
-
-        currTotalBytes   = totalBytes;
-        currTotalPackets = totalPackets;
-
-        if (skipFirst) {
-            // Don't calculate rates until data is coming in
-            if (currTotalPackets > 0) {
-                skipFirst = false;
-            }
-            firstT = t1 = t2;
-            totalT = totalBytes = totalPackets = 0;
-            continue;
-        }
-
-        // Use for instantaneous rates
-        byteCount   = currTotalBytes   - prevTotalBytes;
-        packetCount = currTotalPackets - prevTotalPackets;
-
-        // Reset things if #s rolling over
-        if ( (byteCount < 0) || (totalT < 0) )  {
-            totalT = totalBytes = totalPackets = 0;
-            firstT = t1 = t2;
-            continue;
-        }
-
-        // Dropped stuff rates
-        droppedPkts = droppedPackets;
-        droppedPackets.store(0);
-        totalDroppedPkts += droppedPkts;
-
-        droppedTiks = droppedTicks;
-        droppedTicks.store(0);
-        totalDroppedTiks += droppedTiks;
-
-        pktRate = 1000000.0 * ((double) packetCount) / time;
-        pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        if (packetCount == 0 && droppedPkts == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = 0?/everything? ", pktRate, pktAvgRate);
-        }
-        else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 " ", pktRate, pktAvgRate, droppedPkts);
-        }
-        printf(": Dropped Ticks = %" PRId64 ", total = %" PRId64 "\n", droppedTiks, totalDroppedTiks);
-
-        // Actual Data rates (no header info)
-        dataRate = ((double) byteCount) / time;
-        dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped pkts %" PRId64 ", total %" PRId64 "\n",
-               dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
-
-        totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
-        totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
-        printf(" Total:    %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
-
-        t1 = t2;
-    }
-
-    return (nullptr);
-}
-
-
-
-
-
 int main(int argc, char **argv) {
 
     int udpSocket;
     ssize_t nBytes;
     // Set this to max expected data size
-    int bufSize = 1020000;
-    int recvBufSize = 0;
-    int tickPrescale = 1;
     int grpcId = 0;
     float grpcSetPoint = 0;
     uint16_t grpcPort = 50051;
-    uint16_t port = 7777;
     uint16_t serverPort = 8888;
-    int cores[10];
     bool debug = false;
-    bool useIPv6 = false;
-    bool sendToEt = false;
 
-    char listeningAddr[16];
-    memset(listeningAddr, 0, 16);
-    char filename[101];
-    memset(filename, 0, 101);
     char grpcAddr[16];
     memset(grpcAddr, 0, 16);
     char grpcName[31];
     memset(grpcName, 0, 31);
 
-    for (int i=0; i < 10; i++) {
-        cores[i] = -1;
-    }
 
     parseArgs(argc, argv,
-              &bufSize, &recvBufSize, &tickPrescale,
-              cores, &grpcId, &grpcSetPoint,
-              &port, &grpcPort,
-              &debug, &useIPv6,
-              listeningAddr, grpcAddr, filename, grpcName);
-
-    std::cerr << "Tick prescale = " << tickPrescale << "\n";
-
-#ifdef __linux__
-
-    if (cores[0] > -1) {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        if (debug) {
-            for (int i=0; i < 10; i++) {
-                     std::cerr << "core[" << i << "] = " << cores[i] << "\n";
-            }
-        }
-
-        for (int i=0; i < 10; i++) {
-            if (cores[i] >= 0) {
-                std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
-                CPU_SET(cores[i], &cpuset);
-            }
-            else {
-                break;
-            }
-        }
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
-        }
-    }
-
-#endif
+              &grpcId, &grpcSetPoint, &grpcPort,
+              &debug, grpcAddr,  grpcName);
 
 
-#ifdef __APPLE__
-    // By default, set recv buf size to 7.4 MB which is the highest
-    // it wants to go before reverting back to 787kB.
-    recvBufSize = 7400000;
-#else
-    // By default set recv buf size to 25 MB
-    recvBufSize = recvBufSize <= 0 ? 25000000 : recvBufSize;
-#endif
-
-    // Do we connect to a TCP server and send the data there?
-    if (strlen(filename) > 0) {
-        sendToEt = true;
-    }
-
-    if (useIPv6) {
-        struct sockaddr_in6 serverAddr6{};
-
-        // Create IPv6 UDP socket
-        if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv6 client socket");
-            return -1;
-        }
-
-        // Set & read back UDP receive buffer size
-        socklen_t size = sizeof(int);
-        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-        recvBufSize = 0;
-        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-        if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufSize);
-
-        // Configure settings in address struct
-        // Clear it out
-        memset(&serverAddr6, 0, sizeof(serverAddr6));
-        // it is an INET address
-        serverAddr6.sin6_family = AF_INET6;
-        // the port we are going to receiver from, in network byte order
-        serverAddr6.sin6_port = htons(port);
-        if (strlen(listeningAddr) > 0) {
-            inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
-        }
-        else {
-            serverAddr6.sin6_addr = in6addr_any;
-        }
-
-        // Bind socket with address struct
-        int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
-        if (err != 0) {
-            if (debug) fprintf(stderr, "bind socket error\n");
-            return -1;
-        }
-    }
-    else {
-        // Create UDP socket
-        if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv4 client socket");
-            return -1;
-        }
-
-        // Set & read back UDP receive buffer size
-        socklen_t size = sizeof(int);
-        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-        recvBufSize = 0;
-        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-        fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufSize);
-
-        // Configure settings in address struct
-        struct sockaddr_in serverAddr{};
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
-        if (strlen(listeningAddr) > 0) {
-            serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
-        }
-        else {
-            serverAddr.sin_addr.s_addr = INADDR_ANY;
-        }
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-        // Bind socket with address struct
-        int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-        if (err != 0) {
-            fprintf(stderr, "bind socket error\n");
-            return -1;
-        }
-    }
-
-    // Start thread to printout incoming data rate
-    pthread_t thd;
-    int status = pthread_create(&thd, NULL, rateThread, (void *) nullptr);
-    if (status != 0) {
-        fprintf(stderr, "\n ******* error creating RATE thread\n\n");
-        return -1;
-    }
-
-    // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
-    char *dataBuf = (char *) malloc(bufSize);
-    if (dataBuf == NULL) {
-        fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
-        return -1;
-    }
-
-    fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
-
-    /*
-     * Map to hold out-of-order packets.
-     * map key = sequence/offset from incoming packet
-     * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes),
-     * (is last packet), (is first packet).
-     */
-    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
-
-    // Track cpu by calling sched_getcpu roughly once per sec
-    int cpuLoops = 50000;
-    int loopCount = cpuLoops;
-
-    // Statistics
-    std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
-    droppedTicks.store(0);
-    droppedPackets.store(0);
-
-    /////////////////
-    /// ET  Stuff ///
-    /////////////////
-    et_sys_id id;
-    et_fifo_id fid;
-    et_fifo_entry *entry;
-    et_openconfig openconfig;
-    et_event **pe;
-
-    // This ET fifo is only 1 event wide
-    int idCount = 1;
-    int ids[idCount];
-    int debugLevel = ET_DEBUG_INFO;
-    char host[256];
     ////////////////////////////
     /// Control Plane  Stuff ///
     ////////////////////////////
-    bool reportToCP = true && sendToEt;
     BackendReportServiceImpl service;
     BackendReportServiceImpl *pGrpcService = &service;
 
