@@ -31,8 +31,8 @@
 
 // GRPC stuff
 #include <grpcpp/grpcpp.h>
-#include "lbControlPlane.grpc.pb.h"
-#include "lb_control_plane.h"
+#include "lbControlPlaneEsnet.grpc.pb.h"
+#include "lb_cplane_esnet.h"
 
 
 using namespace std;

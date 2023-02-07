@@ -95,6 +95,7 @@ set(CPP_LIB_FILES
 
 set(GRPC_EXEC_FILES
         control_plane/sched_new.cc
+        control_plane/control_plane_server.cc
         )
 
 
