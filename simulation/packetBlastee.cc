@@ -691,6 +691,11 @@ int main(int argc, char **argv) {
         nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
                                              debug, &tick, &dataId, stats,
                                              tickPrescale, outOfOrderPackets);
+// Test compilation
+//        nBytes = getCompletePacketizedBuffer_NoOutOfOrder(
+//                dataBuf, bufSize, udpSocket, debug,
+//                &tick, &dataId, tickPrescale,nullptr);
+
         if (nBytes < 0) {
             if (nBytes == BUF_TOO_SMALL) {
                 fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
