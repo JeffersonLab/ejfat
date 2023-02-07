@@ -44,7 +44,7 @@
 #endif
 
 // GRPC stuff
-#include "lb_control_plane.h"
+#include "lb_cplane_esnet.h"
 
 
 using namespace ejfat;
