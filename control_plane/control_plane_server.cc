@@ -314,7 +314,7 @@ static void *controlThread(void *arg) {
         for (uint16_t t = 0; t < 512; t++) {
             // random # between 0 & 1
             float r = dist(gen);
-            if (debug) { cout << "sample = " << r << '\n'; }
+//            if (debug) { cout << "sample = " << r << '\n'; }
 
             // cumulative distribution from iterating over sched weights
             float cd = 0.f;
@@ -322,7 +322,7 @@ static void *controlThread(void *arg) {
             n = 0;
             for (size_t ni = 0; ni < num_bes; ni++) {
                 cd += sched[ni];
-                if (debug) cout << "testing = " << r << " against " << cd << " n = " << n << '\n';
+//                if (debug) cout << "testing = " << r << " against " << cd << " n = " << n << '\n';
                 if (r <= cd) break;
                 n++;
             }
@@ -330,9 +330,9 @@ static void *controlThread(void *arg) {
             lb_calendar_table[t] = n;
 
             if (debug) {
-                cout << "sampled index = " << n << '\n';
-                cout << "table_add load_balance_calendar_table do_assign_member 0x" << std::hex << epoch << " 0x"
-                     << std::hex << t << " => 0x" << std::hex << n << '\n';
+//                cout << "sampled index = " << n << '\n';
+//                cout << "table_add load_balance_calendar_table do_assign_member 0x" << std::hex << epoch << " 0x"
+//                     << std::hex << t << " => 0x" << std::hex << n << '\n';
             }
         }
     }
