@@ -29,6 +29,7 @@
 #include <string>
 #include <stdexcept>
 #include <random>
+#include <getopt.h>
 
 
 #ifdef __linux__
