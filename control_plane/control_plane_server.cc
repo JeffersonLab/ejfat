@@ -344,7 +344,7 @@ static void *controlThread(void *arg) {
 int main(int argc, char **argv) {
 
     ssize_t nBytes;
-    uint16_t port = 50051;
+    uint16_t port = 7654;
     int cores[10];
     bool debug = false;
 
