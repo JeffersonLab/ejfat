@@ -66,8 +66,6 @@ X pid(          // Proportional, Integrative, Derivative Controller
 }
 
 
-using namespace ejfat;
-
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
