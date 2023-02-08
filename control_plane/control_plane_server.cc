@@ -263,7 +263,7 @@ static void *controlThread(void *arg) {
         size_t num_bes = pDataMap->size();
 
         // Loop over all backends
-        for (const std::pair<int32_t, BackEnd> &entry: *(pDataMap.get())) {
+        for (const auto &entry: *(pDataMap.get())) {
             const BackEnd &backend = entry.second;
 
             // read node feedback: an array of health metrics
