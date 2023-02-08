@@ -30,8 +30,6 @@
 #include <stdexcept>
 #include <random>
 
-#include "ejfat_assemble_ersap.hpp"
-#include "ejfat_network.hpp"
 
 #ifdef __linux__
 #ifndef _GNU_SOURCE
