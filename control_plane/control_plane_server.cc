@@ -410,7 +410,7 @@ int main(int argc, char **argv) {
     }
 
     while (true) {
-        std::cout << "About to run GRPC server on port 50051" << std::endl;
+        std::cout << "About to run GRPC server on port " << port << std::endl;
         pGrpcService->runServer(port, pGrpcService);
         std::cout << "Should never print this message!!!" << std::endl;
     }
