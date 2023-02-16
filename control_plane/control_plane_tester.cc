@@ -280,7 +280,7 @@ int main(int argc, char **argv) {
     int loopMax   = 1000;
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
 
-    LbControlPlaneClient client(cpAddr, cpPort, clientName, clientId, eventSize, numEvents, setPoint);
+    LbControlPlaneClient client(cpAddr, cpPort, clientName, eventSize, numEvents, setPoint);
 
     // Register this client with the grpc server
     int32_t err = client.Register();
@@ -325,7 +325,7 @@ int main(int argc, char **argv) {
     }
 
     // Unregister this client with the grpc server
-    err = client.UnRegister();
+    err = client.Deregister();
     if (err == 1) {
         printf("GRPC client %s communication error with server when unregistering, exit!\n", clientName);
     }
