@@ -31,13 +31,12 @@
 
 // GRPC stuff
 #include <grpcpp/grpcpp.h>
-#include "lbControlPlaneEsnet.grpc.pb.h"
-#include "lb_cplane_esnet.h"
+#include "loadbalancer.grpc.pb.h"
+#include "lb_cplane.h"
 
 
 using namespace std;
 
-unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 
 void   Usage(void)
 {
