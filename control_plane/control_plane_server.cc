@@ -266,7 +266,9 @@ static void *controlThread(void *arg) {
 
             // read node feedback: an array of health metrics
             control[n] = backend.getPidError();
-            float oldSched = sched[n] = sched[n] == 0 ? 1./num_bes : sched[n]; //activate node if not active
+            //float oldSched = sched[n] = sched[n] == 0 ? 1e-6 : sched[n]; //activate node if not active
+            //float oldSched = sched[n] = sched[n] == 0 ? 1./num_bes : sched[n]; //activate node if not active
+            float oldSched = sched[n] = sched[n] == 0 ? .1 : sched[n]; //activate node if not active
             // update weighting for node from control signal
             sched[n] *= (1.0f + control[n]);
 
