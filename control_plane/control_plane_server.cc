@@ -53,6 +53,7 @@
 #include "lb_cplane.h"
 
 using namespace std;
+using namespace std::chrono;
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -239,6 +240,9 @@ static void *controlThread(void *arg) {
         // Delay 2 seconds between data points
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
+        // Record local time so we can see when backend data was last updated in comparison
+        int64_t now = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+
         // This needs to be called each loop since it gets a COPY of the current data (for thread safety)
         std::shared_ptr<std::unordered_map<std::string, BackEnd>> pDataMap = service->getBackEnds();
         //number of backends giving feed back this reporting interval
@@ -247,27 +251,34 @@ static void *controlThread(void *arg) {
         // Loop over all backends
         for (const auto &entry: *(pDataMap.get())) {
             const BackEnd &backend = entry.second;
+            bool print = true;
+
+            // When was the last LOCAL time this was updated? In millisec since epoch.
+            int64_t msec = backend.getLocalTime();
+
+            int64_t timeDiff = std::abs(now - msec);
+            // If it's been over 2.2 seconds since new data came in, don't keep printing old datad
+            if (timeDiff > 2200) {
+                print = false;
+            }
 
             // read node feedback: an array of health metrics
             uint16_t n = 0;
             control[n] = backend.getPidError();
-            sched[n] = sched[n] == 0 ? 1e-6 : sched[n]; //activate node if not active
-
-            if (debug) cout << "Received pid err " << n << ", " << control[n] << " from backend\n";
-            if (debug) cout << "sched[" << n << "] = " << sched[n] << " ...\n";
-
+            float oldSched = sched[n] = sched[n] == 0 ? 1e-6 : sched[n]; //activate node if not active
             // update weighting for node from control signal
             sched[n] *= (1.0f + control[n]);
-            if (debug) cout << "adjusting sched[" << n << "] = " << sched[n] << " ...\n";
+
+            if (debug && print) cout << "piderr " << n << ", " << control[n] << ", sched[" << n << "] = " << oldSched << ", --> " << sched[n] << " ...\n";
         }
 
-        if (debug) { cout << "read " << num_bes << " controls\n"; }
-        if (debug) {
-            cout << "control: ";
-            for (size_t n = 0; n < num_bes; n++) { cout << control[n] << '\t'; }
-            cout << '\n';
-        }
-        if (debug) { cout << "normalizing ...\n"; }
+//        if (debug) { cout << "read " << num_bes << " controls\n"; }
+//        if (debug) {
+//            cout << "control: ";
+//            for (size_t n = 0; n < num_bes; n++) { cout << control[n] << '\t'; }
+//            cout << '\n';
+//        }
+//        if (debug) { cout << "normalizing ...\n"; }
 
         // normalize schedule density
         float nrm_sum;
@@ -276,7 +287,7 @@ static void *controlThread(void *arg) {
             nrm_sum += sched[n];
         }
         nrm_sum = nrm_sum == 0 ? 1 : nrm_sum;
-        if (debug) { cout << "nrm_sum = " << nrm_sum << '\n'; }
+//        if (debug) { cout << "nrm_sum = " << nrm_sum << '\n'; }
         // ///////////
 
         for (size_t n = 0; n < num_bes; n++) {
@@ -289,7 +300,7 @@ static void *controlThread(void *arg) {
             cout << '\n';
         }
 
-        if (debug) { cout << "write revised tick schedule ...\n"; }
+//        if (debug) { cout << "write revised tick schedule ...\n"; }
         // write revised tick schedule
         std::map<uint16_t, uint32_t> lb_calendar_table;
 
