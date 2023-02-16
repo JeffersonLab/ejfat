@@ -292,7 +292,7 @@ static void *controlThread(void *arg) {
             // sum for normalizing schedule density
             nrm_sum += sched[key];
 
-            if (debug) cout << n << ": piderr " << ", " << control[key] << ", sched den " << oldSched << ", --> " << sched[key] << " ...\n";
+            if (debug) cout << key << ": piderr " << ", " << control[key] << ", sched den " << oldSched << ", --> " << sched[key] << " ...\n";
             n++;
         }
 
