@@ -267,7 +267,7 @@ static void *controlThread(void *arg) {
         float nrm_sum = 0;
 
         for (const auto &entry: *(pDataMap.get())) {
-            const BackEnd &backend = entry.second;
+            BackEnd &backend = entry.second;
             std::string key = backend.getSessionToken();
 
             // When was the last LOCAL time this was updated? In millisec since epoch.
