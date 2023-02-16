@@ -249,6 +249,8 @@ static void *controlThread(void *arg) {
         size_t num_bes = pDataMap->size();
 
         // Loop over all backends
+        uint16_t n = 0;
+
         for (const auto &entry: *(pDataMap.get())) {
             const BackEnd &backend = entry.second;
             bool print = true;
@@ -263,13 +265,13 @@ static void *controlThread(void *arg) {
             }
 
             // read node feedback: an array of health metrics
-            uint16_t n = 0;
             control[n] = backend.getPidError();
             float oldSched = sched[n] = sched[n] == 0 ? 1e-6 : sched[n]; //activate node if not active
             // update weighting for node from control signal
             sched[n] *= (1.0f + control[n]);
 
             if (debug && print) cout << "piderr " << n << ", " << control[n] << ", sched[" << n << "] = " << oldSched << ", --> " << sched[n] << " ...\n";
+            n++;
         }
 
 //        if (debug) { cout << "read " << num_bes << " controls\n"; }
