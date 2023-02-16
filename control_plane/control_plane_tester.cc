@@ -284,10 +284,7 @@ int main(int argc, char **argv) {
 
     // Register this client with the grpc server
     int32_t err = client.Register();
-    if (err == -1) {
-        printf("GRPC client %s is already registered!\n", clientName);
-    }
-    else if (err == 1) {
+    if (err == 1) {
         printf("GRPC client %s communication error with server when registering, exit!\n", clientName);
         exit(1);
     }
@@ -306,14 +303,11 @@ int main(int argc, char **argv) {
         // Every "loopMax" loops
         if (--loopCount <= 0) {
             // Update the changing variables
+            printf("GRPC client %s send fill%% = %f, pid error = %f\n", clientName, fillPercent, pidError);
             client.update(fillPercent, pidError);
             // Send to server
             err = client.SendState();
-            if (err == -2) {
-                printf("GRPC client %s cannot send data since it is not registered with server!\n", clientName);
-                break;
-            }
-            else if (err == 1) {
+            if (err == 1) {
                 printf("GRPC client %s communication error with server during sending of data!\n", clientName);
                 break;
             }
