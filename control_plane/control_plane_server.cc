@@ -268,7 +268,7 @@ static void *controlThread(void *arg) {
 
         for (auto &entry: *(pDataMap.get())) {
             BackEnd &backend = entry.second;
-            std::string key = backend.getSessionToken();
+            std::string keyy = backend.getSessionToken();
 
             // When was the last LOCAL time this was updated? In millisec since epoch.
             int64_t msec = backend.getLocalTime();
@@ -284,15 +284,15 @@ static void *controlThread(void *arg) {
             backend.setIsActive(true);
 
             // read node feedback: an array of health metrics
-            control[key] = backend.getPidError();
+            control[keyy] = backend.getPidError();
             // if node not previously active, schedule it's fair share to start with (queues are probably empty)
-            float oldSched = sched[key] = sched[key] == 0 ? 1./num_bes : sched[key];
+            float oldSched = sched[keyy] = sched[keyy] == 0 ? 1./num_bes : sched[keyy];
             // update weighting for node from control signal
-            sched[key] *= (1.0f + control[key]);
+            sched[keyy] *= (1.0f + control[keyy]);
             // sum for normalizing schedule density
-            nrm_sum += sched[key];
+            nrm_sum += sched[keyy];
 
-            if (debug) cout << key << ": piderr " << ", " << control[key] << ", sched den " << oldSched << ", --> " << sched[key] << " ...\n";
+            if (debug) cout << keyy << ": piderr " << ", " << control[keyy] << ", sched den " << oldSched << ", --> " << sched[keyy] << " ...\n";
             n++;
         }
 
