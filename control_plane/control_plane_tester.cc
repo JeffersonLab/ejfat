@@ -303,10 +303,12 @@ int main(int argc, char **argv) {
         // Every "loopMax" loops
         if (--loopCount <= 0) {
             // Update the changing variables
-            printf("GRPC client %s send fill%% = %f, pid error = %f\n", clientName, fillPercent, pidError);
+            printf("GRPC client %s: update internals w/ send fill%% = %f, pid error = %f\n", clientName, fillPercent, pidError);
             client.update(fillPercent, pidError);
             // Send to server
+            printf("GRPC client %s: call SendState()\n", clientName);
             err = client.SendState();
+            printf("GRPC client %s: past SendState()\n", clientName);
             if (err == 1) {
                 printf("GRPC client %s communication error with server during sending of data!\n", clientName);
                 break;
