@@ -223,17 +223,20 @@ static void *controlThread(void *arg) {
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dist(0.0, 1.0);
 
-    // control (PID error) values from node
-    std::map<uint16_t, float> control;
-    for(size_t n=0; n < 1024; n++) {control[n] = 0;}
-    // schedule density for node
-    std::map<uint16_t, float> sched;
-    for(size_t n=0; n < 1024; n++) {sched[n] = 0;}
+    // Control (PID error) values from node. Key is session token
+    std::map<std::string, float> control;
+    // Schedule density for node> Key is session token
+    std::map<std::string, float> sched;
     uint64_t epoch = 0; //for now
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
     firstT = t1;
+
+
+
+
+
 
     while (true) {
 
@@ -243,66 +246,71 @@ static void *controlThread(void *arg) {
         // Record local time so we can see when backend data was last updated in comparison
         int64_t now = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 
-        // This needs to be called each loop since it gets a COPY of the current data (for thread safety)
+        // This needs to be called each loop since it gets a COPY of the current data (for thread safety).
+        // We need to guarantee that the map is not changed while we iterate and between iterations.
+        // Again, since we use a copy and since we don't change the map in this routine, we're OK.
         std::shared_ptr<std::unordered_map<std::string, BackEnd>> pDataMap = service->getBackEnds();
-        //number of backends giving feed back this reporting interval
+
+        // Number of backends giving feed back this reporting interval (and possibly only previous intervals
+        // but have not been declared dead yet).
         size_t num_bes = pDataMap->size();
+
+        // The tricky part is that N may be registered, but < N may have sent their data if at least
+        // one registration was recent. So account for this or the weight of that new, unreported,
+        // channel will be tiny and it won't be able to crawl out of that hole.
+
+        // Another problem is that the Mth entry may no longer correspond with the proper backend
+        // if one of the existing BEs has disappeared.
 
         // Loop over all backends
         uint16_t n = 0;
+        float nrm_sum = 0;
 
         for (const auto &entry: *(pDataMap.get())) {
             const BackEnd &backend = entry.second;
-            bool print = true;
+            std::string key = backend.getSessionToken();
 
             // When was the last LOCAL time this was updated? In millisec since epoch.
             int64_t msec = backend.getLocalTime();
-
             int64_t timeDiff = std::abs(now - msec);
-            // If it's been over 2.2 seconds since new data came in, don't keep printing out-dated
-            if (timeDiff > 2200) {
-                print = false;
+
+            // If it's been over 2.2 seconds (reporting period = 2 sec) since new data came in or
+            // if data has not come in yet, don't include it in calculations
+            if (timeDiff > 2200 || msec < 1) {
+                // Even tho there is an entry, no current activity
+                backend.setIsActive(false);
+                break;
             }
+            backend.setIsActive(true);
 
             // read node feedback: an array of health metrics
-            control[n] = backend.getPidError();
-            //float oldSched = sched[n] = sched[n] == 0 ? 1e-6 : sched[n]; //activate node if not active
-            //float oldSched = sched[n] = sched[n] == 0 ? 1./num_bes : sched[n]; //activate node if not active
-            float oldSched = sched[n] = sched[n] == 0 ? .3 : sched[n]; //activate node if not active
+            control[key] = backend.getPidError();
+            // if node not previously active, schedule it's fair share to start with (queues are probably empty)
+            float oldSched = sched[key] = sched[key] == 0 ? 1./num_bes : sched[key];
             // update weighting for node from control signal
-            sched[n] *= (1.0f + control[n]);
+            sched[key] *= (1.0f + control[key]);
+            // sum for normalizing schedule density
+            nrm_sum += sched[key];
 
-            if (debug && print) cout << n << ": piderr " << ", " << control[n] << ", sched[" << n << "] = " << oldSched << ", --> " << sched[n] << " ...\n";
+            if (debug) cout << n << ": piderr " << ", " << control[key] << ", sched den " << oldSched << ", --> " << sched[key] << " ...\n";
             n++;
         }
 
-//        if (debug) { cout << "read " << num_bes << " controls\n"; }
-//        if (debug) {
-//            cout << "control: ";
-//            for (size_t n = 0; n < num_bes; n++) { cout << control[n] << '\t'; }
-//            cout << '\n';
-//        }
-//        if (debug) { cout << "normalizing ...\n"; }
-
         // normalize schedule density
-        float nrm_sum;
-        nrm_sum = 0;
-        for (size_t n = 0; n < num_bes; n++) {
-            nrm_sum += sched[n];
-        }
         nrm_sum = nrm_sum == 0 ? 1 : nrm_sum;
 //        if (debug) { cout << "nrm_sum = " << nrm_sum << '\n'; }
-        // ///////////
 
-        for (size_t n = 0; n < num_bes; n++) {
-            sched[n] /= nrm_sum;
+        if (debug) cout << "density: ";
+        for (const auto &entry: *(pDataMap.get())) {
+            const BackEnd &backend = entry.second;
+            if (!backend.getIsActive()) {
+                continue;
+            }
+            std::string key = backend.getSessionToken();
+            sched[key] /= nrm_sum;
+            if (debug) cout << sched[key] << '\t';
         }
-
-        if (debug) {
-            cout << "density: ";
-            for (size_t n = 0; n < num_bes; n++) { cout << sched[n] << '\t'; }
-            cout << '\n';
-        }
+        if (debug) cout << '\n';
 
 //        if (debug) { cout << "write revised tick schedule ...\n"; }
         // write revised tick schedule
@@ -315,14 +323,24 @@ static void *controlThread(void *arg) {
 
             // cumulative distribution from iterating over sched weights
             float cd = 0.f;
-            uint16_t n;
             n = 0;
-            for (size_t ni = 0; ni < num_bes; ni++) {
-                cd += sched[ni];
-//                if (debug) cout << "testing = " << r << " against " << cd << " n = " << n << '\n';
+
+            for (const auto &entry: *(pDataMap.get())) {
+                const BackEnd &backend = entry.second;
+                if (!backend.getIsActive()) {
+                    continue;
+                }
+                cd += sched[backend.getSessionToken()];
                 if (r <= cd) break;
                 n++;
             }
+
+//
+//            for (size_t ni = 0; ni < num_bes; ni++) {
+//                cd += sched[ni];
+//                if (r <= cd) break;
+//                n++;
+//            }
 
             lb_calendar_table[t] = n;
 
