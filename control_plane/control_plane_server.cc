@@ -259,14 +259,14 @@ static void *controlThread(void *arg) {
             int64_t msec = backend.getLocalTime();
 
             int64_t timeDiff = std::abs(now - msec);
-            // If it's been over 2.2 seconds since new data came in, don't keep printing old datad
+            // If it's been over 2.2 seconds since new data came in, don't keep printing out-dated
             if (timeDiff > 2200) {
                 print = false;
             }
 
             // read node feedback: an array of health metrics
             control[n] = backend.getPidError();
-            float oldSched = sched[n] = sched[n] == 0 ? 1e-6 : sched[n]; //activate node if not active
+            float oldSched = sched[n] = sched[n] == 0 ? 1./num_bes : sched[n]; //activate node if not active
             // update weighting for node from control signal
             sched[n] *= (1.0f + control[n]);
 
