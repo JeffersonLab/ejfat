@@ -266,7 +266,7 @@ static void *controlThread(void *arg) {
         uint16_t n = 0;
         float nrm_sum = 0;
 
-        for (const auto &entry: *(pDataMap.get())) {
+        for (auto &entry: *(pDataMap.get())) {
             BackEnd &backend = entry.second;
             std::string key = backend.getSessionToken();
 
