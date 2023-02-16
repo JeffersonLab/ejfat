@@ -270,7 +270,7 @@ static void *controlThread(void *arg) {
             // update weighting for node from control signal
             sched[n] *= (1.0f + control[n]);
 
-            if (debug && print) cout << "piderr " << n << ", " << control[n] << ", sched[" << n << "] = " << oldSched << ", --> " << sched[n] << " ...\n";
+            if (debug && print) cout << n << ": piderr " << ", " << control[n] << ", sched[" << n << "] = " << oldSched << ", --> " << sched[n] << " ...\n";
             n++;
         }
 
