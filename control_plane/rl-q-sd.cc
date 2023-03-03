@@ -220,7 +220,6 @@ if(passedD) cout << "BO = "; print(BO);
             float x = dg(gen); 
             float x1 = dg(gen);         
             //R[action] *= SD[action]+(R[action]>0?1:-1)*x/(x+x1)/2.0; //retard response with Beta noise
-if(passedD) cout << "jitter = " << x << "\n"; 
             //R[action] *= SD[action]+(R[action]>0?1:-1)*x; 	         //retard response with Gamma noise
 //if(passedD) cout << "old_SD/SD[action] = " << old_SD/SD[action] << "\n"; 
             //R[action] -= x; 	         //retard response with Gamma noise
@@ -231,7 +230,9 @@ if(passedD) cout << "SDrto = "; print(SDrto);
         for(size_t i=0;i<num_hsts;i++)//effect of schedule change
             {
             R[i] *= 0.875*(R[i]<=0 ? SDrto[i] : 1/SDrto[i]); 
-            R[i] += d(gen)/4; //add some response jitter	         
+            float x = d(gen)/2; 
+if(passedD) cout << "jitter = " << x << "\n"; 
+            R[i] += x; //add some response jitter	         
             R[i] = R[i] > 0.5 ? 0.5 : R[i];
             R[i] = R[i] < -0.5 ? -0.5 : R[i];
             }
