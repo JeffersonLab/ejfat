@@ -25,6 +25,9 @@
 #include <random>
 #include <functional>
 #include <array>
+#include <algorithm>    // std::transform
+#include <vector>       // std::vector
+#include <math.h>       /* fabs */
 
 using namespace std;
 
@@ -121,7 +124,7 @@ int main (int argc, char *argv[])
     if(!(passedN && passedF)) { Usage(); exit(1); }
 
     // set up
-    double alpha = 0.3; // learning rate
+    double alpha = 0.5; // learning rate
     //double beta_0 = 0.5; // bias to for hosts (?)
     double beta_1 = 1; //  temperature
 
@@ -137,6 +140,7 @@ int main (int argc, char *argv[])
     // Mersenne twister PRNG, initialized with seed from previous random device instance
     std::mt19937 gen(rd()); 
     std::normal_distribution<float> d(0, 0.1); 
+    std::gamma_distribution<float> dg(10.0,0.01);
 
     //Betting Odds
     vector<double> BO;   BO.resize(num_hsts); for(uint16_t h=0;h<num_hsts;h++) BO[h] = 0;
@@ -151,7 +155,13 @@ int main (int argc, char *argv[])
     ///////// set initial Reward
     {
         size_t s = R.size();
-        for(size_t i=0;i<s;i++) R[i] += d(gen);
+        for(size_t i=0;i<s;i++) 
+        {
+            R[i] += 3*d(gen);
+            R[i] = R[i] > 0.5 ? 0.5 : R[i];
+            R[i] = R[i] < -0.5 ? -0.5 : R[i];
+            //Q[i] = R[i]; //somethng other than zero
+        }
     }      
 
     do {
@@ -177,24 +187,55 @@ if(passedD) cout << "read " << x << " from feedback file\n";
         //theta <- rep(NA, times = N_trials)
 //        d.param(Q.begin(),Q.end()); //update action selection probability weightings from Q
 
-if(passedD) cout << "SD = "; print(SD);            
-if(passedD) cout << "Q = "; print(Q);            
+//if(passedD) cout << "old_SD = "; print(SD);            
+if(passedD) cout << "old_Q = "; print(Q);            
 if(passedD) cout << "R = "; print(R);            
-        uint16_t action = smpl_wghtd(SD);  //d();  //which.max(R[t,]) #
+        //uint16_t action = smpl_wghtd(SD);  //d();  //which.max(R[t,]) #
+        vector<double> q0; q0.resize(Q.size()); 
+        //std::transform (Q.begin(), Q.end(), q.begin(), fabs);
+        for(size_t i=0;i<num_hsts;i++) q0[i] = (Q[i]<0?-1:1)*Q[i]; //fabs()
+        vector<double> q; q.resize(q0.size()); 
+        softmax(q0, q, num_hsts, beta_1);
+if(passedD) cout << "q = "; print(q); 
+        uint16_t action = smpl_wghtd(q); //select for action based on distance from setpoint
 if(passedD) cout << "action = " << action << "\n";            
+if(passedD) cout << "Q_dlt = " << alpha * (R[action] - Q[action]) << "\n";            
         Q[action] += alpha * (R[action] - Q[action]);
+if(passedD) cout << "new_Q = "; print(Q);            
+        vector<double> old_SD; old_SD.resize(SD.size()); 
+        for(size_t i=0;i<num_hsts;i++) old_SD[i] = SD[i];
+if(passedD) cout << "old_SD = "; print(old_SD);
         softmax(Q, SD, num_hsts, beta_1);
-if(passedD) cout << "new Q = "; print(Q);            
+if(passedD) cout << "new_SD = "; print(SD);
         //what are the betting odds after each trial? (LaPlace's Rule of Succession)
 //        BO <- matrix(nrow = N_trials, ncol = num_hsts)
 //        NS <- vector(length = num_hsts)
         NS[action]++;
 if(passedD) cout << "NS = "; print(NS);            
         for(size_t i=0;i<num_hsts;i++)  BO[i] = double(NS[i]+1)/double(trl+2);
-	double BOsum = accumulate(BO.begin(),BO.end(),0.0);
+        double BOsum = accumulate(BO.begin(),BO.end(),0.0);
         for(size_t i=0;i<num_hsts;i++)  BO[i] /= BOsum;   //normalize
-if(passedD) cout << "BO = "; print(BO);            
-        R[action] *= SD[action]; // need to add some noise
+if(passedD) cout << "BO = "; print(BO); 
+        {                 
+            float x = dg(gen); 
+            float x1 = dg(gen);         
+            //R[action] *= SD[action]+(R[action]>0?1:-1)*x/(x+x1)/2.0; //retard response with Beta noise
+if(passedD) cout << "jitter = " << x << "\n"; 
+            //R[action] *= SD[action]+(R[action]>0?1:-1)*x; 	         //retard response with Gamma noise
+//if(passedD) cout << "old_SD/SD[action] = " << old_SD/SD[action] << "\n"; 
+            //R[action] -= x; 	         //retard response with Gamma noise
+            //clip Reward to proper bounds
+        vector<double> SDrto; SDrto.resize(SD.size()); 
+        for(size_t i=0;i<num_hsts;i++) SDrto[i] = SD[i]/old_SD[i];
+if(passedD) cout << "SDrto = "; print(SDrto); 
+        for(size_t i=0;i<num_hsts;i++)//effect of schedule change
+            {
+            R[i] *= 0.875*(R[i]<=0 ? SDrto[i] : 1/SDrto[i]); 
+            R[i] += d(gen)/4; //add some response jitter	         
+            R[i] = R[i] > 0.5 ? 0.5 : R[i];
+            R[i] = R[i] < -0.5 ? -0.5 : R[i];
+            }
+        }
         trl++;
     } while(1);
 
