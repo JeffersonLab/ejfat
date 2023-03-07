@@ -29,6 +29,7 @@
 #include <cmath>
 #include <memory>
 #include <getopt.h>
+#include <climits>
 #include <cinttypes>
 
 #include <sys/socket.h>
@@ -251,7 +252,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          *  3               4                   5                   6
          *  2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
          *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-         *  |              Rsvd             |            Entropy            |
+         *  |              Rsvd             |            Entropy            | channel id
          *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
          *  6                                               12
          *  4 5       ...           ...         ...         0 1 2 3 4 5 6 7
