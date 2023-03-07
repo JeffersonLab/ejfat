@@ -45,9 +45,9 @@
 #include <grpcpp/grpcpp.h>
 
 #ifdef BAZEL_BUILD
-#include "examples/protos/lbControlPlaneEsnet.grpc.pb.h"
+#include "examples/protos/loadbalancer.grpc.pb.h"
 #else
-#include "lbControlPlaneEsnet.grpc.pb.h"
+#include "loadbalancer.grpc.pb.h"
 #endif
 
 #include "lb_cplane.h"
