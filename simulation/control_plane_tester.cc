@@ -325,7 +325,7 @@ int main(int argc, char **argv) {
     }
 
     // Unregister this client with the grpc server
-    err = client.DeRegister();
+    err = client.Deregister();
     if (err == 1) {
         printf("GRPC client %s communication error with server when unregistering, exit!\n", clientName);
     }
