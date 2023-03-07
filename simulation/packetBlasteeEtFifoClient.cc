@@ -44,7 +44,7 @@
 #endif
 
 // GRPC stuff
-#include "lb_cplane_esnet.h"
+#include "lb_cplane.h"
 
 
 using namespace ejfat;
@@ -416,7 +416,7 @@ static void *pidThread(void *arg) {
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
 
     LbControlPlaneClient client(targ->grpcServerIpAddr, targ->grpcServerPort, targ->myName,
-                                targ->myId, (int32_t)eventSize, numEvents,targ->setPoint);
+                                (int32_t)eventSize, numEvents, targ->setPoint);
 
     // Register this client with the grpc server
     int32_t err = client.Register();
@@ -462,7 +462,7 @@ static void *pidThread(void *arg) {
     }
 
     // Unregister this client with the grpc server
-    err = client.UnRegister();
+    err = client.Deregister();
     if (err == 1) {
         printf("GRPC client %s communication error with server when unregistering, exit!\n", targ->myName.c_str());
     }
@@ -782,8 +782,8 @@ int main(int argc, char **argv) {
     /// Control Plane  Stuff ///
     ////////////////////////////
     bool reportToCP = true && sendToEt;
-    BackendReportServiceImpl service;
-    BackendReportServiceImpl *pGrpcService = &service;
+    LoadBalancerServiceImpl service;
+    LoadBalancerServiceImpl *pGrpcService = &service;
 
 
     if (sendToEt) {
