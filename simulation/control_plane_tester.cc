@@ -28,11 +28,9 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
+#include <random>
+#include <getopt.h>
 
-#include "ejfat_assemble_ersap.hpp"
-#include "ejfat_network.hpp"
-#include "et.h"
-#include "et_fifo.h"
 
 #ifdef __linux__
     #ifndef _GNU_SOURCE
@@ -44,39 +42,34 @@
 #endif
 
 // GRPC stuff
-#include "lb_cplane_esnet.h"
+#include "lb_cplane.h"
 
 
-using namespace ejfat;
+
+template<class X>
+X pid(          // Proportional, Integrative, Derivative Controller
+        const X& setPoint, // Desired Operational Set Point
+        const X& prcsVal,  // Measure Process Value
+        const X& delta_t,  // Time delta between determination of last control value
+        const X& Kp,       // Konstant for Proprtional Control
+        const X& Ki,       // Konstant for Integrative Control
+        const X& Kd        // Konstant for Derivative Control
+)
+{
+    static X previous_error = 0; // for Derivative
+    static X integral_acc = 0;   // For Integral (Accumulated Error)
+    X error = setPoint - prcsVal;
+    integral_acc += error * delta_t;
+    X derivative = (error - previous_error) / delta_t;
+    previous_error = error;
+    return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
+}
+
 
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
 //-----------------------------------------------------------------------
-
-
-#define INPUT_LENGTH_MAX 256
-
-//
-//template<class X>
-//X pid(          // Proportional, Integrative, Derivative Controller
-//        const X& setPoint, // Desired Operational Set Point
-//        const X& prcsVal,  // Measure Process Value
-//        const X& delta_t,  // Time delta between determination of last control value
-//        const X& Kp,       // Konstant for Proprtional Control
-//        const X& Ki,       // Konstant for Integrative Control
-//        const X& Kd        // Konstant for Derivative Control
-//)
-//{
-//    static X previous_error = 0; // for Derivative
-//    static X integral_acc = 0;   // For Integral (Accumulated Error)
-//    X error = setPoint - prcsVal;
-//    integral_acc += error * delta_t;
-//    X derivative = (error - previous_error) / delta_t;
-//    previous_error = error;
-//    return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
-//}
-
 
 
 /**
@@ -85,14 +78,13 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        -f <ET file>",
-            "        [-h] [-v] [-ip6]",
-            "        [-gaddr <grpc server IP address>]",
-            "        [-gport <grpc server port>]",
-            "        [-gname <grpc name>]",
-            "        [-gid <grpc id#>]",
+            "        [-h] [-v]",
+            "        [-cp_addr <control plane IP address>]",
+            "        [-cp_port <control plane port>]",
+            "        [-name <backend name>]",
+            "        [-id <backend id#>]",
             "        [-s <PID fifo set point>]");
 
     fprintf(stderr, "        This is a gRPC program that simulates an ERSAP backend by sending messages to a simulated control plane.\n");
@@ -104,24 +96,16 @@ static void printHelp(char *programName) {
  *
  * @param argc          arg count from main().
  * @param argv          arg list from main().
- * @param bufSize       filled with buffer size.
- * @param recvBufSize   filled with UDP receive buffer size.
- * @param tickPrescale  expected increase in tick with each incoming buffer.
- * @param cores         array of core ids on which to run assembly thread.
- * @param grpcId        filled with id# of this grpc client (backend) to send to control plane.
+ * @param clientId      filled with id# of this grpc client (backend) to send to control plane.
  * @param setPt         filled with the set point of PID loop used with fifo fill level.
- * @param port          filled with UDP receiving data port to listen on.
- * @param grpcPort      filled with grpc server port to send control plane info to.
+ * @param cpPort        filled with grpc server (control plane) port to info to.
  * @param debug         filled with debug flag.
- * @param useIPv6       filled with use IP version 6 flag.
- * @param listenAddr    filled with IP address to listen on for LB data.
- * @param grpcAddr      filled with grpc server IP address to send control plane info to.
- * @param etFilename    filled with name of ET file in which to write data.
- * @param grpcName      filled with name of this grpc client (backend) to send to control plane.
+ * @param cpAddr        filled with grpc server (control plane) IP address to info to.
+ * @param clientName    filled with name of this grpc client (backend) to send to control plane.
  */
 static void parseArgs(int argc, char **argv,
-                      int *grpcId, float *setPt, uint16_t* grpcPort,
-                      bool *debug, char *grpcAddr, char *grpcName) {
+                      uint32_t *clientId, float *setPt, uint16_t* cpPort,
+                      bool *debug, char *cpAddr, char *clientName) {
 
     int c, i_tmp;
     bool help = false;
@@ -129,12 +113,10 @@ static void parseArgs(int argc, char **argv,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {             {"ip6",  0, NULL, 2},
-                          {"cores",  1, NULL, 3},
-                          {"gaddr",  1, NULL, 4},
-                          {"gport",  1, NULL, 5},
-                          {"gname",  1, NULL, 6},
-                          {"gid",  1, NULL, 7},
+            {             {"cp_addr",  1, NULL, 4},
+                          {"cp_port",  1, NULL, 5},
+                          {"name",  1, NULL, 6},
+                          {"id",  1, NULL, 7},
                           {0,       0, 0,    0}
             };
 
@@ -147,10 +129,10 @@ static void parseArgs(int argc, char **argv,
         switch (c) {
 
             case 5:
-                // grpc server PORT
+                // grpc server/control-plane PORT
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp > 1023 && i_tmp < 65535) {
-                    *grpcPort = i_tmp;
+                    *cpPort = i_tmp;
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
@@ -184,33 +166,34 @@ static void parseArgs(int argc, char **argv,
                 // grpc client id
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp >= 0) {
-                    *grpcId = i_tmp;
+                    *clientId = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -gid, grpc client id must be >= 0\n\n");
+                    fprintf(stderr, "Invalid argument to -id, backend id must be >= 0\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
                 break;
 
             case 4:
-                // GRPC server IP ADDRESS
+                // GRPC server/control-plane IP ADDRESS
                 if (strlen(optarg) > 15 || strlen(optarg) < 7) {
                     fprintf(stderr, "grpc server IP address is bad\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                strcpy(grpcAddr, optarg);
+                memset(cpAddr, 0, 16);
+                strcpy(cpAddr, optarg);
                 break;
 
             case 6:
                 // grpc client name
                 if (strlen(optarg) > 30 || strlen(optarg) < 1) {
-                    fprintf(stderr, "grpc client name too long/short, %s\n\n", optarg);
+                    fprintf(stderr, "backend name too long/short, %s\n\n", optarg);
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                strcpy(grpcName, optarg);
+                strcpy(clientName, optarg);
                 break;
 
             case 'v':
@@ -236,52 +219,76 @@ static void parseArgs(int argc, char **argv,
 }
 
 
+int main(int argc, char **argv) {
+
+    int udpSocket;
+    ssize_t nBytes;
+
+    // Set this to max expected data size
+    uint32_t clientId = 0;
+
+    float pidError = 0.F;
+    float setPoint = 0.5F;   // set fifo to 1/2 full by default
+
+    uint16_t cpPort = 56789;
+    bool debug = false;
+
+    char cpAddr[16];
+    memset(cpAddr, 0, 16);
+    strcpy(cpAddr, "172.19.22.15"); // ejfat-4 by default
+
+    char clientName[31];
+    memset(clientName, 0, 31);
+
+    parseArgs(argc, argv, &clientId, &setPoint, &cpPort, &debug, cpAddr,  clientName);
+
+    // give it a default name
+    if (strlen(clientName) < 1) {
+        std::string name = "backend" + std::to_string(clientId);
+        std::strcpy(clientName, name.c_str());
+    }
+
+    ////////////////////////////
+    /// Control Plane  Stuff ///
+    ////////////////////////////
+    LoadBalancerServiceImpl service;
+    LoadBalancerServiceImpl *pGrpcService = &service;
+
+    // random device class instance, source of 'true' randomness for initializing random seed
+    std::random_device rd;
+    // Mersenne twister PRNG, initialized with seed from previous random device instance
+    std::mt19937 gen(rd());
+
+    // Even distribution between 0 & 1
+    std::uniform_real_distribution<> d(0.0, 1.0);
+    // Gaussian, mean = .5, std dev = .2
+    std::normal_distribution<> g(0.5, 0.2);
 
 
-// structure for passing args to thread
-typedef struct threadStruct_t {
-    et_sys_id etId;
-    uint16_t grpcServerPort;
-    std::string grpcServerIpAddr;
-    std::string myName;
-    int32_t myId;
-    float setPoint;
-    bool report;
-} threadStruct;
-
-
-// Thread to monitor the ET system, run PID loop and report back to control plane
-static void *pidThread(void *arg) {
-
-    threadStruct *targ = static_cast<threadStruct *>(arg);
-
-    et_sys_id etId = targ->etId;
-    bool reportToCp = targ->report;
-    int status, numEvents, inputListCount = 0, fillPercent = 0;
-    size_t eventSize;
-    status = et_system_getnumevents(etId, &numEvents);
-    status = et_system_geteventsize(etId, &eventSize);
-
-    float pidError;
-    float pidSetPoint = targ->setPoint;
+    // PID loop variables
     const float Kp = 0.5;
     const float Ki = 0.0;
     const float Kd = 0.00;
     const float deltaT = 1.0; // 1 millisec
 
+
+    // ET system
+    float fillPercent;
+    uint32_t eventSize = 100000;
+    uint32_t numEvents = 1000;
+
     int loopMax   = 1000;
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
 
-    LbControlPlaneClient client(targ->grpcServerIpAddr, targ->grpcServerPort, targ->myName,
-                                targ->myId, (int32_t)eventSize, numEvents,targ->setPoint);
+    LbControlPlaneClient client(cpAddr, cpPort, clientName, clientId, eventSize, numEvents, setPoint);
 
     // Register this client with the grpc server
     int32_t err = client.Register();
     if (err == -1) {
-        printf("GRPC client %s is already registered!\n", targ->myName.c_str());
+        printf("GRPC client %s is already registered!\n", clientName);
     }
     else if (err == 1) {
-        printf("GRPC client %s communication error with server when registering, exit!\n", targ->myName.c_str());
+        printf("GRPC client %s communication error with server when registering, exit!\n", clientName);
         exit(1);
     }
 
@@ -290,29 +297,28 @@ static void *pidThread(void *arg) {
         // Delay 1 milliseconds between data points
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-        // Get the number of available events (# sitting in Grandcentral's input list)
-        status = et_station_getinputcount_rt(etId, ET_GRANDCENTRAL, &inputListCount);
+        // Random # in Gaussian dist, mean .5
+        fillPercent = g(gen);
 
-        fillPercent = (numEvents-inputListCount)*100/numEvents;
-        pidError = pid(pidSetPoint, (float)fillPercent, deltaT, Kp, Ki, Kd);
+        // PID error
+        pidError = pid(setPoint, fillPercent, deltaT, Kp, Ki, Kd);
 
         // Every "loopMax" loops
-        if (reportToCp && --loopCount <= 0) {
+        if (--loopCount <= 0) {
             // Update the changing variables
             client.update(fillPercent, pidError);
             // Send to server
             err = client.SendState();
             if (err == -2) {
-                printf("GRPC client %s cannot send data since it is not registered with server!\n", targ->myName.c_str());
+                printf("GRPC client %s cannot send data since it is not registered with server!\n", clientName);
                 break;
             }
             else if (err == 1) {
-                printf("GRPC client %s communication error with server during sending of data!\n", targ->myName.c_str());
+                printf("GRPC client %s communication error with server during sending of data!\n", clientName);
                 break;
             }
 
-            printf("Total cnt %d, GC in list cnt %d, %d%% filled, error %f\n",
-                   numEvents, inputListCount, fillPercent, pidError);
+            printf("Total cnt %d, %f%% filled, error %f\n", numEvents, fillPercent, pidError);
 
             loopCount = loopMax;
         }
@@ -321,209 +327,10 @@ static void *pidThread(void *arg) {
     // Unregister this client with the grpc server
     err = client.UnRegister();
     if (err == 1) {
-        printf("GRPC client %s communication error with server when unregistering, exit!\n", targ->myName.c_str());
+        printf("GRPC client %s communication error with server when unregistering, exit!\n", clientName);
     }
     exit(1);
 
-    return (nullptr);
-}
-
-
-
-int main(int argc, char **argv) {
-
-    int udpSocket;
-    ssize_t nBytes;
-    // Set this to max expected data size
-    int grpcId = 0;
-    float grpcSetPoint = 0;
-    uint16_t grpcPort = 50051;
-    uint16_t serverPort = 8888;
-    bool debug = false;
-
-    char grpcAddr[16];
-    memset(grpcAddr, 0, 16);
-    char grpcName[31];
-    memset(grpcName, 0, 31);
-
-
-    parseArgs(argc, argv,
-              &grpcId, &grpcSetPoint, &grpcPort,
-              &debug, grpcAddr,  grpcName);
-
-
-    ////////////////////////////
-    /// Control Plane  Stuff ///
-    ////////////////////////////
-    BackendReportServiceImpl service;
-    BackendReportServiceImpl *pGrpcService = &service;
-
-
-    if (sendToEt) {
-
-        /******************/
-        /* open ET system */
-        /******************/
-        et_open_config_init(&openconfig);
-
-        et_open_config_setcast(openconfig, ET_DIRECT);
-        et_open_config_sethost(openconfig, ET_HOST_LOCAL);
-        et_open_config_gethost(openconfig, host);
-        fprintf(stderr, "Direct ET connection to %s\n", host);
-
-        /* debug level */
-        et_open_config_setdebugdefault(openconfig, debugLevel);
-
-        et_open_config_setwait(openconfig, ET_OPEN_WAIT);
-        if (et_open(&id, filename, openconfig) != ET_OK) {
-            fprintf(stderr, "et_open problems\n");
-            exit(1);
-        }
-        et_open_config_destroy(openconfig);
-
-        /*-------------------------------------------------------*/
-
-        /* set level of debug output (everything) */
-        et_system_setdebug(id, debugLevel);
-
-        /***********************/
-        /* Use FIFO interface  */
-        /***********************/
-        status = et_fifo_openProducer(id, &fid, ids, idCount);
-        if (status != ET_OK) {
-            fprintf(stderr, "et_fifo_open problems\n");
-            exit(1);
-        }
-
-        /* no error here */
-        int numRead = et_fifo_getEntryCapacity(fid);
-
-        fprintf(stderr, "Et fifo capacity = %d, idCount = %d\n", numRead, idCount);
-
-        entry = et_fifo_entryCreate(fid);
-        if (entry == NULL) {
-            fprintf(stderr, "et_fifo_entryCreate: out of mem\n");
-            exit(1);
-        }
-
-        /**************************/
-        /* Start a couple threads */
-        /**************************/
-
-        // Start thread to do PID "control"
-        threadStruct *targ = (threadStruct *)calloc(1, sizeof(threadStruct));
-        if (targ == nullptr) {
-            fprintf(stderr, "out of mem\n");
-            return -1;
-        }
-
-        targ->etId = id;
-        targ->grpcServerPort = grpcPort;
-        targ->grpcServerIpAddr = grpcAddr;
-        targ->myName = grpcName;
-        targ->myId = grpcId;
-        targ->setPoint = grpcSetPoint;
-        targ->report = reportToCP;
-
-        pthread_t thd1;
-        status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
-        if (status != 0) {
-            fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
-            return -1;
-        }
-    }
-
-    // Start with offset 0 in very first packet to be read
-    uint64_t tick = 0L;
-    uint16_t dataId;
-    bool firstLoop = true;
-
-    while (true) {
-
-        clearStats(stats);
-        uint64_t diff, prevTick = tick;
-
-        // Fill with data
-        nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                             debug, &tick, &dataId, stats,
-                                             tickPrescale, outOfOrderPackets);
-        if (nBytes < 0) {
-            if (nBytes == BUF_TOO_SMALL) {
-                fprintf(stderr, "Receiving buffer is too small (%d), exit\n", bufSize);
-            }
-            else {
-                fprintf(stderr, "Error in getCompletePacketizedBuffer (%ld), exit\n", nBytes);
-            }
-            et_close(id);
-            return -1;
-        }
-
-        // The first tick received may be any value depending on # of backends receiving
-        // packets from load balancer. Use the first tick received and subsequent ticks
-        // to check the prescale. Took prescale-checking logic out of ejfat_assemble_ersap.hpp
-        // code. Checking it here makes more sense.
-        if (firstLoop) {
-            prevTick = tick;
-            firstLoop = false;
-        }
-
-        //fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
-
-        diff = tick - prevTick;
-        if (diff != 0) {
-            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
-        }
-
-        totalBytes   += nBytes;
-        totalPackets += stats->acceptedPackets;
-
-        // atomic
-        droppedTicks   += stats->droppedTicks;
-        droppedPackets += stats->droppedPackets;
-
-        // The tick returned is what was just built.
-        // Now give it the next expected tick.
-        tick += tickPrescale;
-
-#ifdef __linux__
-
-        if (loopCount-- < 1) {
-            cpu = sched_getcpu();
-            loopCount = cpuLoops;
-        }
-#endif
-
-        // Send to ET
-        if (sendToEt) {
-
-            /* Grab new/empty buffers */
-            status = et_fifo_newEntry(fid, entry);
-            if (status != ET_OK) {
-                fprintf(stderr, "et_fifo_newEntry error\n");
-                return -1;
-            }
-
-            /* Access the new buffers */
-            pe = et_fifo_getBufs(entry);
-
-            /* write data, set control values here */
-            char *pdata;
-            et_event_getdata(pe[0], (void **) &pdata);
-            memcpy((void *)pdata, (const void *) dataBuf, nBytes);
-
-            /* Send all data */
-            et_event_setlength(pe[0], nBytes);
-            et_fifo_setId(pe[0], ids[0]);
-            et_fifo_setHasData(pe[0], 1);
-
-            /* put events back into the ET system */
-            status = et_fifo_putEntry(entry);
-            if (status != ET_OK) {
-                fprintf(stderr, "et_fifo_putEntry error\n");
-                return -1;
-            }
-        }
-    }
 
     return 0;
 }

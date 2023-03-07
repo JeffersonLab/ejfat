@@ -45,7 +45,7 @@ if(NOT TARGET libejfatGrpcLib)
     add_library(libgrpc++ UNKNOWN IMPORTED)
     add_library(libgrpc++_reflection UNKNOWN IMPORTED)
     add_library(libprotobuf UNKNOWN IMPORTED)
-    
+
     set_target_properties(ejfat_grpc PROPERTIES
             IMPORTED_LOCATION ${GRPC_LIBRARY}
             INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})

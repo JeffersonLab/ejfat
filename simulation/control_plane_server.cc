@@ -50,7 +50,7 @@
 #include "lbControlPlaneEsnet.grpc.pb.h"
 #endif
 
-#include "lb_cplane_esnet.h"
+#include "lb_cplane.h"
 
 
 //using grpc::Channel;
@@ -62,7 +62,7 @@
 //using grpc::ServerContext;
 //using grpc::Status;
 //
-//using lbControlPlaneEsnet::BackendReport;
+//using lbControlPlaneEsnet::LoadBalancer;
 //using lbControlPlaneEsnet::ServerReply;
 //using lbControlPlaneEsnet::ErrorCode;
 //using lbControlPlaneEsnet::RegistrationRequest;
@@ -219,7 +219,7 @@ static void parseArgs(int argc, char **argv,
 
 // structure for passing args to thread
 typedef struct threadStruct_t {
-    BackendReportServiceImpl *pGrpcService;
+    LoadBalancerServiceImpl *pGrpcService;
 } threadStruct;
 
 
@@ -227,7 +227,7 @@ typedef struct threadStruct_t {
 static void *controlThread(void *arg) {
 
     threadStruct *targ = static_cast<threadStruct *>(arg);
-    BackendReportServiceImpl *service = targ->pGrpcService;
+    LoadBalancerServiceImpl *service = targ->pGrpcService;
     int status, fillPercent;
     bool debug = true;
 
@@ -390,8 +390,8 @@ int main(int argc, char **argv) {
     uint16_t dataId;
     bool firstLoop = true;
 
-    BackendReportServiceImpl service;
-    BackendReportServiceImpl *pGrpcService = &service;
+    LoadBalancerServiceImpl service;
+    LoadBalancerServiceImpl *pGrpcService = &service;
 
     // Start thread to do run pid loop
     threadStruct *targ = (threadStruct *)calloc(1, sizeof(threadStruct));
