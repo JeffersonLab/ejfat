@@ -2989,7 +2989,8 @@ static inline uint64_t bswap_64(uint64_t x) {
 //            return 0;
 //        }
 //
-//    }
+
+}
 
 
 #endif // EJFAT_ASSEMBLE_ERSAP_H
