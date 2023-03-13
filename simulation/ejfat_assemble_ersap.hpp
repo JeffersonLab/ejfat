@@ -718,6 +718,67 @@ static inline uint64_t bswap_64(uint64_t x) {
 
 
 
+        /**
+         * <p>
+         * Routine to read a single UDP packet into a single buffer.
+         * The reassembly header will be parsed and its data retrieved.
+         * </p>
+         *
+         * It's the responsibility of the caller to have at least enough space in the
+         * buffer for 1 MTU of data. Otherwise, the caller risks truncating the data
+         * of a packet and having error code of TRUNCATED_MSG returned.
+         *
+         *
+         * @param dataBuf   buffer in which to store actual data read (not any headers).
+         * @param bufLen    available bytes in dataBuf in which to safely write.
+         * @param udpSocket UDP socket to read.
+         * @param tick      to be filled with tick from RE header.
+         * @param sequence  to be filled with packet sequence from RE header.
+         * @param dataId    to be filled with data id read RE header.
+         * @param version   to be filled with version read RE header.
+         * @param first     to be filled with "first" bit from RE header,
+         *                  indicating the first packet in a series used to send data.
+         * @param last      to be filled with "last" bit id from RE header,
+         *                  indicating the last packet in a series used to send data.
+         * @param debug     turn debug printout on & off.
+         *
+         * @return number of data (not headers!) bytes read from packet.
+         *         If there's an error in recvfrom, it will return RECV_MSG.
+         *         If there is not enough data to contain a header, it will return INTERNAL_ERROR.
+         *         If there is not enough room in dataBuf to hold incoming data, it will return BUF_TOO_SMALL.
+         */
+        static int readPacketRecvFrom(char *dataBuf, size_t bufLen, int udpSocket,
+                                      uint64_t *tick, uint32_t* sequence, uint16_t* dataId, int* version,
+                                      bool *first, bool *last, bool debug) {
+
+            // Storage for packet
+            char pkt[9100];
+
+            int bytesRead = recvfrom(udpSocket, pkt, 9100, 0, NULL, NULL);
+            if (bytesRead < 0) {
+                if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
+                return(RECV_MSG);
+            }
+            else if (bytesRead < HEADER_BYTES) {
+                fprintf(stderr, "recvfrom(): not enough data to contain a header on read\n");
+                return(INTERNAL_ERROR);
+            }
+
+            if (bufLen < bytesRead) {
+                return(BUF_TOO_SMALL);
+            }
+
+            // Parse header
+            parseReHeader(pkt, version, first, last, dataId, sequence, tick);
+
+            // Copy datq
+            int dataBytes = bytesRead - HEADER_BYTES;
+            memcpy(dataBuf, pkt + HEADER_BYTES, dataBytes);
+
+            return dataBytes;
+        }
+
+
         static void clearMap(std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
             if (outOfOrderPackets.empty()) return;
 
