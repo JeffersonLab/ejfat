@@ -205,7 +205,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                   */
                 uint8_t* expandDataBuf(uint32_t pktNum, size_t bytes) {
                     if ((pktNum >= count) || (bytes <= sizes[pktNum])) {
-                        return packets[pktNum].msg_hdr.msg_iov[1].iov_base;
+                        return reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
                     }
                     delete packets[pktNum].msg_hdr.msg_iov[1].iov_base;
                     packets[pktNum].msg_hdr.msg_iov[1].iov_base = new uint8_t[bytes];
