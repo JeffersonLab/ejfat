@@ -769,7 +769,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             }
 
             // Parse header
-            parseReHeader(pkt, version, first, last, dataId, sequence, tick);
+            parseReHeaderOld(pkt, version, first, last, dataId, sequence, tick);
 
             // Copy datq
             int dataBytes = bytesRead - HEADER_BYTES;
