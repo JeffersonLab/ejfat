@@ -8,8 +8,8 @@
 // (757)-269-7100
 
 
-#ifndef UTIL_BUFFERSUPPLY_H
-#define UTIL_BUFFERSUPPLY_H
+#ifndef UTIL_SUPPLIER_H
+#define UTIL_SUPPLIER_H
 
 
 #include <string>
@@ -17,6 +17,7 @@
 #include <vector>
 #include <atomic>
 #include <mutex>
+#include <iostream>
 #include <type_traits>
 
 
@@ -446,14 +447,9 @@ namespace ejfat {
             ringBuffer->publish(items[0]->getProducerSequence(), items[n-1]->getProducerSequence());
         }
 
-
-
-
-
-
     };
 
 }
 
 
-#endif // UTIL_BUFFERSUPPLY_H
+#endif // UTIL_SUPPLIER_H
