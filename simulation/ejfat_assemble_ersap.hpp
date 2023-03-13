@@ -2620,218 +2620,218 @@ static inline uint64_t bswap_64(uint64_t x) {
 //        }
 //
 //
-//        /**
-//         * <p>
-//         * Assemble incoming packets into the given buffer - not necessarily the entirety of the data.
-//         * This routine is best for reading a very large buffer, or a file, for the purpose
-//         * of writing it on the receiving end - something too big to hold in RAM.
-//         * Transfer this packet by packet.
-//         * It will return when the buffer has less space left than it read from the first packet
-//         * or when the "last" bit is set in a packet.
-//         * This routine allows for out-of-order packets. It also allows for multiple calls
-//         * to read the buffer in stages.
-//         * </p>
-//         *
-//         * Note, this routine does a poor job of error handling!
-//         *
-//         * @param dataBuf           place to store assembled packets.
-//         * @param bufLen            byte length of dataBuf.
-//         * @param udpSocket         UDP socket to read.
-//         * @param debug             turn debug printout on & off.
-//         * @param veryFirstRead     this is the very first time data will be read for a sequence of same-tick packets.
-//         * @param last              to be filled with "last" bit id from RE header,
-//         *                          indicating the last packet in a series used to send data.
-//         * @param useRecvFrom       if true, use recvfrom to read (and copy data to dataBuf), else
-//         *                          use recvmsg to read.
-//         * @param tick              to be filled with tick from RE header.
-//         * @param expSequence       value-result parameter which gives the next expected sequence to be
-//         *                          read from RE header and returns its updated value
-//         *                          indicating its sequence in the flow of packets.
-//         * @param bytesPerPacket    pointer to int which get filled with the very first packet's data byte length
-//         *                          (not including header). This gives us an indication of the MTU.
-//         * @param packetCount       pointer to int which get filled with the number of in-order packets read.
-//         * @param outOfOrderPackets map for holding out-of-order packets between calls to this function.
-//         *
-//         * @return total bytes read.
-//         *         If there's an error in recvmsg/recvfrom, it will return RECV_MSG.
-//         *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
-//         *         If the buffer is too small to receive a single packet's data, it will return BUF_TOO_SMALL.
-//         *         If a packet is out of order and no recovery is possible (e.g. duplicate sequence),
-//         *              it will return OUT_OF_ORDER.
-//         *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
-//         *         If cannot allocate memory, it will return OUT_OF_MEM.
-//         */
-//        static ssize_t getPacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
-//                                           bool debug, bool veryFirstRead, bool *last, /*bool useRecvFrom,*/
-//                                           uint64_t *tick, uint32_t *expSequence,
-//                                           uint32_t *bytesPerPacket, uint32_t *packetCount,
-//                                           std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
-//
-//            uint64_t packetTick;
-//            uint32_t sequence, expectedSequence = *expSequence;
-//
-//            bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
-//            int  version, nBytes;
-//            uint16_t dataId;
-//            uint32_t pktCount = 0;
-//            size_t  maxPacketBytes = 0;
-//            ssize_t totalBytesRead = 0;
-//
-//            char *putDataAt = dataBuf;
-//            size_t remainingLen = bufLen;
-//
-//            if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
-//
-//            while (true) {
-//                // Read in one packet
-//                    nBytes = readPacketRecvFrom(putDataAt, remainingLen, udpSocket,
-//                                                &packetTick, &sequence, &dataId, &version,
-//                                                &packetFirst, &packetLast, debug);
-//
-//
-//                // If error
-//                if (nBytes < 0) {
-//                    return nBytes;
-//                }
-//
-//                // TODO: What if we get a zero-length packet???
-//
-//                if (sequence == 0) {
-//                    firstReadForBuf = true;
-//                    *bytesPerPacket = nBytes;
-//                }
-//
-//                if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
-//                                   nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
-//
-//                // Check to see if packet is in sequence
-//                if (sequence != expectedSequence) {
-//                    if (debug) fprintf(stderr, "\n    Got seq %u, expecting %u\n", sequence, expectedSequence);
-//
-//                    // If we get one that we already received, ERROR!
-//                    if (sequence < expectedSequence) {
-//                        clearMap(outOfOrderPackets);
-//                        fprintf(stderr, "    Already got seq %u once before!\n", sequence);
-//                        return OUT_OF_ORDER;
-//                    }
-//
-//                    // Set a limit on how much we're going to store (1000 packets) while we wait
-//                    if (outOfOrderPackets.size() >= 1000 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
-//                        clearMap(outOfOrderPackets);
-//                        fprintf(stderr, "    Reached size limit of stored packets!\n");
-//                        return OUT_OF_ORDER;
-//                    }
-//
-//                    // Since it's out of order, what was written into dataBuf will need to be
-//                    // copied and stored. And that written data will eventually need to be
-//                    // overwritten with the correct packet data.
-//                    char *tempBuf = (char *) malloc(nBytes);
-//                    if (tempBuf == nullptr) {
-//                        clearMap(outOfOrderPackets);
-//                        return OUT_OF_MEM;
-//                    }
-//                    memcpy(tempBuf, putDataAt, nBytes);
-//
-//                    // Put it into map
-//                    if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s\n", sequence, btoa(packetLast));
-//                    outOfOrderPackets.emplace(sequence, std::tuple<char *, uint32_t, bool, bool>{tempBuf, nBytes, packetLast, packetFirst});
-//                    // Read next packet
-//                    continue;
-//                }
-//
-//                while (true) {
-//                    if (debug) fprintf(stderr, "\nPacket %u in proper order, last = %s\n", sequence, btoa(packetLast));
-//
-//                    // Packet was in proper order. Get ready to look for next in sequence.
-//                    putDataAt += nBytes;
-//                    remainingLen -= nBytes;
-//                    totalBytesRead += nBytes;
-//                    expectedSequence++;
-//                    pktCount++;
-//                    //packetsInBuf++;
-//
-//                    // If it's the first read of a sequence, and there are more reads to come,
-//                    // the # of bytes it read will be max possible. Remember that.
-//                    if (firstReadForBuf) {
-//                        maxPacketBytes = nBytes;
-//                        firstReadForBuf = false;
-//                        //maxPacketsInBuf = bufLen / maxPacketBytes;
-//                        if (debug) fprintf(stderr, "In first read, max bytes/packet = %lu\n", maxPacketBytes);
-//
-//                        // Error check
-//                        if (veryFirstRead && !packetFirst) {
-//                            fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
-//                            clearMap(outOfOrderPackets);
-//                            return BAD_FIRST_LAST_BIT;
-//                        }
-//                    }
-//                    else if (packetFirst) {
-//                        fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
-//                        clearMap(outOfOrderPackets);
-//                        return BAD_FIRST_LAST_BIT;
-//                    }
-//
-//                    if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
-//                                       remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
-//
-//                    // If no stored, out-of-order packets ...
-//                    if (outOfOrderPackets.empty()) {
-//                        // If very last packet, quit
-//                        if (packetLast) {
-//                            break;
-//                        }
-//
-//                        // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
-//                        if (remainingLen < maxPacketBytes) {
-//                            tooLittleRoom = true;
-//                            break;
-//                        }
-//                    }
-//                        // If there were previous packets out-of-order, they may now be in order.
-//                        // If so, write them into buffer.
-//                        // Remember the map already sorts them into proper sequence.
-//                    else {
-//                        if (debug) fprintf(stderr, "We also have stored packets\n");
-//                        // Go to first stored packet
-//                        auto it = outOfOrderPackets.begin();
-//
-//                        // If it's truly the next packet ...
-//                        if (it->first == expectedSequence) {
-//                            char *data  = std::get<0>(it->second);
-//                            nBytes      = std::get<1>(it->second);
-//                            packetLast  = std::get<2>(it->second);
-//                            packetFirst = std::get<3>(it->second);
-//                            sequence = expectedSequence;
-//
-//                            memcpy(putDataAt, data, nBytes);
-//                            free(data);
-//
-//                            // Remove packet from map
-//                            it = outOfOrderPackets.erase(it);
-//                            if (debug) fprintf(stderr, "Go and add stored packet %u, size of map = %lu, last = %s\n",
-//                                               expectedSequence, outOfOrderPackets.size(), btoa(packetLast));
-//                            continue;
-//                        }
-//                    }
-//
-//                    break;
-//                }
-//
-//                if (packetLast || tooLittleRoom) {
-//                    break;
-//                }
-//            }
-//
-//            if (debug) fprintf(stderr, "getPacketizedBuffer: passing offset = %u\n\n", expectedSequence);
-//
-//            *last = packetLast;
-//            *tick = packetTick;
-//            *expSequence = expectedSequence;
-//            *packetCount = pktCount;
-//
-//            return totalBytesRead;
-//        }
-//
+        /**
+         * <p>
+         * Assemble incoming packets into the given buffer - not necessarily the entirety of the data.
+         * This routine is best for reading a very large buffer, or a file, for the purpose
+         * of writing it on the receiving end - something too big to hold in RAM.
+         * Transfer this packet by packet.
+         * It will return when the buffer has less space left than it read from the first packet
+         * or when the "last" bit is set in a packet.
+         * This routine allows for out-of-order packets. It also allows for multiple calls
+         * to read the buffer in stages.
+         * </p>
+         *
+         * Note, this routine does a poor job of error handling!
+         *
+         * @param dataBuf           place to store assembled packets.
+         * @param bufLen            byte length of dataBuf.
+         * @param udpSocket         UDP socket to read.
+         * @param debug             turn debug printout on & off.
+         * @param veryFirstRead     this is the very first time data will be read for a sequence of same-tick packets.
+         * @param last              to be filled with "last" bit id from RE header,
+         *                          indicating the last packet in a series used to send data.
+         * @param useRecvFrom       if true, use recvfrom to read (and copy data to dataBuf), else
+         *                          use recvmsg to read.
+         * @param tick              to be filled with tick from RE header.
+         * @param expSequence       value-result parameter which gives the next expected sequence to be
+         *                          read from RE header and returns its updated value
+         *                          indicating its sequence in the flow of packets.
+         * @param bytesPerPacket    pointer to int which get filled with the very first packet's data byte length
+         *                          (not including header). This gives us an indication of the MTU.
+         * @param packetCount       pointer to int which get filled with the number of in-order packets read.
+         * @param outOfOrderPackets map for holding out-of-order packets between calls to this function.
+         *
+         * @return total bytes read.
+         *         If there's an error in recvmsg/recvfrom, it will return RECV_MSG.
+         *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
+         *         If the buffer is too small to receive a single packet's data, it will return BUF_TOO_SMALL.
+         *         If a packet is out of order and no recovery is possible (e.g. duplicate sequence),
+         *              it will return OUT_OF_ORDER.
+         *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
+         *         If cannot allocate memory, it will return OUT_OF_MEM.
+         */
+        static ssize_t getPacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
+                                           bool debug, bool veryFirstRead, bool *last, /*bool useRecvFrom,*/
+                                           uint64_t *tick, uint32_t *expSequence,
+                                           uint32_t *bytesPerPacket, uint32_t *packetCount,
+                                           std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
+
+            uint64_t packetTick;
+            uint32_t sequence, expectedSequence = *expSequence;
+
+            bool packetFirst, packetLast, firstReadForBuf = false, tooLittleRoom = false;
+            int  version, nBytes;
+            uint16_t dataId;
+            uint32_t pktCount = 0;
+            size_t  maxPacketBytes = 0;
+            ssize_t totalBytesRead = 0;
+
+            char *putDataAt = dataBuf;
+            size_t remainingLen = bufLen;
+
+            if (debug) fprintf(stderr, "getPacketizedBuffer: remainingLen = %lu\n", remainingLen);
+
+            while (true) {
+                // Read in one packet
+                    nBytes = readPacketRecvFrom(putDataAt, remainingLen, udpSocket,
+                                                &packetTick, &sequence, &dataId, &version,
+                                                &packetFirst, &packetLast, debug);
+
+
+                // If error
+                if (nBytes < 0) {
+                    return nBytes;
+                }
+
+                // TODO: What if we get a zero-length packet???
+
+                if (sequence == 0) {
+                    firstReadForBuf = true;
+                    *bytesPerPacket = nBytes;
+                }
+
+                if (debug) fprintf(stderr, "Received %d bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
+                                   nBytes, sequence, btoa(packetLast), btoa(firstReadForBuf));
+
+                // Check to see if packet is in sequence
+                if (sequence != expectedSequence) {
+                    if (debug) fprintf(stderr, "\n    Got seq %u, expecting %u\n", sequence, expectedSequence);
+
+                    // If we get one that we already received, ERROR!
+                    if (sequence < expectedSequence) {
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "    Already got seq %u once before!\n", sequence);
+                        return OUT_OF_ORDER;
+                    }
+
+                    // Set a limit on how much we're going to store (1000 packets) while we wait
+                    if (outOfOrderPackets.size() >= 1000 || sizeof(outOfOrderPackets) >= outOfOrderPackets.max_size() ) {
+                        clearMap(outOfOrderPackets);
+                        fprintf(stderr, "    Reached size limit of stored packets!\n");
+                        return OUT_OF_ORDER;
+                    }
+
+                    // Since it's out of order, what was written into dataBuf will need to be
+                    // copied and stored. And that written data will eventually need to be
+                    // overwritten with the correct packet data.
+                    char *tempBuf = (char *) malloc(nBytes);
+                    if (tempBuf == nullptr) {
+                        clearMap(outOfOrderPackets);
+                        return OUT_OF_MEM;
+                    }
+                    memcpy(tempBuf, putDataAt, nBytes);
+
+                    // Put it into map
+                    if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s\n", sequence, btoa(packetLast));
+                    outOfOrderPackets.emplace(sequence, std::tuple<char *, uint32_t, bool, bool>{tempBuf, nBytes, packetLast, packetFirst});
+                    // Read next packet
+                    continue;
+                }
+
+                while (true) {
+                    if (debug) fprintf(stderr, "\nPacket %u in proper order, last = %s\n", sequence, btoa(packetLast));
+
+                    // Packet was in proper order. Get ready to look for next in sequence.
+                    putDataAt += nBytes;
+                    remainingLen -= nBytes;
+                    totalBytesRead += nBytes;
+                    expectedSequence++;
+                    pktCount++;
+                    //packetsInBuf++;
+
+                    // If it's the first read of a sequence, and there are more reads to come,
+                    // the # of bytes it read will be max possible. Remember that.
+                    if (firstReadForBuf) {
+                        maxPacketBytes = nBytes;
+                        firstReadForBuf = false;
+                        //maxPacketsInBuf = bufLen / maxPacketBytes;
+                        if (debug) fprintf(stderr, "In first read, max bytes/packet = %lu\n", maxPacketBytes);
+
+                        // Error check
+                        if (veryFirstRead && !packetFirst) {
+                            fprintf(stderr, "Expecting first bit to be set on very first read but wasn't\n");
+                            clearMap(outOfOrderPackets);
+                            return BAD_FIRST_LAST_BIT;
+                        }
+                    }
+                    else if (packetFirst) {
+                        fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
+                        clearMap(outOfOrderPackets);
+                        return BAD_FIRST_LAST_BIT;
+                    }
+
+                    if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
+                                       remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
+
+                    // If no stored, out-of-order packets ...
+                    if (outOfOrderPackets.empty()) {
+                        // If very last packet, quit
+                        if (packetLast) {
+                            break;
+                        }
+
+                        // Another mtu of data (as reckoned by source) will exceed buffer space, so quit
+                        if (remainingLen < maxPacketBytes) {
+                            tooLittleRoom = true;
+                            break;
+                        }
+                    }
+                        // If there were previous packets out-of-order, they may now be in order.
+                        // If so, write them into buffer.
+                        // Remember the map already sorts them into proper sequence.
+                    else {
+                        if (debug) fprintf(stderr, "We also have stored packets\n");
+                        // Go to first stored packet
+                        auto it = outOfOrderPackets.begin();
+
+                        // If it's truly the next packet ...
+                        if (it->first == expectedSequence) {
+                            char *data  = std::get<0>(it->second);
+                            nBytes      = std::get<1>(it->second);
+                            packetLast  = std::get<2>(it->second);
+                            packetFirst = std::get<3>(it->second);
+                            sequence = expectedSequence;
+
+                            memcpy(putDataAt, data, nBytes);
+                            free(data);
+
+                            // Remove packet from map
+                            it = outOfOrderPackets.erase(it);
+                            if (debug) fprintf(stderr, "Go and add stored packet %u, size of map = %lu, last = %s\n",
+                                               expectedSequence, outOfOrderPackets.size(), btoa(packetLast));
+                            continue;
+                        }
+                    }
+
+                    break;
+                }
+
+                if (packetLast || tooLittleRoom) {
+                    break;
+                }
+            }
+
+            if (debug) fprintf(stderr, "getPacketizedBuffer: passing offset = %u\n\n", expectedSequence);
+
+            *last = packetLast;
+            *tick = packetTick;
+            *expSequence = expectedSequence;
+            *packetCount = pktCount;
+
+            return totalBytesRead;
+        }
+
 
         /**
          * Routine to process the data. In this case, write it to file pointer (file or stdout)
