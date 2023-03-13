@@ -1,5 +1,5 @@
 //
-// Copyright 2020, Jefferson Science Associates, LLC.
+// Copyright 2023, Jefferson Science Associates, LLC.
 // Subject to the terms in the LICENSE file found in the top-level directory.
 //
 // EPSCI Group
@@ -27,9 +27,9 @@
 namespace ejfat {
 
     /**
-     * This class provides the items which are supplied by the RecordSupply class.
+     * This class defines the ByteBufferItems which are supplied by the Supplier class.
      *
-     * @date 11/05/2019
+     * @date 03/13/2023
      * @author timmer
      */
     class BufferSupplyItem2 : public SupplyItem {
@@ -51,9 +51,6 @@ namespace ejfat {
 
         /** Byte order of buffer. */
         ByteOrder order {ByteOrder::ENDIAN_LOCAL};
-
-        /** Is this byte buffer direct? */
-        bool direct;
 
         /**
          * If true, and this item comes from a supply used in the sense of

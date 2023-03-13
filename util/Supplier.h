@@ -30,37 +30,41 @@ namespace ejfat {
 
 
     /**
+     * <p>
      * This class was originally written in Java and is translated to C++ here.
-     * It is used to provide a very fast supply of ByteBuffer objects
+     * It was originally used to provide a very fast supply of ByteBuffer objects
      * (actually ByteBufferItem objects each of which wraps a ByteBuffer)
-     * for reuse in 2 different modes (uses Disruptor software package).<p>
+     * for reuse in 2 different modes (uses Disruptor software package).</p>
+     * <p>
+     * Here it's been rewritten in templated form so the fast Disruptor ring buffer
+     * can be used to supply different types of items/objects.</p>
      *
-     * 1) It can be used as a simple supply of ByteBuffer(Item)s.
+     * 1) It can be used as a simple supply of items.
      * In this mode, only get() and release() are called. A user does a {@link #get()},
-     * uses that buffer, then calls {@link #release()} when done with it. If there are
-     * multiple users of a single buffer (say 5), then call bufferItem.setUsers(5)
-     * before it is used and the buffer is only released when all 5 users have
+     * uses that item, then calls {@link #release(std::shared_ptr<T>)} when done with it.
+     * If there are multiple users of a single item (say 5), then call item.setUsers(5)
+     * BEFORE it is used and the item is only released when all 5 users have
      * called release().<p>
      *
-     * 2) It can be used as a supply of ByteBuffers in which a single
-     * producer provides data for a single consumer which is waiting for that data.
-     * The producer does a {@link #get()}, fills the buffer with data, and finally does a {@link #publish()}
+     * 2) It can be used as a supply of items in which a single
+     * producer provides data/content for a single consumer which is waiting for that data.
+     * The producer does a {@link #get()}, fills the item with data, and finally does a
+     * {@link #publish(std::shared_ptr<T>)}
      * to let the consumer know the data is ready. Simultaneously, a consumer does a
-     * {@link #consumerGet()} to access the data buffer once it is ready. To preserve all the data
-     * as the producer wrote it, use the {@link BufferSupplyItem#getBuffer()} when getting
-     * the data buffer. The consumer then calls {@link #release()} when finished
-     * which allows the producer to reuse the now unused buffer.<p>
+     * {@link #consumerGet()} to access the item and its data once it is ready.
+     * The consumer then calls {@link #release()} when finished
+     * which allows the producer to reuse the now unused item.<p>
      *
      *
      * <pre><code>
      *
      *   This is a graphical representation of how our ring buffer is set up in mode 2.
      *
-     *   (1) The producer who calls get() will get a ring item allowing a buffer to be
-     *       filled. That same user does a publish() when done filling buffer.
+     *   (1) The producer who calls get() will get a ring item allowing a it to be
+     *       filled. That same user does a publish() when done filling item.
      *
      *   (2) The consumer who calls consumerGet() will get that ring item and will
-     *       use its data. That same user does a release() when done with the buffer.
+     *       use its data. That same user does a release() when done with the item.
      *
      *   (3) When the consumer calls release() it frees the ring item to be used by the producer again.
      *
@@ -69,7 +73,7 @@ namespace ejfat {
      *                         ||
      *                       ________
      *                     /    |    \
-     *                    / 1 _ | _ 2 \  <---- Thread using buffers
+     *                    / 1 _ | _ 2 \  <---- Thread using items
      *                   | __ /   \ __ |               |
      *                   |  6 |    | 3 |               V
      *             ^     | __ | __ | __| ==========================
@@ -100,21 +104,21 @@ namespace ejfat {
         std::shared_ptr<Disruptor::RingBuffer<std::shared_ptr<T>>> ringBuffer = nullptr;
 
 
-        /** Barrier to prevent buffers from being used again, before being released. */
+        /** Barrier to prevent items from being used again, before being released. */
         std::shared_ptr<Disruptor::ISequenceBarrier> barrier;
-        /** Which buffer is this one? */
+        /** Which item is this one? */
         std::shared_ptr<Disruptor::ISequence> sequence;
         /** All sequences for barrier. */
         std::vector<std::shared_ptr<Disruptor::ISequence>> allSeqs;
-        /** Which buffer is next for the consumer? */
+        /** Which item is next for the consumer? */
         int64_t nextConsumerSequence = 0L;
-        /** Up to which buffer is available for the consumer? */
+        /** Up to which item is available for the consumer? */
         int64_t availableConsumerSequence = 0L;
 
     
         // For thread safety
 
-        /** True if user releases SupplyItems in same order as acquired. */
+        /** True if user releases items in same order as acquired. */
         bool orderedRelease;
         /** When releasing in sequence, the last sequence to have been released. */
         int64_t lastSequenceReleased = -1L;
@@ -144,24 +148,21 @@ namespace ejfat {
                 Supplier(16, false) {
         }
 
-
-
+        
         /**
-         * Constructor. Used when wanting to avoid locks for speed purposes. Say a BufferSupplyItem
+         * Constructor. Used when wanting to avoid locks for speed purposes. Say a T item
          * is used by several users. This is true in ET or emu input channels in which many evio
          * events all contain a reference to the same buffer. If the user can guarantee that all
-         * the users of one buffer release it before any of the users of the next, then synchronization
+         * the users of one item release it before any of the users of the next, then synchronization
          * is not necessary. If that isn't the case, then locks take care of preventing a later
-         * acquired buffer from being released first and consequently everything that came before
+         * acquired item from being released first and consequently everything that came before
          * it in the ring.
          *
-         * @param ringSize        number of BufferSupplyItem objects in ring buffer.
-         * @param bufferSize      initial size (bytes) of ByteBuffer in each BufferSupplyItem object.
-         * @param order           byte order of ByteBuffer in each BufferSupplyItem object.
-         * @param orderedRelease  if true, the user promises to release the BufferSupplyItems
+         * @param ringSize        number of T item in ring buffer.
+         * @param orderedRelease  if true, the user promises to release the T items
          *                        in the same order as acquired. This avoids using
          *                        synchronized code (no locks).
-         * @throws IllegalArgumentException if args &lt; 1 or ringSize not power of 2.
+         * @throws IllegalArgumentException if ringSize arg &lt; 1 or not power of 2.
          */
         Supplier(int ringSize, bool orderedRelease) :
                 orderedRelease(orderedRelease) {
@@ -283,7 +284,7 @@ namespace ejfat {
         /**
          * Get the next "n" available item in ring buffer for writing/reading data.
          * This may only be used in conjunction with:
-         * {@link #publish()} or preferably {@link #publish(std::shared_ptr<BufferSupplyItem>[]}.
+         * {@link #publish(std::shared_ptr<T>)} or preferably {@link #publish(std::shared_ptr<T>[]}.
          * Not sure if this method is thread-safe.
          *
          * @param n number of ring buffer items to get.
@@ -307,10 +308,10 @@ namespace ejfat {
 
         /**
          * Get the next available item in ring buffer for writing/reading data.
-         * Does not set the ByteBuffer to position = 0 and limit = capacity.
-         * In other words, it facilitates reading existing data from the buffer.
-         * When finished with this item, it's up to the user to set position and
-         * limit to the correct value for the next user.
+         * Does NOT reset the item.
+         * In other words, it facilitates reading existing data from the item.
+         * When finished with this item, it's up to the user to set its state
+         * for the next user.
          * Not sure if this method is thread-safe.
          *
          * @return next available item in ring buffer.
@@ -360,7 +361,7 @@ namespace ejfat {
 
 
         /**
-         * Consumer releases claim on the given ring buffer item so it becomes available for reuse.
+         * Consumer releases claim on the given item so it becomes available for reuse.
          * This method <b>ensures</b> that sequences are released in order and is thread-safe.
          * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
          * @param item item in ring buffer to release for reuse.
@@ -424,20 +425,20 @@ namespace ejfat {
 
 
         /**
-         * Used to tell that the consumer that the ring buffer item is ready for consumption.
+         * Used to tell that the consumer that the item is ready for consumption.
          * Not sure if this method is thread-safe.
          * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
-         * @param bufferSupplyItem item available for consumer's use.
+         * @param item item available for consumer's use.
          */
-        void publish(std::shared_ptr<T> & bufferSupplyItem) {
-            if (bufferSupplyItem == nullptr) return;
-            ringBuffer->publish(bufferSupplyItem->getProducerSequence());
+        void publish(std::shared_ptr<T> & item) {
+            if (item == nullptr) return;
+            ringBuffer->publish(item->getProducerSequence());
         }
 
 
         /**
-         * Used to tell that the consumer that the ring buffer items are ready for consumption.
-         * This may only be used in conjunction with {@link #get(int32_t, std::shared_ptr<BufferSupplyItem>[])}.
+         * Used to tell that the consumer that the items are ready for consumption.
+         * This may only be used in conjunction with {@link #get(int32_t, std::shared_ptr<T>[])}.
          * Not sure if this method is thread-safe.
          * @param n number of array items available for consumer's use.
          * @param items array of items available for consumer's use.

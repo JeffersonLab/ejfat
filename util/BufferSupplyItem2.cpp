@@ -1,5 +1,5 @@
 //
-// Copyright 2020, Jefferson Science Associates, LLC.
+// Copyright 2023, Jefferson Science Associates, LLC.
 // Subject to the terms in the LICENSE file found in the top-level directory.
 //
 // EPSCI Group
@@ -52,7 +52,7 @@ namespace ejfat {
     /**
      * Default constructor which uses values set by {@link #setEventFactorySetting()}.
      */
-    BufferSupplyItem2::BufferSupplyItem2() {
+    BufferSupplyItem2::BufferSupplyItem2() : SupplyItem() {
         order          = BufferSupplyItem2::factoryByteOrder;
         bufferSize     = BufferSupplyItem2::factoryBufferSize;
         orderedRelease = SupplyItem::factoryOrderedRelease;

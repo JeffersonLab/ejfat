@@ -1,5 +1,5 @@
 //
-// Copyright 2020, Jefferson Science Associates, LLC.
+// Copyright 2023, Jefferson Science Associates, LLC.
 // Subject to the terms in the LICENSE file found in the top-level directory.
 //
 // EPSCI Group
@@ -24,7 +24,7 @@
 namespace ejfat {
 
     /**
-     * This class provides the items which are supplied by the Supplier class.
+     * This class provides the base class for items which are supplied by the Supplier class.
      * Use this to inherit from and provide basic supply logic.
      *
      * @date 3/13/2023
