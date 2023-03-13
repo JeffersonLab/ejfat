@@ -114,7 +114,7 @@ namespace ejfat {
     
         // For thread safety
 
-        /** True if user releases ByteBufferItems in same order as acquired. */
+        /** True if user releases SupplyItems in same order as acquired. */
         bool orderedRelease;
         /** When releasing in sequence, the last sequence to have been released. */
         int64_t lastSequenceReleased = -1L;
@@ -174,12 +174,15 @@ namespace ejfat {
                 throw std::runtime_error("ringSize must be a power of 2");
             }
 
+            // All the supply items need to know if the release is ordered
+            SupplyItem::factoryOrderedRelease = orderedRelease;
+
             // Spin first then block
             auto blockingStrategy = std::make_shared< Disruptor::BlockingWaitStrategy >();
             auto waitStrategy = std::make_shared< Disruptor::SpinCountBackoffWaitStrategy >(10000, blockingStrategy);
 
             // Any specs on the "T" items need to be set with the T class' static functions
-            // BEFORE this constructor is called. That way then can be constructed below using
+            // BEFORE this constructor is called. That way they can be constructed below using
             // their no-arg constructor.
 
             // Create ring buffer with "ringSize" # of elements

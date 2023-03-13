@@ -36,7 +36,8 @@ namespace ejfat {
 
         /** Assign each record a unique id for debugging purposes. */
         static uint64_t  idValue;
-        static bool      factoryOrderedRelease;
+        /** True if user releases SupplyItems in same order as acquired (set when constructing Supplier). */
+        static bool factoryOrderedRelease;
 
     protected:
 
@@ -72,7 +73,7 @@ namespace ejfat {
 
 
         /**
-         * Default constructor which uses values set by {@link #setEventFactorySetting()}.
+         * Default constructor which uses value set in {@link Supplier#Supplier(int, bool)}.
          */
         SupplyItem() {
             orderedRelease = factoryOrderedRelease;
