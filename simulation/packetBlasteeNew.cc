@@ -126,7 +126,7 @@ static void printHelp(char *programName) {
  * @param filename      filled with name of file in which to write stats.
  */
 static void parseArgs(int argc, char **argv,
-                      int* bufSize, int *recvBufSize, int *tickPrescale,
+                      uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
                       int *core, int *coreBuf, int *sourceIds, uint16_t* port,
                       bool *debug, bool *useIPv6, bool *keepStats, bool *dump,
                       char *listenAddr, char *filename) {
@@ -988,7 +988,7 @@ int main(int argc, char **argv) {
     int status;
     ssize_t nBytes;
     // Set this to max expected data size
-    int bufSize = 100000;
+    uint32_t bufSize = 100000;
     int recvBufSize = 0;
     int tickPrescale = 1;
     uint16_t startingPort = 7777;
