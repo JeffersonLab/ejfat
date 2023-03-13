@@ -37,9 +37,6 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 
-#include "blockingconcurrentqueue.h"
-#include "readerwritercircularqueue.h"
-
 #ifdef __APPLE__
 #include <cctype>
 #endif
