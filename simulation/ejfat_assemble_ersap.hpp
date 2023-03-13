@@ -207,7 +207,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     if ((pktNum >= count) || (bytes <= sizes[pktNum])) {
                         return reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
                     }
-                    delete packets[pktNum].msg_hdr.msg_iov[1].iov_base;
+                    delete reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
                     packets[pktNum].msg_hdr.msg_iov[1].iov_base = new uint8_t[bytes];
                     packets[pktNum].msg_hdr.msg_iov[1].iov_len = bytes;
                     sizes[pktNum] = bytes;
