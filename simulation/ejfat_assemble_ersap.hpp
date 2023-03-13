@@ -432,6 +432,55 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer args.
+         * The padding values are ignored and only there to circumvent
+         * a bug in the ESNet Load Balancer which otherwise filters out
+         * packets with data payload of 0 or 1 byte.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32 Padding1:8, Padding2:8'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |Version|        Rsvd       |F|L|            Data-ID            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                  UDP Packet Offset                            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                              Tick                             +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  *   Padding 1   |   Padding 2   |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
+         *
+         * @param buffer   buffer to parse.
+         * @param version  returned version.
+         * @param first    returned is-first-packet value.
+         * @param last     returned is-last-packet value.
+         * @param dataId   returned data source id.
+         * @param sequence returned packet sequence number.
+         * @param tick     returned tick value, also in LB meta data.
+         */
+        static void parseReHeaderOld(char* buffer, int* version,
+                                  bool *first, bool *last,
+                                  uint16_t* dataId, uint32_t* sequence,
+                                  uint64_t *tick)
+        {
+            // Now pull out the component values
+            *version = (buffer[0] >> 4) & 0xf;
+            *first   = (buffer[1] & 0x02) >> 1;
+            *last    =  buffer[1] & 0x01;
+
+            *dataId   = ntohs(*((uint16_t *) (buffer + 2)));
+            *sequence = ntohl(*((uint32_t *) (buffer + 4)));
+            *tick     = ntohll(*((uint64_t *) (buffer + 8)));
+        }
+
+
+        /**
+         * Parse the reassembly header at the start of the given buffer.
+         * Return parsed values in pointer args.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'

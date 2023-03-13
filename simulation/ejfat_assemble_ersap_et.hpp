@@ -264,7 +264,7 @@
                     // Set data source for future copy
                     readDataFrom = packetBuffer + HEADER_BYTES;
 
-                    parseReHeader(packetBuffer, &version, &packetFirst, &packetLast, &dataId, &sequence, &tick);
+                    parseReHeaderOld(packetBuffer, &version, &packetFirst, &packetLast, &dataId, &sequence, &tick);
                     if (debug) {
                         fprintf(stderr, "\n\nPkt hdr: ver = %d, first = %s, last = %s, dataId = %hu, seq = %u, tick = %" PRIu64 ", nBytes = %d\n",
                                 version, btoa(packetFirst), btoa(packetLast), dataId, sequence, tick, nBytes);
