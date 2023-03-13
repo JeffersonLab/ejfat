@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
 
     while (true) {
         nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                     debug, firstRead, &last, useRecvfrom, &tick, &offset,
+                                     debug, firstRead, &last, &tick, &offset,
                                      &bytesPerPacket, &packetCount, outOfOrderPackets);
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
