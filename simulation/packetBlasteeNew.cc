@@ -81,11 +81,6 @@ using namespace ejfat;
 #define INPUT_LENGTH_MAX 256
 
 
-
-// Shared pointer to queue to hold incoming UDP packets & parsed
-std::shared_ptr<moodycamel::BlockingConcurrentQueue<packetData>> incomingData;
-
-
 /**
  * Print out help.
  * @param programName name to use for this program.
