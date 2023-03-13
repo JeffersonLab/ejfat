@@ -78,7 +78,7 @@ namespace ejfat {
     public:
 
 
-        static void setEventFactorySettings(const ByteOrder & order, uint32_t bufSize, bool release);
+        static void setEventFactorySettings(const ByteOrder & order, uint32_t bufSize);
         static const std::function< std::shared_ptr<BufferSupplyItem2> () >& eventFactory();
         static const std::function< std::shared_ptr<BufferSupplyItem2> (int, const ByteOrder&, bool) >&
                         eventFactory(int, const ByteOrder&, bool);

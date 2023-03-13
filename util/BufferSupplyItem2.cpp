@@ -33,12 +33,10 @@ namespace ejfat {
      *
      * @param order   byte order.
      * @param bufSize max number of uncompressed data bytes each record can hold.
-     * @param release does the caller promise to release things in exact order as received?
      */
-    void BufferSupplyItem2::setEventFactorySettings(const ByteOrder & order, uint32_t bufSize, bool release) {
+    void BufferSupplyItem2::setEventFactorySettings(const ByteOrder & order, uint32_t bufSize) {
         BufferSupplyItem2::factoryByteOrder = order;
         BufferSupplyItem2::factoryBufferSize = bufSize;
-        SupplyItem::factoryOrderedRelease = release;
     }
 
 

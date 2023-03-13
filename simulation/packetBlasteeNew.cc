@@ -1244,6 +1244,7 @@ int main(int argc, char **argv) {
                 std::make_shared<ejfat::BufferSupply>(pktRingSize, pktRingBufSize, ByteOrder::ENDIAN_LOCAL, true);
 
         // TEST of new code
+        BufferSupplyItem2::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
         std::shared_ptr<ejfat::Supplier<BufferSupplyItem2>> newSupply =
                 std::make_shared<ejfat::Supplier<BufferSupplyItem2>>(pktRingSize, true);
 
