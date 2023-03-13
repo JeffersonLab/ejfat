@@ -178,12 +178,9 @@ namespace ejfat {
             auto blockingStrategy = std::make_shared< Disruptor::BlockingWaitStrategy >();
             auto waitStrategy = std::make_shared< Disruptor::SpinCountBackoffWaitStrategy >(10000, blockingStrategy);
 
-            // Set BufferSupplyItem static values to be used when eventFactory is creating SupplyItem objects
-            // Doing things in this roundabout manner is necessary because the disruptor's
-            // createSingleProducer method takes a function for created items which has no args! Thus these args,
-            // needed for construction of each BufferSupplyItem, must be passed in as global parameters.
-            //        T::setEventFactorySettings(order, bufferSize, orderedRelease);
-            T::setEventFactorySettings(orderedRelease);
+            // Any specs on the "T" items need to be set with the T class' static functions
+            // BEFORE this constructor is called. That way then can be constructed below using
+            // their no-arg constructor.
 
             // Create ring buffer with "ringSize" # of elements
             ringBuffer = Disruptor::RingBuffer<std::shared_ptr<T>>::createSingleProducer(
