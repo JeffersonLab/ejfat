@@ -8,8 +8,8 @@
 // (757)-269-7100
 
 
-#ifndef UTIL_BUFFERSUPPLYITEM2_H
-#define UTIL_BUFFERSUPPLYITEM2_H
+#ifndef UTIL_BUFFERITEM_H
+#define UTIL_BUFFERITEM_H
 
 
 #include <memory>
@@ -32,7 +32,7 @@ namespace ejfat {
      * @date 03/13/2023
      * @author timmer
      */
-    class BufferSupplyItem2 : public SupplyItem {
+    class BufferItem : public SupplyItem {
 
     public:
 
@@ -76,16 +76,16 @@ namespace ejfat {
 
 
         static void setEventFactorySettings(const ByteOrder & order, uint32_t bufSize);
-        static const std::function< std::shared_ptr<BufferSupplyItem2> () >& eventFactory();
-        static const std::function< std::shared_ptr<BufferSupplyItem2> (int, const ByteOrder&, bool) >&
+        static const std::function< std::shared_ptr<BufferItem> () >& eventFactory();
+        static const std::function< std::shared_ptr<BufferItem> (int, const ByteOrder&, bool) >&
                         eventFactory(int, const ByteOrder&, bool);
 
-        BufferSupplyItem2();
-//        BufferSupplyItem2(int bufferSize, const ByteOrder & order = ByteOrder::ENDIAN_LOCAL, bool release = false, int myId = 0);
-        BufferSupplyItem2(const BufferSupplyItem2 & item);
-        ~BufferSupplyItem2() = default;
+        BufferItem();
+//        BufferItem(int bufferSize, const ByteOrder & order = ByteOrder::ENDIAN_LOCAL, bool release = false, int myId = 0);
+        BufferItem(const BufferItem & item);
+        ~BufferItem() = default;
 
-        BufferSupplyItem2 & operator=(const BufferSupplyItem2 & other) = delete;
+        BufferItem & operator=(const BufferItem & other) = delete;
 
         void reset();
 
@@ -112,4 +112,4 @@ namespace ejfat {
 }
 
 
-#endif // UTIL_BUFFERSUPPLYITEM2_H
+#endif // UTIL_BUFFERITEM_H

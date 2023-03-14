@@ -8,7 +8,7 @@
 // (757)-269-7100
 
 
-#include "BufferSupplyItem2.h"
+#include "BufferItem.h"
 
 
 namespace ejfat {
@@ -18,32 +18,32 @@ namespace ejfat {
     // STATIC INITIALIZATION
     //--------------------------------
 
-    uint32_t  BufferSupplyItem2::factoryBufferSize {0};
-    ByteOrder BufferSupplyItem2::factoryByteOrder {ByteOrder::ENDIAN_LOCAL};
+    uint32_t  BufferItem::factoryBufferSize {0};
+    ByteOrder BufferItem::factoryByteOrder {ByteOrder::ENDIAN_LOCAL};
 
     uint64_t  SupplyItem::idValue {0};
     bool      SupplyItem::factoryOrderedRelease;
 
 
     /**
-     * Method to set BufferSupplyItem2 parameters for objects created by eventFactory.
+     * Method to set BufferItem parameters for objects created by eventFactory.
      * Doing things in this roundabout manor is necessary because the disruptor's
      * createSingleProducer method takes a function for created items which has no args! Thus these args,
-     * needed for construction of each BufferSupplyItem2, must be passed in as global parameters.
+     * needed for construction of each BufferItem, must be passed in as global parameters.
      *
      * @param order   byte order.
      * @param bufSize max number of uncompressed data bytes each record can hold.
      */
-    void BufferSupplyItem2::setEventFactorySettings(const ByteOrder & order, uint32_t bufSize) {
-        BufferSupplyItem2::factoryByteOrder = order;
-        BufferSupplyItem2::factoryBufferSize = bufSize;
+    void BufferItem::setEventFactorySettings(const ByteOrder & order, uint32_t bufSize) {
+        BufferItem::factoryByteOrder = order;
+        BufferItem::factoryBufferSize = bufSize;
     }
 
 
     /** Function to create BufferSupplyItems by RingBuffer. */
-    const std::function< std::shared_ptr<BufferSupplyItem2> () >& BufferSupplyItem2::eventFactory() {
-        static std::function< std::shared_ptr<BufferSupplyItem2> () > result([]  {
-            return std::move(std::make_shared<BufferSupplyItem2>());
+    const std::function< std::shared_ptr<BufferItem> () >& BufferItem::eventFactory() {
+        static std::function< std::shared_ptr<BufferItem> () > result([]  {
+            return std::move(std::make_shared<BufferItem>());
         });
         return result;
     }
@@ -52,9 +52,9 @@ namespace ejfat {
     /**
      * Default constructor which uses values set by {@link #setEventFactorySetting()}.
      */
-    BufferSupplyItem2::BufferSupplyItem2() : SupplyItem() {
-        order          = BufferSupplyItem2::factoryByteOrder;
-        bufferSize     = BufferSupplyItem2::factoryBufferSize;
+    BufferItem::BufferItem() : SupplyItem() {
+        order          = BufferItem::factoryByteOrder;
+        bufferSize     = BufferItem::factoryBufferSize;
         orderedRelease = SupplyItem::factoryOrderedRelease;
         buffer = std::make_shared<ByteBuffer>(bufferSize);
         myId = idValue++;
@@ -65,7 +65,7 @@ namespace ejfat {
      * Copy constructor.
      * @param item ring item to copy.
      */
-    BufferSupplyItem2::BufferSupplyItem2(const BufferSupplyItem2 & item) : SupplyItem(item) {
+    BufferItem::BufferItem(const BufferItem & item) : SupplyItem(item) {
 
         // Avoid self copy ...
         if (this != &item) {
@@ -85,7 +85,7 @@ namespace ejfat {
     /**
      * Method to reset this item each time it is retrieved from the supply.
      */
-    void BufferSupplyItem2::reset() {
+    void BufferItem::reset() {
         SupplyItem::reset();
 
         buffer->clear();
@@ -100,21 +100,21 @@ namespace ejfat {
      * Get the byte order used to build record.
      * @return byte order used to build record.
      */
-    ByteOrder BufferSupplyItem2::getOrder() const {return order;}
+    ByteOrder BufferItem::getOrder() const {return order;}
 
 
     /**
      * Get the flag used to suggest a forced write to a consumer.
      * @return flag used to suggest a forced write to a consumer.
      */
-    bool BufferSupplyItem2::getForce() const {return force;}
+    bool BufferItem::getForce() const {return force;}
 
 
     /**
      * Set the flag used to suggest a forced write to a consumer.
      * @param frc flag used to suggest a forced write to a consumer.
      */
-    void BufferSupplyItem2::setForce(bool frc) {this->force = frc;}
+    void BufferItem::setForce(bool frc) {this->force = frc;}
 
 
     /**
@@ -122,14 +122,14 @@ namespace ejfat {
      * User long gets reset to 0 each time supply.get() is called.
      * @return user long.
      */
-    int64_t BufferSupplyItem2::getUserLong() const {return userLong;}
+    int64_t BufferItem::getUserLong() const {return userLong;}
 
 
     /**
      * Set the user long.
      * @param i user long.
      */
-    void BufferSupplyItem2::setUserLong(int64_t i) {userLong = i;}
+    void BufferItem::setUserLong(int64_t i) {userLong = i;}
 
 
     /**
@@ -137,14 +137,14 @@ namespace ejfat {
     * Each int in array gets reset to 0 each time supply.get() is called.
     * @return user integer array.
     */
-    int32_t* BufferSupplyItem2::getUserInts() {return userInt;}
+    int32_t* BufferItem::getUserInts() {return userInt;}
 
 
     /**
      * Get the number of elements in user int array.
      * @return number of elements in user int array.
      */
-    int BufferSupplyItem2::getUserIntCount() {return 60;}
+    int BufferItem::getUserIntCount() {return 60;}
 
 
     /**
@@ -152,21 +152,21 @@ namespace ejfat {
      * User boolean gets reset to false each time supply.get() is called.
      * @return user boolean.
      */
-    bool BufferSupplyItem2::getUserBoolean() const {return userBoolean;}
+    bool BufferItem::getUserBoolean() const {return userBoolean;}
 
 
     /**
      * Set user boolean.
      * @param usrBool user boolean.
      */
-    void BufferSupplyItem2::setUserBoolean(bool usrBool) {userBoolean = usrBool;}
+    void BufferItem::setUserBoolean(bool usrBool) {userBoolean = usrBool;}
 
 
     /**
      * Get the size in bytes of the contained ByteBuffer.
      * @return size in bytes of the contained ByteBuffer.
      */
-    uint32_t BufferSupplyItem2::getBufferSize() const {return bufferSize;}
+    uint32_t BufferItem::getBufferSize() const {return bufferSize;}
 
 
     /**
@@ -174,7 +174,7 @@ namespace ejfat {
      * This method is dangerous -- definitely not thread safe!
      * @param buf contained ByteBuffer.
      */
-    void BufferSupplyItem2::setBuffer(std::shared_ptr<ByteBuffer> buf) {
+    void BufferItem::setBuffer(std::shared_ptr<ByteBuffer> buf) {
         bufferSize = buf->capacity();
         buffer = buf;
     }
@@ -185,7 +185,7 @@ namespace ejfat {
      * The contents are "cleared" such that position is set to 0, limit to capacity.
      * @return contained ByteBuffer.
      */
-    std::shared_ptr<ByteBuffer> BufferSupplyItem2::getClearedBuffer() {
+    std::shared_ptr<ByteBuffer> BufferItem::getClearedBuffer() {
         buffer->clear();
         return buffer;
     }
@@ -196,7 +196,7 @@ namespace ejfat {
      * To be used by a data consumer.
      * @return contained ByteBuffer without any modifications.
      */
-    std::shared_ptr<ByteBuffer> BufferSupplyItem2::getBuffer() const {
+    std::shared_ptr<ByteBuffer> BufferItem::getBuffer() const {
         return buffer;
     }
 
@@ -210,7 +210,7 @@ namespace ejfat {
      * @param capacity minimum necessary size of buffer in bytes.
      * @return internal buffer, new object if capacity expanded, else current buffer as is.
      */
-    std::shared_ptr<ByteBuffer> BufferSupplyItem2::ensureCapacity(uint32_t capacity) {
+    std::shared_ptr<ByteBuffer> BufferItem::ensureCapacity(uint32_t capacity) {
         if (bufferSize < capacity) {
             buffer = std::make_shared<ByteBuffer>(capacity);
             buffer->order(order);
@@ -227,7 +227,7 @@ namespace ejfat {
      * @param capacity new, larger, desired capacity buffer in bytes.
      * @return current buffer with new capacity.
      */
-    std::shared_ptr<ByteBuffer> BufferSupplyItem2::expandBuffer(uint32_t capacity) {
+    std::shared_ptr<ByteBuffer> BufferItem::expandBuffer(uint32_t capacity) {
         if (bufferSize < capacity) {
             buffer->expand(capacity);
             bufferSize = capacity;
