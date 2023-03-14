@@ -133,7 +133,7 @@ set(UTIL_FILES
         util/ByteBuffer.cpp
         util/BufferSupplyItem.cpp
         util/BufferSupply.cpp
-        util/BufferSupplyItem2.cpp
+        util/BufferItem.cpp
         )
 
 set(SIM_EXEC_FILES
@@ -170,7 +170,7 @@ set(CPP_HEADER_FILES
         util/BufferSupply.h
         util/Supplier.h
         util/SupplyItem.h
-        util/BufferSupplyItem2.h
+        util/BufferItem.h
         )
 
 
