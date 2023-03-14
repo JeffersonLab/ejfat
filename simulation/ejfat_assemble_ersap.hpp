@@ -39,6 +39,46 @@
 
 #include "PacketsItem.h"
 
+#ifdef __APPLE__
+#include <cctype>
+#endif
+
+// Reassembly header size in bytes
+#define HEADER_BYTES 20
+
+#define btoa(x) ((x)?"true":"false")
+
+
+#ifdef __linux__
+    // for recvmmsg
+    #ifndef _GNU_SOURCE
+        #define _GNU_SOURCE
+    #endif
+
+    #define htonll(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
+    #define ntohll(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
+#endif
+
+
+#ifndef EJFAT_BYTESWAP_H
+#define EJFAT_BYTESWAP_H
+
+static inline uint16_t bswap_16(uint16_t x) {
+    return (x>>8) | (x<<8);
+}
+
+static inline uint32_t bswap_32(uint32_t x) {
+    return (bswap_16(x&0xffff)<<16) | (bswap_16(x>>16));
+}
+
+static inline uint64_t bswap_64(uint64_t x) {
+    return (((uint64_t)bswap_32(x&0xffffffffull))<<32) |
+           (bswap_32(x>>32));
+}
+#endif
+
+    namespace ejfat {
+
         enum errorCodes {
             RECV_MSG = -1,
             TRUNCATED_MSG = -2,
