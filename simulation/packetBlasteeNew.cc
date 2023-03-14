@@ -52,6 +52,7 @@
 #include "BufferSupplyItem.h"
 
 #include "BufferItem.h"
+#include "PacketsItem.h"
 #include "SupplyItem.h"
 #include "Supplier.h"
 
@@ -1247,6 +1248,10 @@ int main(int argc, char **argv) {
         BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
         std::shared_ptr<ejfat::Supplier<BufferItem>> newSupply =
                 std::make_shared<ejfat::Supplier<BufferItem>>(pktRingSize, true);
+
+        PacketsItem::setEventFactorySettings(200);
+        std::shared_ptr<ejfat::Supplier<PacketsItem>> newSupply2 =
+                std::make_shared<ejfat::Supplier<PacketsItem>>(pktRingSize, false);
 
 
 

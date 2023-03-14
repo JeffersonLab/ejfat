@@ -41,6 +41,7 @@
 #include <cctype>
 #endif
 
+// Reassembly header size in bytes
 #define HEADER_BYTES 20
 
 #define btoa(x) ((x)?"true":"false")
@@ -98,50 +99,16 @@ static inline uint64_t bswap_64(uint64_t x) {
 //           };
 
 
-//       #define VLEN 10
-//       #define BUFSIZE 200
-//       #define TIMEOUT 1
-//           int sockfd, retval, i;
-//           struct mmsghdr msgs[VLEN];
-//           struct iovec iovecs[VLEN];
-//           char bufs[VLEN][BUFSIZE+1];
-//           struct timespec timeout;
-//
-//           memset(msgs, 0, sizeof(msgs));
-//           for (i = 0; i < VLEN; i++) {
-//               iovecs[i].iov_base         = bufs[i];
-//               iovecs[i].iov_len          = BUFSIZE;
-//               msgs[i].msg_hdr.msg_iov    = &iovecs[i];
-//               msgs[i].msg_hdr.msg_iovlen = 1;
-//           }
-//
-//           timeout.tv_sec = TIMEOUT;
-//           timeout.tv_nsec = 0;
-//
-//           retval = recvmmsg(sockfd, msgs, VLEN, 0, &timeout);
-//           if (retval == -1) {
-//               perror("recvmmsg()");
-//               exit(EXIT_FAILURE);
-//           }
-//
-//           printf("%d messages received\n", retval);
-//           for (i = 0; i < retval; i++) {
-//               bufs[i][msgs[i].msg_len] = 0;
-//               printf("%d %s", i+1, bufs[i]);
-//           }
-//           exit(EXIT_SUCCESS);
-
-
     namespace ejfat {
 
-        // Structure to hold reassembly header info
-        typedef struct reHeader_t {
-            uint8_t  version;
-            uint16_t dataId;
-            uint32_t offset;
-            uint32_t length;
-            uint64_t tick;
-        } reHeader;
+//        // Structure to hold reassembly header info
+//        typedef struct reHeader_t {
+//            uint8_t  version;
+//            uint16_t dataId;
+//            uint32_t offset;
+//            uint32_t length;
+//            uint64_t tick;
+//        } reHeader;
 
 
 //        // Structure to hold arrays of packet data & header info.
@@ -151,70 +118,70 @@ static inline uint64_t bswap_64(uint64_t x) {
 //            reHeader *headers;
 //        } packetData;
 
-
-        class qElement {
-
-            public:
-                struct mmsghdr *packets;
-                reHeader *headers;
-                size_t count, bufBytes;
-                size_t *sizes;
-
-
-                qElement(size_t _count, size_t _bufBytes) :
-                        count(_count), bufBytes(_bufBytes) {
-
-                    // Allocate array of structs each containing a single parsed RE header
-                    headers = new reHeader[count];
-                    packets = new mmsghdr[count];
-                    sizes   = new size_t[count];
-
-                    for (int i = 0; i < count; i++) {
-                        packets[i].msg_hdr.msg_iov = new struct iovec[2];
-                        packets[i].msg_hdr.msg_iovlen = 2;
-
-                        // Where RE header goes
-                        packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[20];
-                        packets[i].msg_hdr.msg_iov[0].iov_len = 20;
-
-                        // Where data goes
-                        packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[100000];
-                        packets[i].msg_hdr.msg_iov[1].iov_len = 100000;
-                        sizes[i] = 100000;
-                    }
-                }
-
-                ~qElement() {
-                    delete headers;
-                    delete sizes;
-
-                    for (int i = 0; i < count; i++) {
-                        delete reinterpret_cast<uint8_t *>(packets[i].msg_hdr.msg_iov[0].iov_base);
-                        delete reinterpret_cast<uint8_t *>(packets[i].msg_hdr.msg_iov[1].iov_base);
-                        delete packets[i].msg_hdr.msg_iov;
-                    }
-
-                    delete packets;
-                }
-
-                 /**
-                  *
-                  * @param pktNum starts from 0.
-                  * @param bytes
-                  * @return pointer to data
-                  */
-                uint8_t* expandDataBuf(uint32_t pktNum, size_t bytes) {
-                    if ((pktNum >= count) || (bytes <= sizes[pktNum])) {
-                        return reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
-                    }
-                    delete reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
-                    packets[pktNum].msg_hdr.msg_iov[1].iov_base = new uint8_t[bytes];
-                    packets[pktNum].msg_hdr.msg_iov[1].iov_len = bytes;
-                    sizes[pktNum] = bytes;
-
-                    return reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
-                }
-        };
+//
+//        class qElement {
+//
+//            public:
+//                struct mmsghdr *packets;
+//                reHeader *headers;
+//                size_t count, bufBytes;
+//                size_t *sizes;
+//
+//
+//                qElement(size_t _count, size_t _bufBytes) :
+//                        count(_count), bufBytes(_bufBytes) {
+//
+//                    // Allocate array of structs each containing a single parsed RE header
+//                    headers = new reHeader[count];
+//                    packets = new mmsghdr[count];
+//                    sizes   = new size_t[count];
+//
+//                    for (int i = 0; i < count; i++) {
+//                        packets[i].msg_hdr.msg_iov = new struct iovec[2];
+//                        packets[i].msg_hdr.msg_iovlen = 2;
+//
+//                        // Where RE header goes
+//                        packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[20];
+//                        packets[i].msg_hdr.msg_iov[0].iov_len = 20;
+//
+//                        // Where data goes
+//                        packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[100000];
+//                        packets[i].msg_hdr.msg_iov[1].iov_len = 100000;
+//                        sizes[i] = 100000;
+//                    }
+//                }
+//
+//                ~qElement() {
+//                    delete headers;
+//                    delete sizes;
+//
+//                    for (int i = 0; i < count; i++) {
+//                        delete reinterpret_cast<uint8_t *>(packets[i].msg_hdr.msg_iov[0].iov_base);
+//                        delete reinterpret_cast<uint8_t *>(packets[i].msg_hdr.msg_iov[1].iov_base);
+//                        delete packets[i].msg_hdr.msg_iov;
+//                    }
+//
+//                    delete packets;
+//                }
+//
+//                 /**
+//                  *
+//                  * @param pktNum starts from 0.
+//                  * @param bytes
+//                  * @return pointer to data
+//                  */
+//                uint8_t* expandDataBuf(uint32_t pktNum, size_t bytes) {
+//                    if ((pktNum >= count) || (bytes <= sizes[pktNum])) {
+//                        return reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
+//                    }
+//                    delete reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
+//                    packets[pktNum].msg_hdr.msg_iov[1].iov_base = new uint8_t[bytes];
+//                    packets[pktNum].msg_hdr.msg_iov[1].iov_len = bytes;
+//                    sizes[pktNum] = bytes;
+//
+//                    return reinterpret_cast<uint8_t *>(packets[pktNum].msg_hdr.msg_iov[1].iov_base);
+//                }
+//        };
 
 
         enum errorCodes {

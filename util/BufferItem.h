@@ -27,7 +27,7 @@
 namespace ejfat {
 
     /**
-     * This class defines the ByteBufferItems which are supplied by the Supplier class.
+     * This class defines the ByteBuffer items which are supplied by the Supplier class.
      *
      * @date 03/13/2023
      * @author timmer
@@ -36,7 +36,6 @@ namespace ejfat {
 
     public:
 
-        /** Assign each record a unique id for debugging purposes. */
         static uint32_t  factoryBufferSize;
         static ByteOrder factoryByteOrder;
 
@@ -74,14 +73,11 @@ namespace ejfat {
 
     public:
 
-
         static void setEventFactorySettings(const ByteOrder & order, uint32_t bufSize);
         static const std::function< std::shared_ptr<BufferItem> () >& eventFactory();
-        static const std::function< std::shared_ptr<BufferItem> (int, const ByteOrder&, bool) >&
-                        eventFactory(int, const ByteOrder&, bool);
+
 
         BufferItem();
-//        BufferItem(int bufferSize, const ByteOrder & order = ByteOrder::ENDIAN_LOCAL, bool release = false, int myId = 0);
         BufferItem(const BufferItem & item);
         ~BufferItem() = default;
 
