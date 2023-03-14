@@ -134,6 +134,7 @@ set(UTIL_FILES
         util/BufferSupplyItem.cpp
         util/BufferSupply.cpp
         util/BufferItem.cpp
+        util/PacketsItem.cpp
         )
 
 set(SIM_EXEC_FILES
@@ -171,6 +172,7 @@ set(CPP_HEADER_FILES
         util/Supplier.h
         util/SupplyItem.h
         util/BufferItem.h
+        util/PacketsItem.h
         )
 
 
