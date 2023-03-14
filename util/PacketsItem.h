@@ -19,9 +19,10 @@
 #include <sys/socket.h>
 
 
-#include "Disruptor/Disruptor.h"
 #include "SupplyItem.h"
-#include "ejfat_assemble_ersap.hpp"
+
+// Number of bytes in ERSAP reassembly header
+#define RE_HEADER_BYTES 20
 
 
 #ifdef __linux__

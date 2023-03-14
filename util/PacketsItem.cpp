@@ -67,8 +67,8 @@ namespace ejfat {
             packets[i].msg_hdr.msg_iovlen = 2;
 
             // Where RE header goes
-            packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
-            packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
+            packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[RE_HEADER_BYTES];
+            packets[i].msg_hdr.msg_iov[0].iov_len = RE_HEADER_BYTES;
 
             // Where data goes (can hold jumbo frame)
             packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
@@ -101,8 +101,8 @@ namespace ejfat {
                 packets[i].msg_hdr.msg_iovlen = 2;
 
                 // Where RE header goes
-                packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
-                packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
+                packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[RE_HEADER_BYTES];
+                packets[i].msg_hdr.msg_iov[0].iov_len = RE_HEADER_BYTES;
 
                 // Where data goes
                 packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
@@ -112,7 +112,7 @@ namespace ejfat {
             // Copy over packet data
             for (int i = 0; i < pktsFilled; i++) {
                 memcpy(packets[i].msg_hdr.msg_iov[0].iov_base,
-                       item.packets[i].msg_hdr.msg_iov[0].iov_base, HEADER_BYTES);
+                       item.packets[i].msg_hdr.msg_iov[0].iov_base, RE_HEADER_BYTES);
 
                 memcpy(packets[i].msg_hdr.msg_iov[1].iov_base,
                        item.packets[i].msg_hdr.msg_iov[1].iov_base, 9000);
