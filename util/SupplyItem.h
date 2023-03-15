@@ -260,11 +260,12 @@ namespace ejfat {
 
     };
 
+    uint64_t  SupplyItem::idValue = 0;
+    bool      SupplyItem::factoryOrderedRelease = false;
+
 }
 
 
-//uint64_t  ejfat::SupplyItem::idValue = 0;
-//bool      ejfat::SupplyItem::factoryOrderedRelease = false;
 
 
 #endif // UTIL_SUPPLYITEM_H
