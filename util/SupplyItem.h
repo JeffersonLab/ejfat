@@ -18,9 +18,6 @@
 #include <cstring>
 
 
-#include "Disruptor/Disruptor.h"
-
-
 namespace ejfat {
 
     /**
@@ -35,7 +32,7 @@ namespace ejfat {
     public:
 
         /** Assign each record a unique id for debugging purposes. */
-        static uint64_t  idValue;
+        static uint64_t idValue;
         /** True if user releases SupplyItems in same order as acquired (set when constructing Supplier). */
         static bool factoryOrderedRelease;
 
@@ -266,8 +263,8 @@ namespace ejfat {
 }
 
 
-uint64_t  ejfat::SupplyItem::idValue = 0;
-bool      ejfat::SupplyItem::factoryOrderedRelease = false;
+//uint64_t  ejfat::SupplyItem::idValue = 0;
+//bool      ejfat::SupplyItem::factoryOrderedRelease = false;
 
 
 #endif // UTIL_SUPPLYITEM_H
