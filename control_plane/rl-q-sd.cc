@@ -53,7 +53,8 @@ void print(const X& x) {
 }
 
 template<class X>
-void softmax(const X& x, X& y, const uint16_t N, double t) {
+void softmax(const X& x, X& y) {
+    const uint64_t N = x.size();
     double a = 0;
     for(uint16_t i=0;i<N;i++) a   += exp(x[i]);
     for(uint16_t i=0;i<N;i++) y[i] = exp(x[i])/a;
@@ -126,7 +127,6 @@ int main (int argc, char *argv[])
     // set up
     double alpha = 0.5; // learning rate
     //double beta_0 = 0.5; // bias to for hosts (?)
-    double beta_1 = 1; //  temperature
 
     // R vector with the first value set at 0.5
     vector<double> R; R.resize(num_hsts); //for(uint16_t h=0;h<num_hsts;h++) R[h] = 0.5+h*0.2;
@@ -151,7 +151,7 @@ int main (int argc, char *argv[])
 
     // set initial schedule Density (SD) ////////////
     vector<double> SD;   SD.resize(num_hsts);
-    softmax(Q, SD, num_hsts, beta_1);
+    softmax(Q, SD);
     ///////// set initial Reward
     {
         size_t s = R.size();
@@ -195,7 +195,7 @@ if(passedD) cout << "R = "; print(R);
         //std::transform (Q.begin(), Q.end(), q.begin(), fabs);
         for(size_t i=0;i<num_hsts;i++) q0[i] = (Q[i]<0?-1:1)*Q[i]; //fabs()
         vector<double> q; q.resize(q0.size()); 
-        softmax(q0, q, num_hsts, beta_1);
+        softmax(q0, q);
 if(passedD) cout << "q = "; print(q); 
         uint16_t action = smpl_wghtd(q); //select for action based on distance from setpoint
 if(passedD) cout << "action = " << action << "\n";            
@@ -205,7 +205,7 @@ if(passedD) cout << "new_Q = "; print(Q);
         vector<double> old_SD; old_SD.resize(SD.size()); 
         for(size_t i=0;i<num_hsts;i++) old_SD[i] = SD[i];
 if(passedD) cout << "old_SD = "; print(old_SD);
-        softmax(Q, SD, num_hsts, beta_1);
+        softmax(Q, SD);
 if(passedD) cout << "new_SD = "; print(SD);
         //what are the betting odds after each trial? (LaPlace's Rule of Succession)
 //        BO <- matrix(nrow = N_trials, ncol = num_hsts)
