@@ -37,7 +37,6 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 
-//#include "PacketsItem.h"
 
 #ifdef __APPLE__
 #include <cctype>
@@ -89,6 +88,16 @@ static inline uint64_t bswap_64(uint64_t x) {
             BAD_ARG = -7,
             INTERNAL_ERROR = -8
         };
+
+
+        // Structure to hold reassembly header info
+        typedef struct reHeader_t {
+            uint8_t  version;
+            uint16_t dataId;
+            uint32_t offset;
+            uint32_t length;
+            uint64_t tick;
+        } reHeader;
 
 
         /**
@@ -381,42 +390,42 @@ static inline uint64_t bswap_64(uint64_t x) {
         }
 
 
-//        /**
-//         * Parse the reassembly header at the start of the given buffer.
-//         * Return parsed values in pointer arg.
-//         *
-//         * <pre>
-//         *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
-//         *
-//         *  0                   1                   2                   3
-//         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-//         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-//         *  |Version|        Rsvd           |            Data-ID            |
-//         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-//         *  |                         Buffer Offset                         |
-//         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-//         *  |                         Buffer Length                         |
-//         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-//         *  |                                                               |
-//         *  +                             Tick                              +
-//         *  |                                                               |
-//         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-//         * </pre>
-//         *
-//         * @param buffer   buffer to parse.
-//         * @param header   pointer to struct to be filled with RE header info.
-//         */
-//        static void parseReHeader(const char* buffer, ejfat::PacketsItem::reHeader* header)
-//        {
-//            // Now pull out the component values
-//            if (header != nullptr) {
-//                header->version =                       (buffer[0] >> 4) & 0xf;
-//                header->dataId  = ntohs(*((uint16_t *)  (buffer + 2)));
-//                header->offset  = ntohl(*((uint32_t *)  (buffer + 4)));
-//                header->length  = ntohl(*((uint32_t *)  (buffer + 8)));
-//                header->tick    = ntohll(*((uint64_t *) (buffer + 12)));
-//            }
-//        }
+        /**
+         * Parse the reassembly header at the start of the given buffer.
+         * Return parsed values in pointer arg.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |Version|        Rsvd           |            Data-ID            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                         Buffer Offset                         |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                         Buffer Length                         |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                             Tick                              +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
+         *
+         * @param buffer   buffer to parse.
+         * @param header   pointer to struct to be filled with RE header info.
+         */
+        static void parseReHeader(const char* buffer, reHeader* header)
+        {
+            // Now pull out the component values
+            if (header != nullptr) {
+                header->version =                       (buffer[0] >> 4) & 0xf;
+                header->dataId  = ntohs(*((uint16_t *)  (buffer + 2)));
+                header->offset  = ntohl(*((uint32_t *)  (buffer + 4)));
+                header->length  = ntohl(*((uint32_t *)  (buffer + 8)));
+                header->tick    = ntohll(*((uint64_t *) (buffer + 12)));
+            }
+        }
 
 
         /**

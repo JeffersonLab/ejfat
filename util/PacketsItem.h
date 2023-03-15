@@ -20,9 +20,7 @@
 #include <arpa/inet.h>
 
 #include "SupplyItem.h"
-
-// Number of bytes in ERSAP reassembly header
-#define RE_HEADER_BYTES 20
+#include "ejfat_assemble_ersap.hpp"
 
 
 #ifdef __linux__
@@ -60,17 +58,6 @@ namespace ejfat {
     public:
 
         static size_t factoryPacketCount;
-
-
-        // Structure to hold reassembly header info
-        typedef struct reHeader_t {
-            uint8_t  version;
-            uint16_t dataId;
-            uint32_t offset;
-            uint32_t length;
-            uint64_t tick;
-        } reHeader;
-
 
     private:
 
@@ -126,7 +113,7 @@ namespace ejfat {
     };
 
 
-    static void parseReHeader(const char* buffer, PacketsItem::reHeader* header);
+    static void parseReHeader(const char* buffer, reHeader* header);
 
 }
 

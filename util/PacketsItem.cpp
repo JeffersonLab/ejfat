@@ -13,44 +13,6 @@
 
 namespace ejfat {
 
-    /**
-     * Parse the reassembly header at the start of the given buffer.
-     * Return parsed values in pointer arg.
-     *
-     * <pre>
-     *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
-     *
-     *  0                   1                   2                   3
-     *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     *  |Version|        Rsvd           |            Data-ID            |
-     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     *  |                         Buffer Offset                         |
-     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     *  |                         Buffer Length                         |
-     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     *  |                                                               |
-     *  +                             Tick                              +
-     *  |                                                               |
-     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     * </pre>
-     *
-     * @param buffer   buffer to parse.
-     * @param header   pointer to struct to be filled with RE header info.
-     */
-    void parseReHeader(const char* buffer, PacketsItem::reHeader* header)
-    {
-        // Now pull out the component values
-        if (header != nullptr) {
-            header->version =                       (buffer[0] >> 4) & 0xf;
-            header->dataId  = ntohs(*((uint16_t *)  (buffer + 2)));
-            header->offset  = ntohl(*((uint32_t *)  (buffer + 4)));
-            header->length  = ntohl(*((uint32_t *)  (buffer + 8)));
-            header->tick    = ntohll(*((uint64_t *) (buffer + 12)));
-        }
-    }
-
-    
     //--------------------------------
     // STATIC INITIALIZATION
     //--------------------------------
@@ -101,8 +63,8 @@ namespace ejfat {
             packets[i].msg_hdr.msg_iovlen = 2;
 
             // Where RE header goes
-            packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[RE_HEADER_BYTES];
-            packets[i].msg_hdr.msg_iov[0].iov_len = RE_HEADER_BYTES;
+            packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
+            packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
 
             // Where data goes (can hold jumbo frame)
             packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
@@ -135,8 +97,8 @@ namespace ejfat {
                 packets[i].msg_hdr.msg_iovlen = 2;
 
                 // Where RE header goes
-                packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[RE_HEADER_BYTES];
-                packets[i].msg_hdr.msg_iov[0].iov_len = RE_HEADER_BYTES;
+                packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
+                packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
 
                 // Where data goes
                 packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
@@ -146,7 +108,7 @@ namespace ejfat {
             // Copy over packet data
             for (int i = 0; i < pktsFilled; i++) {
                 memcpy(packets[i].msg_hdr.msg_iov[0].iov_base,
-                       item.packets[i].msg_hdr.msg_iov[0].iov_base, RE_HEADER_BYTES);
+                       item.packets[i].msg_hdr.msg_iov[0].iov_base, HEADER_BYTES);
 
                 memcpy(packets[i].msg_hdr.msg_iov[1].iov_base,
                        item.packets[i].msg_hdr.msg_iov[1].iov_base, 9000);
