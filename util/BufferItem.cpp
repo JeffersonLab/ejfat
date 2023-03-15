@@ -53,7 +53,9 @@ namespace ejfat {
         order          = BufferItem::factoryByteOrder;
         bufferSize     = BufferItem::factoryBufferSize;
         orderedRelease = SupplyItem::factoryOrderedRelease;
+
         buffer = std::make_shared<ByteBuffer>(bufferSize);
+        userInt = new int32_t[60];
         myId = idValue++;
     }
 
@@ -70,6 +72,7 @@ namespace ejfat {
             bufferSize       = item.bufferSize;
             order            = item.order;
             force            = item.force;
+            userInt          = new int32_t[60];
             for (int i=0; i < getUserIntCount(); i++) {
                 userInt[i] = item.userInt[i];
             }
@@ -77,6 +80,11 @@ namespace ejfat {
             userBoolean      = item.userBoolean;
         }
     }
+
+
+    BufferItem::~BufferItem() {
+        delete(userInt);
+    };
 
 
     /**

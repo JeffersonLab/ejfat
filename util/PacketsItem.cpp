@@ -13,14 +13,6 @@
 
 namespace ejfat {
 
-
-    //--------------------------------
-    // STATIC INITIALIZATION
-    //--------------------------------
-
-    size_t PacketsItem::factoryPacketCount {200};
-
-
     /**
      * Parse the reassembly header at the start of the given buffer.
      * Return parsed values in pointer arg.
@@ -46,7 +38,7 @@ namespace ejfat {
      * @param buffer   buffer to parse.
      * @param header   pointer to struct to be filled with RE header info.
      */
-    static void parseReHeader(const char* buffer, PacketsItem::reHeader* header)
+    void parseReHeader(const char* buffer, PacketsItem::reHeader* header)
     {
         // Now pull out the component values
         if (header != nullptr) {
@@ -57,6 +49,13 @@ namespace ejfat {
             header->tick    = ntohll(*((uint64_t *) (buffer + 12)));
         }
     }
+
+    
+    //--------------------------------
+    // STATIC INITIALIZATION
+    //--------------------------------
+
+    size_t PacketsItem::factoryPacketCount {200};
 
 
     /**

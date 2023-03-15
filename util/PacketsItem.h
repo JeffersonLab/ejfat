@@ -125,6 +125,9 @@ namespace ejfat {
         void reset();
     };
 
+
+    static void parseReHeader(const char* buffer, PacketsItem::reHeader* header);
+
 }
 
 
