@@ -156,7 +156,7 @@ namespace ejfat {
      * @param index index into array of info.
      * @return pointer to struct with reassembly info in it, or nullptr if none.
      */
-    PacketsItem::reHeader * PacketsItem::getHeader(uint32_t index) {
+    reHeader * PacketsItem::getHeader(uint32_t index) {
         if (index >= pktsFilled) {
             return nullptr;
         }
