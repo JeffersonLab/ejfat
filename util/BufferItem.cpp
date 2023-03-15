@@ -22,7 +22,7 @@ namespace ejfat {
     ByteOrder BufferItem::factoryByteOrder {ByteOrder::ENDIAN_LOCAL};
 
     uint64_t  SupplyItem::idValue {0};
-    bool      SupplyItem::factoryOrderedRelease;
+    bool      SupplyItem::factoryOrderedRelease {false};
 
 
     /**
