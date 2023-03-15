@@ -91,7 +91,7 @@ int main (int argc, char *argv[])
     std::map<uint16_t, float> sched;
     for(size_t n=0;n<1024;n++) {sched[n] = 0;}///////////////
     uint64_t epoch = 0; //for now
-    //while(true)
+    while(true)
     {
         //load the feedback from each node
         hst_fdbk.open(hst_fdbk_t,std::ios::in); //nodes that have reported pid 'errors'
