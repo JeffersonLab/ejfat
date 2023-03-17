@@ -46,6 +46,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cstring>
+#include <unordered_map>
 #include <errno.h>
 
 #include "BufferSupply.h"
@@ -515,22 +516,21 @@ static void *rateThread(void *arg) {
 
 // Arg to pass to buffer reassembly thread
 typedef struct threadArg_t {
-    /** Supply holding buffers of reassembled data. */
-    std::shared_ptr<ejfat::BufferSupply> supply;
-    /** Supply holding buffers of single UDP packets. */
-    std::shared_ptr<ejfat::BufferSupply> pktSupply;
+    /** Supply of buffers for holding reassembled data. */
+    std::shared_ptr<ejfat::Supplier<BufferItem>> bufSupply;
+
+    /** Supply of sstructures holding UDP packets. */
+    std::shared_ptr<ejfat::Supplier<PacketsItem>> pktSupply;
+
     /** Byte size of buffers contained in supply. */
     int bufferSize;
 
-    /** For reading packet thread. */
-    int udpSocket;
-
-    /** For reading packet thread. */
-    int sourceId;
+    int sourceCount;
 
     bool debug;
     bool dump;
 
+    // shared ptr of stats
     std::shared_ptr<packetRecvStats> stats;
 
     uint64_t expectedTick;
@@ -568,38 +568,25 @@ typedef struct threadArg_t {
 static void *threadAssemble(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
-    std::shared_ptr<ejfat::BufferSupply> supply = tArg->supply;
-    std::shared_ptr<ejfat::BufferSupply> pktSupply = tArg->pktSupply;
+
+    std::shared_ptr<ejfat::Supplier<BufferItem>>  bufSupply = tArg->bufSupply;
+    std::shared_ptr<ejfat::Supplier<PacketsItem>> pktSupply = tArg->pktSupply;
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
     auto stats    = tArg->stats;
-    int sourceId  = tArg->sourceId;
+
     int core      = tArg->core;
+    int sourceCount = tArg->sourceCount;
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 2000;
     int loopCount = cpuLoops;
 
-    uint64_t packetTick;
-    uint32_t sequence, expectedSequence = 0;
-
-    bool packetFirst, packetLast;
     bool takeStats = stats != nullptr;
-    bool getMorePkts = true;
 
-    int  nBytes, bufIndex, baseIndex, chunk = 10;
-    ssize_t totalBytesRead = 0;
-    char *putDataAt;
-    char *getDataFrom;
-    size_t remainingLen;
-    uint32_t *intArray;
-
-    std::shared_ptr<BufferSupplyItem> item;
-    std::shared_ptr<BufferSupplyItem> pktItem;
-    std::shared_ptr<ByteBuffer> itemBuf;
-
-    char *buffer;
-    char *pktBuffer;
+    std::shared_ptr<BufferItem>  bufItem;
+    std::shared_ptr<PacketsItem> pktItem;
+    std::shared_ptr<ByteBuffer>  buf;
 
 
 #ifdef __linux__
@@ -623,153 +610,157 @@ static void *threadAssemble(void *arg) {
         }
     }
 
-
 #endif
+
+    // The following maps are very small.
+    // No need to get fancy here as searches will be brief.
+
+    // One map for each source: key = source id, val = pointer to map
+    std::unordered_map<int, std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *> maps;
+
+    // For a single source, a map keeps buffers being worked on: key = tick, val = buffer
+    std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> buffers;
+
+    std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pmap;
 
     while (true) {
 
-        expectedSequence = 0;
-        takeStats = stats != nullptr;
-        totalBytesRead = 0;
+        //-------------------------------------------------------------
+        // Get item containing packets previously read in by another thd
+        //-------------------------------------------------------------
+        pktItem = pktSupply->consumerGet();
+        size_t packetCount = pktItem->getPacketsFilled();
 
-        //------------------------------------------------------
-        // Get item (new buf) from supply for reassembled bufs
-        //------------------------------------------------------
-        item = supply->get();
-        // Get reference to item's ByteBuffer object
-        itemBuf = item->getClearedBuffer();
-        // Get reference to item's byte array (underlying itemBuf)
-        buffer = reinterpret_cast<char *>(itemBuf->array());
-        size_t bufCapacity = itemBuf->capacity();
+        int prevSrcId = -1;
+        uint64_t prevTick = UINT64_MAX;
+        pmap = nullptr;
 
-        while (true) {
 
-            //-------------------------------------------------------------
-            // Get item contained packets previously read in by another thd
-            //-------------------------------------------------------------
-            if (getMorePkts) {
-                pktItem = pktSupply->consumerGet();
-                // Get reference to item's byte array
-                getDataFrom = pktBuffer = reinterpret_cast<char *>(pktItem->getBuffer()->array());
-                // Get the RE headers data (stored in item), 6 ints for each pkt
-                intArray = (uint32_t *) pktItem->getUserInts();
-                // There are up to chunk (10) packets in this buffer, one every 9000 bytes, start with first
-                bufIndex = 0;
-                getMorePkts = false;
-            }
+        for (int i = 0; i < packetCount; i++) {
+            reHeader *hdr = pktItem->getHeader(i);
 
-            baseIndex = 6*bufIndex;
+            int srcId = hdr->dataId;
+            if (srcId != prevSrcId) {
+                // Switching to a different data source ...
 
-            // Extract header data previously stored in array by read pkt thread
-            packetFirst  = intArray[baseIndex] ? true : false;
-            packetLast   = intArray[baseIndex + 1] ? true : false;
-            sequence     = intArray[baseIndex + 2];
-            nBytes       = (int)intArray[baseIndex + 5];
-            packetTick   = (uint64_t) ((uint64_t)(intArray[baseIndex + 3]) << 32 | intArray[baseIndex + 4]);
-//            fprintf(stderr, "assem: bufIndex = %d, read nbytes = %d, pktFrst = %s, seq = %u, at %p\n", bufIndex, nBytes,
-//                               btoa(packetFirst), sequence, &intArray[baseIndex]);
+                // Get the right map if there is one, else make one
+                pmap = maps[srcId];
+                if (pmap == nullptr) {
+                    maps[srcId] = pmap = new std::unordered_map<uint64_t, std::shared_ptr<BufferItem>>();
+                }
 
-            if (packetFirst) {
-                putDataAt = buffer;
-                remainingLen = bufCapacity;
-                totalBytesRead = 0;
-                expectedSequence = 0;
-            }
-
-            // Make sure enough room in buffer.
-            // If the command line's -b option properly set the buffer sizes,
-            // they should never have to be expanded!
-            if (remainingLen - nBytes < 0) {
-                // Preserves existing data up to limit() while doubling underlying array
-                item->expandBuffer(2*(bufCapacity + nBytes));
-
-                // underlying array has changed
-                buffer = reinterpret_cast<char *>(itemBuf->array());
-
-                putDataAt = buffer + totalBytesRead;
-                bufCapacity = itemBuf->capacity();
-                remainingLen = bufCapacity - totalBytesRead;
-            }
-
-            // Copy data into reassembly buffer
-            memcpy(putDataAt, getDataFrom + HEADER_BYTES, nBytes);
-
-            // If we went thru all chunk pkts stored in pktBuffer or hit the last pkt of the buffer,
-            // we know it's the last pkt, so move on
-            if ((++bufIndex == chunk) || packetLast) {
-                // Release packet buffer back to supply for reuse
-                pktSupply->release(pktItem);
-                getMorePkts = true;
-            }
-            else {
-                // Packets are stored every 9k bytes
-                getDataFrom = pktBuffer + bufIndex * 9000;
-            }
-
-            putDataAt += nBytes;
-            remainingLen -= nBytes;
-            totalBytesRead += nBytes;
-
-            // Keep track of limit by hand since we're using underlying array directly.
-            // This will ensure copying of data when expanding buffer (see above).
-            itemBuf->limit(totalBytesRead);
-
-            if (debug)
-                fprintf(stderr, "Received %d data bytes from sender in packet #%d, last = %s, firstReadForBuf = %s\n",
-                        nBytes, sequence, btoa(packetLast), btoa(sequence == 0));
-
-            // Check to see if packet is out-of-sequence
-            if (sequence != expectedSequence) {
-                if (debug) fprintf(stderr, "\n    Got seq %u, expecting %u, quit program\n", sequence, expectedSequence);
-                exit(-1);
-            }
-
-            // Get ready to look for next in sequence
-            expectedSequence++;
-
-            // Check RE header consistency
-            if (sequence == 0) {
-                if (!packetFirst) {
-                    fprintf(stderr, "Bad RE header, first bit was NOT set on seq = 0\n");
-                    exit(-1);
+                // Get buffer in which to reassemble
+                bufItem = (*pmap)[hdr->tick];
+                // If there is no buffer existing for this tick, get one
+                if (bufItem == nullptr) {
+                    // This call gets a reset bufItem
+                    (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                 }
             }
-            else if (packetFirst) {
-                fprintf(stderr, "Bad RE header, first bit was set but seq > 0\n");
-                exit(-1);
+            else if (hdr->tick != prevTick) {
+                // Same source as last pkt, but if NOT the same tick ...
+                bufItem = (*pmap)[hdr->tick];
+                if (bufItem == nullptr) {
+                    (*pmap)[hdr->tick] = bufItem = bufSupply->get();
+                }
             }
 
-            if (debug)
-                fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
-                        remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
+            // Keep track so if next packet is same source/tick, we don't have to look it up
+            prevSrcId = srcId;
+            prevTick  = hdr->tick;
 
-            if (debug) fprintf(stderr, "assem: 1\n");
-            // If very last packet, go to next reassembly buffer
-            if (packetLast) {
+            // We are using the ability of the BufferItem to store a user's long.
+            // Use it store how many bytes we've copied into it so far.
+            // This will enable us to tell if we're done w/ reassembly.
+            int64_t bytesSoFar = bufItem->getUserLong();
+            int64_t dataLen = pktItem->getPacket(i)->msg_len - HEADER_BYTES;
 
-                // Send the finished buffer to the next guy using circular buffer
-                item->setUserLong(packetTick);
+            // Do we have memory to store entire buf? If not, expand.
+            if (hdr->length > bufItem->getBuffer()->capacity()) {
+                // Preserves all existing data while increasing underlying array
+                bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
+            }
+
+            // The neat thing about doing it this way is we don't have to track out-of-order packets.
+            // We don't have to copy and store them!
+            //
+            // Duplicate packets just write over themselves. However,
+            // duplicate packets will mess up our calculation on whether we've received all packets
+            // that make up a buffer. The easiest way to deal with that is sending UDP over a single
+            // network interface and having the receiver listen on a specific interface (not INADDR_ANY).
+            // So, send in a manner in which duplication will not happen. I think we can control this
+            // without too much effort.
+            // The alternative is to add a sequential number to RE header to be able to track this.
+            // That requires more bookkeeping on this receiving end.
+
+            // Copy things into buf
+            memcpy(bufItem->getBuffer()->array() + hdr->offset,
+                   pktItem->getPacket(i)->msg_hdr.msg_iov[1].iov_base,
+                   dataLen);
+
+            // Keep track of how much we've written so far
+            bytesSoFar += dataLen;
+            bufItem->setUserLong(bytesSoFar);
+
+            // If we've written all data to this buf ...
+            if (bytesSoFar >= hdr->length) {
+                // Done with this buffer, so set its limit to proper value
+                bufItem->getBuffer()->limit(bytesSoFar);
+
+                // Clear buffer from local map
+                pmap->erase(hdr->tick);
+
+                if (takeStats) {
+                    stats->acceptedBytes += hdr->length;
+                    stats->builtBuffers++;
+                }
+
+                // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
-                    supply->release(item);
+                    bufSupply->release(bufItem);
                 }
                 else {
-                    supply->publish(item);
+                    bufSupply->publish(bufItem);
                 }
-
-                // Finish up some stats
-                if (takeStats) {
-                    stats->builtBuffers++;
-#ifdef __linux__
-                    // If core hasn't been pinned, track it
-                    if ((core < 0) && (loopCount-- < 1)) {
-                        stats->cpuBuf = sched_getcpu();
-                        loopCount = cpuLoops;
-    //printf("Read pkt thd: get CPU\n");
-                    }
-#endif
-                }
-                break;
             }
+        }
+
+        // If here, we've gone thru a bundle of UDP packets,
+        // time to get the next bundle.
+        pktSupply->release(pktItem);
+
+        // May want to do some house cleaning at this point.
+        // There may be missing packets which have kept some ticks in some maps
+        // that need to cleared out.
+
+
+
+
+
+
+//        volatile uint64_t droppedPackets;   /**< Number of dropped packets. This cannot be known exactly, only estimate. */
+//        volatile uint64_t acceptedPackets;  /**< Number of packets successfully read. */
+//        volatile uint64_t discardedPackets; /**< Number of bytes discarded because reassembly was impossible. */
+//
+//        volatile uint64_t droppedBytes;     /**< Number of bytes dropped. */
+//        volatile uint64_t acceptedBytes;    /**< Number of bytes successfully read, NOT including RE header. */
+//        volatile uint64_t discardedBytes;   /**< Number of bytes dropped. */
+//
+//        volatile uint32_t droppedBuffers;    /**< Number of ticks/buffers for which no packets showed up. */
+//        volatile uint32_t discardedBuffers;  /**< Number of ticks/buffers discarded. */
+//        volatile uint32_t builtBuffers;      /**< Number of ticks/buffers fully reassembled. */
+
+
+        // Finish up some stats
+        if (takeStats) {
+#ifdef __linux__
+            // If core hasn't been pinned, track it
+            if ((core < 0) && (loopCount-- < 1)) {
+                stats->cpuBuf = sched_getcpu();
+                loopCount = cpuLoops;
+//printf("Read pkt thd: get CPU\n");
+            }
+#endif
         }
     }
 
@@ -1049,278 +1040,190 @@ int main(int argc, char **argv) {
     recvBufSize = recvBufSize <= 0 ? 25000000 : recvBufSize;
 #endif
 
-
-    //std::shared_ptr<moodycamel::BlockingConcurrentQueue<packetData>> incomingData;
-
-//                struct iovec {
-//                    ptr_t iov_base; /* Starting address */
-//                    size_t iov_len; /* Length in bytes */
-//                }
-//
-//
-//         struct msghdr {
-//                 void            *msg_name;      /* optional address */
-//                 socklen_t       msg_namelen;    /* size of address */
-//                 struct          iovec *msg_iov; /* scatter/gather array */
-//                 size_t          msg_iovlen;     /* # elements in msg_iov */
-//                 void            *msg_control;   /* ancillary data, see below */
-//                 size_t          msg_controllen; /* ancillary data buffer len */
-//                 int             msg_flags;      /* flags on received message */
-//         };
-
-
-//               struct mmsghdr {
-//                   struct msghdr msg_hdr;  /* Message header */
-//                   unsigned int  msg_len;  /* Number of received bytes for header */
-//               };
-
-
-//    // Structure to hold reassembly header info
-//    typedef struct reHeader_t {
-//        uint8_t  version;
-//        uint16_t dataID;
-//        uint32_t offset;
-//        uint32_t length;
-//        uint64_t tick;
-//    } reHeader;
-//
-//
-//    // Structure to hold arrays of packet data & header info.
-//    // There will be one reHeader_t structure for each packet.
-//    typedef struct packetData_t {
-//        struct mmsghdr packets;
-//        reHeader *headers;
-//    } packetData;
-
-    // Q has 6 elements
-    int queueEntries = 6;
-    // 200 packets stored in 1 Q entry
-    int VLEN = 200;
     // Let's start with 100kB buffers
     int BUFSIZE = 100000;
     int TIMEOUT = 1;
-
-    int sockfd, retval, i;
-    struct mmsghdr msgs[VLEN];
-    // 2 buffers for each packet: 1) RE header, 2) all the rest
-    struct iovec iovecs[2*VLEN];
-    char bufs[VLEN][BUFSIZE+1];
-    struct timespec timeout;
-
-    memset(msgs, 0, sizeof(msgs));
-    for (i = 0; i < VLEN; i++) {
-        iovecs[i].iov_base         = bufs[i];
-        iovecs[i].iov_len          = BUFSIZE;
-        msgs[i].msg_hdr.msg_iov    = &iovecs[i];
-        msgs[i].msg_hdr.msg_iovlen = 1;
-    }
-
-    timeout.tv_sec = TIMEOUT;
-    timeout.tv_nsec = 0;
-
-    retval = recvmmsg(sockfd, msgs, VLEN, 0, &timeout);
-    if (retval == -1) {
-        perror("recvmmsg()");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("%d messages received\n", retval);
-    for (i = 0; i < retval; i++) {
-        bufs[i][msgs[i].msg_len] = 0;
-        printf("%d %s", i+1, bufs[i]);
-    }
-
-
-
+    int sockfd, retval;
 
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
     uint16_t dataId;
 
+//    // Array of stat object for handing to threads which read packets and assemble buffers
+//    std::shared_ptr<packetRecvStats> stats[sourceCount];
+//    for (int i=0; i < sourceCount; i++) {
+//        if (keepStats) {
+//            stats[i] = std::make_shared<packetRecvStats>();
+//            clearStats(stats[i]);
+//        }
+//        else {
+//            stats[i] = nullptr;
+//        }
+//    }
 
-    // Array of stat object for handing to threads which read packets and assemble buffers
-    std::shared_ptr<packetRecvStats> stats[sourceCount];
-    for (int i=0; i < sourceCount; i++) {
-        if (keepStats) {
-            stats[i] = std::make_shared<packetRecvStats>();
-            clearStats(stats[i]);
-        }
-        else {
-            stats[i] = nullptr;
-        }
+    std::shared_ptr<packetRecvStats> stats = nullptr;
+    if (keepStats) {
+        stats = std::make_shared<packetRecvStats>();
+        clearStats(stats);
     }
 
 
-    //-----------------------------------
-    // For each data source ...
-    //-----------------------------------
-    for (int i=0; i < sourceCount; i++) {
 
-        //---------------------------------------------------
-        // Create socket to read data from source ID
-        //---------------------------------------------------
-        int udpSocket;
+    //---------------------------------------------------
+    // Create socket to read data from source ID
+    //---------------------------------------------------
+    int udpSocket;
 
-        if (useIPv6) {
-            struct sockaddr_in6 serverAddr6{};
+    if (useIPv6) {
+        struct sockaddr_in6 serverAddr6{};
 
-            // Create IPv6 UDP socket
-            if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-                perror("creating IPv6 client socket");
-                return -1;
-            }
-
-            // Set & read back UDP receive buffer size
-            socklen_t size = sizeof(int);
-            setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-            recvBufSize = 0;
-            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-            if (debug) fprintf(stderr, "UDP socket for source %d recv buffer = %d bytes\n", sourceIds[i], recvBufSize);
-
-            // Configure settings in address struct
-            // Clear it out
-            memset(&serverAddr6, 0, sizeof(serverAddr6));
-            // it is an INET address
-            serverAddr6.sin6_family = AF_INET6;
-            // the startingPort we are going to receiver from, in network byte order
-            serverAddr6.sin6_port = htons(startingPort + i);
-            if (strlen(listeningAddr) > 0) {
-                inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
-            }
-            else {
-                serverAddr6.sin6_addr = in6addr_any;
-            }
-
-            // Bind socket with address struct
-            int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
-            if (err != 0) {
-                if (debug) fprintf(stderr, "bind socket error\n");
-                return -1;
-            }
-        }
-        else {
-            // Create UDP socket
-            if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-                perror("creating IPv4 client socket");
-                return -1;
-            }
-
-            // Set & read back UDP receive buffer size
-            socklen_t size = sizeof(int);
-            setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-            recvBufSize = 0;
-            getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-
-            // Configure settings in address struct
-            struct sockaddr_in serverAddr{};
-            memset(&serverAddr, 0, sizeof(serverAddr));
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(startingPort + i);
-            if (strlen(listeningAddr) > 0) {
-                serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
-            }
-            else {
-                serverAddr.sin_addr.s_addr = INADDR_ANY;
-            }
-            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-            // Bind socket with address struct
-            int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-            if (err != 0) {
-                fprintf(stderr, "bind socket error\n");
-                return -1;
-            }
-
-            fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes\n", (startingPort + i), recvBufSize);
-
-        }
-
-        //---------------------------------------------------
-        // Supply in which each buf holds 10 Jumbo packets (90kB).
-        // Make this 1024 bufs * 90kB/buf = 92MB
-        //---------------------------------------------------
-        int pktRingSize = 1024;
-        int pktRingBufSize = 90000;
-        std::shared_ptr<ejfat::BufferSupply> pktSupply =
-                std::make_shared<ejfat::BufferSupply>(pktRingSize, pktRingBufSize, ByteOrder::ENDIAN_LOCAL, true);
-
-        // TEST of new code
-        BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
-        std::shared_ptr<ejfat::Supplier<BufferItem>> newSupply =
-                std::make_shared<ejfat::Supplier<BufferItem>>(pktRingSize, true);
-
-        PacketsItem::setEventFactorySettings(200);
-        std::shared_ptr<ejfat::Supplier<PacketsItem>> newSupply2 =
-                std::make_shared<ejfat::Supplier<PacketsItem>>(pktRingSize, false);
-
-
-
-        //---------------------------------------------------
-        // Supply in which each buf will hold reconstructed buffer.
-        // Make these buffers sized as given on command line (100kB default) and expand as necessary.
-        //---------------------------------------------------
-        int ringSize = 1024;
-        std::shared_ptr<ejfat::BufferSupply> supply =
-                std::make_shared<ejfat::BufferSupply>(ringSize, bufSize, ByteOrder::ENDIAN_LOCAL, true);
-        supplies[i] = supply;
-
-        //---------------------------------------------------
-        // Start thread to assemble buffers of packets from this source
-        //---------------------------------------------------
-        threadArg *tArg2 = (threadArg *) calloc(1, sizeof(threadArg));
-        if (tArg2 == NULL) {
-            fprintf(stderr, "\n ******* ran out of memory\n\n");
-            exit(1);
-        }
-
-        tArg2->supply     = supply;
-        tArg2->pktSupply  = pktSupply;
-        tArg2->stats      = stats[i];
-        tArg2->sourceId   = sourceIds[i];
-        tArg2->dump       = dumpBufs;
-        tArg2->debug      = debug;
-        if (pinBufCores) {
-            tArg2->core = startingBufCore + i;
-        }
-        else {
-            tArg2->core = -1;
-        }
-
-        pthread_t thd1;
-        status = pthread_create(&thd1, NULL, threadAssemble, (void *) tArg2);
-        if (status != 0) {
-            fprintf(stderr, "\n ******* error creating thread\n\n");
+        // Create IPv6 UDP socket
+        if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv6 client socket");
             return -1;
         }
 
-        //---------------------------------------------------
-        // Start thread to read packets from this source
-        //---------------------------------------------------
-        threadArg *tArg = (threadArg *)calloc(1, sizeof(threadArg));
-        if (tArg == nullptr) {
-            fprintf(stderr, "out of mem\n");
-            return -1;
-        }
+        // Set & read back UDP receive buffer size
+        socklen_t size = sizeof(int);
+        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+        recvBufSize = 0;
+        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
+        if (debug) fprintf(stderr, "UDP socket for source %d recv buffer = %d bytes\n", sourceIds[i], recvBufSize);
 
-        tArg->udpSocket    = udpSocket;
-        tArg->pktSupply    = pktSupply;
-        tArg->stats        = stats[i];
-        tArg->sourceId     = sourceIds[i];
-        tArg->expectedTick = 0;
-        tArg->tickPrescale = 1;
-        if (pinCores) {
-            tArg->core = startingCore + i;
+        // Configure settings in address struct
+        // Clear it out
+        memset(&serverAddr6, 0, sizeof(serverAddr6));
+        // it is an INET address
+        serverAddr6.sin6_family = AF_INET6;
+        // the startingPort we are going to receiver from, in network byte order
+        serverAddr6.sin6_port = htons(startingPort);
+        if (strlen(listeningAddr) > 0) {
+            inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
         }
         else {
-            tArg->core = -1;
+            serverAddr6.sin6_addr = in6addr_any;
         }
 
-        pthread_t thd;
-        status = pthread_create(&thd, NULL, threadReadPackets, (void *) tArg);
-        if (status != 0) {
-            fprintf(stderr, "Error creating thread for reading pkts\n");
+        // Bind socket with address struct
+        int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
+        if (err != 0) {
+            if (debug) fprintf(stderr, "bind socket error\n");
             return -1;
         }
+    }
+    else {
+        // Create UDP socket
+        if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv4 client socket");
+            return -1;
+        }
+
+        // Set & read back UDP receive buffer size
+        socklen_t size = sizeof(int);
+        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
+        recvBufSize = 0;
+        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
+
+        // Configure settings in address struct
+        struct sockaddr_in serverAddr{};
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(startingPort);
+        if (strlen(listeningAddr) > 0) {
+            serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
+        }
+        else {
+            serverAddr.sin_addr.s_addr = INADDR_ANY;
+        }
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+        // Bind socket with address struct
+        int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+        if (err != 0) {
+            fprintf(stderr, "bind socket error\n");
+            return -1;
+        }
+
+        fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes\n", (startingPort + i), recvBufSize);
+
+    }
+
+
+    //---------------------------------------------------
+    // Supply in which each item holds 200 UDP packets
+    // and parsed header info.
+    //---------------------------------------------------
+    int pktRingSize = 32;
+    PacketsItem::setEventFactorySettings(200);
+    std::shared_ptr<ejfat::Supplier<PacketsItem>> pktSupply =
+            std::make_shared<ejfat::Supplier<PacketsItem>>(pktRingSize, true);
+
+
+    //---------------------------------------------------
+    // Supply in which each buf will hold reconstructed buffer.
+    // Make these buffers sized as given on command line (100kB default) and expand as necessary.
+    //---------------------------------------------------
+    int ringSize = 1024;
+    BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
+    std::shared_ptr<ejfat::Supplier<BufferItem>> supply =
+            std::make_shared<ejfat::Supplier<BufferItem>>(ringSize, true);
+
+
+    //---------------------------------------------------
+    // Start thread to assemble buffers of packets from this source
+    //---------------------------------------------------
+    threadArg *tArg2 = (threadArg *) calloc(1, sizeof(threadArg));
+    if (tArg2 == NULL) {
+        fprintf(stderr, "\n ******* ran out of memory\n\n");
+        exit(1);
+    }
+
+    tArg2->bufSupply  = supply;
+    tArg2->pktSupply  = pktSupply;
+    tArg2->stats      = stats;
+    tArg2->dump       = dumpBufs;
+    tArg2->debug      = debug;
+    tArg2->sourceCount = sourceCount;
+    if (pinBufCores) {
+        tArg2->core = startingBufCore;
+    }
+    else {
+        tArg2->core = -1;
+    }
+
+    pthread_t thd1;
+    status = pthread_create(&thd1, NULL, threadAssemble, (void *) tArg2);
+    if (status != 0) {
+        fprintf(stderr, "\n ******* error creating thread\n\n");
+        return -1;
+    }
+
+    //---------------------------------------------------
+    // Thread to empty reassembled buffers from ring
+    //---------------------------------------------------
+    threadArg *tArg = (threadArg *)calloc(1, sizeof(threadArg));
+    if (tArg == nullptr) {
+        fprintf(stderr, "out of mem\n");
+        return -1;
+    }
+
+    tArg2->bufSupply   = supply;
+    tArg->stats        = stats;
+    tArg->sourceId     = sourceIds[i];
+    tArg->expectedTick = 0;
+    tArg->tickPrescale = 1;
+    if (pinCores) {
+        tArg->core = startingCore;
+    }
+    else {
+        tArg->core = -1;
+    }
+
+    pthread_t thd;
+    status = pthread_create(&thd, NULL, threadReadPackets, (void *) tArg);
+    if (status != 0) {
+        fprintf(stderr, "Error creating thread for reading pkts\n");
+        return -1;
     }
 
     //---------------------------------------------------
@@ -1348,51 +1251,65 @@ int main(int argc, char **argv) {
 
     // Time Delay Here???
 
-    std::shared_ptr<BufferSupplyItem> item;
-    std::shared_ptr<ByteBuffer> itemBuf;
-    char *buffer;
+    std::shared_ptr<PacketsItem> item;
+
+    struct timespec timeout;
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_nsec = 0;
+
+again:
 
     while (true) {
 
-        // How to combine all sub buffers into one big one?
-        // How do we know what size to make it?
-        //    -  Start with an educated guess and allow for expansion
+        // Read all UDP packets here
+        item = pktSupply->get();
 
-        // Note: in this blastee, buffers from different ticks would be combined since
-        // the sources are not started at the exact same time
-
-        for (int i=0; i < sourceCount; i++) {
-
-            if (dumpBufs) {
-                // sleep
-                sleep(1);
+        // Collect packets until full or timeout expires.
+        // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
+        // @ 1MB/sec ---> 1.8 sec
+        int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
+        if (packetCount == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // if timeout, go 'round again
+                goto again;
             }
-            else {
+            fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
+            exit (-1);
+        }
 
-                auto supply = supplies[i];
 
-                //------------------------------------------------------
-                // Get reassembled buffer
-                //------------------------------------------------------
-                item = supply->consumerGet();
-                // Get reference to item's ByteBuffer object
-                itemBuf = item->getBuffer();
-                // Get reference to item's byte array (underlying itemBuf)
-                buffer = reinterpret_cast<char *>(itemBuf->array());
-                size_t bufCapacity = itemBuf->capacity();
-                //            long packetTick = item->getUserLong();
-                //fprintf(stderr, "s%d/%ld ", i, packetTick);
+//        // Allocate array of mmsghdr structs each containing a single UDP packet
+//        // (spread over 2 buffers, 1 for hdr, 1 for data).
+//        packets = new mmsghdr[maxPktCount];
+//
+//        for (int i = 0; i < maxPktCount; i++) {
+//            packets[i].msg_hdr.msg_iov = new struct iovec[2];
+//            packets[i].msg_hdr.msg_iovlen = 2;
+//
+//            // Where RE header goes
+//            packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
+//            packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
+//
+//            // Where data goes (can hold jumbo frame)
+//            packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
+//            packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
+//        }
 
-                // ETC, ETC
+        // Since all the packets have been read in, parse the headers
 
-                // Release buffer back to supply for reuse
-                supply->release(item);
+        // TODO: We could shift this code to the reassembly thread
+
+        for (int i=0; i < packetCount; i++) {
+            unsigned int dataLen = item->getPacket(i)->msg_len;
+            if (dataLen < 20) {
+                // didn't read in enough data for even the header, ERROR
             }
+            ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
+                                 item->getHeader(i));
         }
-//fprintf(stderr, "\n");
-        if (keepStats) {
-            stats[0]->combinedBuffers++;
-        }
+
+        // Send data to reassembly thread for consumption
+        pktSupply->publish(item);
     }
 
     return 0;
