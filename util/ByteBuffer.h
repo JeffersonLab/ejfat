@@ -113,6 +113,7 @@ namespace ejfat {
         void copy(const std::shared_ptr<const ByteBuffer> & srcBuf);
         bool equals(const ByteBuffer & other);
         void expand(size_t newSize);
+        void expandAndCopyAll(size_t size);
 
         bool isDirect()     const;
         bool hasArray()     const;

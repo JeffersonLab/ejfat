@@ -401,6 +401,24 @@ namespace ejfat {
 
 
     /**
+     * This method is identical to the {@link #expand(size_t)} method with the exception
+     * that it copies over all the original capacity of data. This is sometimes necessary
+     * as data operations can be performed directly in the array and the limit is not maintained.
+     * @param size new size (in bytes) of space to allocate internally.
+     */
+    void ByteBuffer::expandAndCopyAll(size_t size) {
+        if (size <= cap) return;
+
+        auto tempBuf = std::shared_ptr<uint8_t>(new uint8_t[size], std::default_delete<uint8_t[]>());
+        std::memcpy((void *)(tempBuf.get()), (const void *)(buf.get() + off), cap);
+        buf = tempBuf;
+        totalSize = cap = size;
+        off = 0;
+    }
+
+
+
+    /**
      * This method tests for data equivilancy. Two byte buffers are equal if, and only if,
      * they have the same number of remaining elements, and the two sequences of remaining
      * elements, considered independently of their starting positions, are pointwise equal.

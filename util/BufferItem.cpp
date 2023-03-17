@@ -227,14 +227,14 @@ namespace ejfat {
 
     /**
      * Make sure the buffer is the size needed.
-     * If expanded, all data up to the limit is copied.
+     * If expanded, all data up to the original capacity is copied.
      * Position, limit, and mark are unchanged.
      * @param capacity new, larger, desired capacity buffer in bytes.
      * @return current buffer with new capacity.
      */
     std::shared_ptr<ByteBuffer> BufferItem::expandBuffer(uint32_t capacity) {
         if (bufferSize < capacity) {
-            buffer->expand(capacity);
+            buffer->expandAndCopyAll(capacity);
             bufferSize = capacity;
         }
         return buffer;
