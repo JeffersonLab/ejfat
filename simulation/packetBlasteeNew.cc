@@ -577,6 +577,7 @@ static void *threadAssemble(void *arg) {
 
     int core      = tArg->core;
     int sourceCount = tArg->sourceCount;
+    uint32_t tickPrescale = tArg->tickPrescale;
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 2000;
@@ -622,6 +623,10 @@ static void *threadAssemble(void *arg) {
     std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> buffers;
 
     std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pmap;
+
+    // One tick for each source: key = source id, val = largest tick value to be reassembled
+    std::unordered_map<int, uint64_t> largestSavedTick;
+
 
     while (true) {
 
@@ -715,6 +720,11 @@ static void *threadAssemble(void *arg) {
                     stats->builtBuffers++;
                 }
 
+                // Track the biggest tick to be saved from this source
+                if (hdr->tick > largestSavedTick[srcId]) {
+                    largestSavedTick[srcId] = hdr->tick;
+                }
+
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
                     bufSupply->release(bufItem);
@@ -730,13 +740,33 @@ static void *threadAssemble(void *arg) {
         pktSupply->release(pktItem);
 
         // May want to do some house cleaning at this point.
-        // There may be missing packets which have kept some ticks in some maps
-        // that need to cleared out.
+        // There may be missing packets which have kept some ticks from some sources
+        // from being completely reassembled and need to cleared out.
+        // So, for each source, take biggest tick to be saved and remove all existing ticks
+        // less than 2*tickPrescale and still being constructed. Keep stats.
 
+        // Iterate over map
+        for (const auto& n : largestSavedTick) {
+            int source = n.first;
+            uint64_t tick = n.second;
 
-
-
-
+            // Compare this tick with the ticks in maps[source] and remove if too old
+            std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
+            if (pm != nullptr) {
+                for (const auto &nn: *pm) {
+                    uint64_t tck = nn.first;
+                    auto bItem = nn.second;
+                    if (tck < tick - 2 * tickPrescale) {
+                        pm->erase(tck);
+                        // Release resources here
+                        // TODO: Can we release some and publish others?????
+                        // TODO: If not, we need to label bad buffers!!!!!!!
+                        bufSupply->release(bufItem);
+                    }
+                }
+            }
+        }
+        
 
 //        volatile uint64_t droppedPackets;   /**< Number of dropped packets. This cannot be known exactly, only estimate. */
 //        volatile uint64_t acceptedPackets;  /**< Number of packets successfully read. */
