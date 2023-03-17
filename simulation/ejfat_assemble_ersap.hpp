@@ -1067,7 +1067,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                                 stats->acceptedBytes += totalBytesRead;
                                 stats->acceptedPackets += offset + 1;
                                 //fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, offset);
-                                stats->droppedTicks   += droppedTicks;
+                                stats->droppedBuffers   += droppedTicks;
                                 // This works if all the buffers coming in are exactly the same size.
                                 // If they're not, then the offset (# of packets - 1) of this buffer
                                 // is used to guess at how many packets were dropped for the dropped tick(s).
@@ -1575,7 +1575,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                                     stats->acceptedBytes += totalBytesRead;
                                     stats->acceptedPackets += offset + 1;
                                     //fprintf(stderr, "        accepted pkts = %llu, seq = %u\n", stats->acceptedPackets, offset);
-                                    stats->droppedTicks += droppedTicks;
+                                    stats->droppedBuffers += droppedTicks;
                                     // This works if all the buffers coming in are exactly the same size.
                                     // If they're not, then the offset (# of packets - 1) of this buffer
                                     // is used to guess at how many packets were dropped for the dropped tick(s).
@@ -1994,7 +1994,7 @@ static inline uint64_t bswap_64(uint64_t x) {
 
                         stats->acceptedBytes   += totalBytesRead;
                         stats->acceptedPackets += packetCount;
-                        stats->droppedTicks    += droppedTicks;
+                        stats->droppedBuffers  += droppedTicks;
                         stats->droppedBytes    += droppedBytes;
                     }
                 }

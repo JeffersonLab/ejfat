@@ -725,7 +725,7 @@ int main(int argc, char **argv) {
         totalPackets += stats->acceptedPackets;
 
         // atomic
-        droppedTicks   += stats->droppedTicks;
+        droppedTicks   += stats->droppedBuffers;
         droppedPackets += stats->droppedPackets;
 
         // The tick returned is what was just built.
