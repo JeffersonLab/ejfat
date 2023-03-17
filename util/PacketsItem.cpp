@@ -139,6 +139,20 @@ namespace ejfat {
 
 
     /**
+     * Get pointer to array of structs with all packet data.
+     * @return pointer to array of structs with all packet data.
+     */
+    struct mmsghdr * PacketsItem::getPackets() {return packets;}
+
+
+    /**
+     * Get pointer to array of header data.
+     * @return pointer to array of header data.
+     */
+    reHeader * PacketsItem::getHeaders() {return headers;}
+
+
+    /**
      * Get pointer to struct with packet data in it.
      * @param index index into array of data.
      * @return pointer to struct with packet data in it, or nullptr if none.
@@ -161,6 +175,19 @@ namespace ejfat {
             return nullptr;
         }
         return &(headers[index]);
+    }
+
+
+    /**
+     * Get the data id of RE packet header at index.
+     * @param index index into array of info.
+     * @return data id of RE packet header at index, or -1 if index out of bounds.
+     */
+    int PacketsItem::getSource(uint32_t index) {
+        if (index >= pktsFilled) {
+            return -1;
+        }
+        return headers[index].dataId;
     }
 
 

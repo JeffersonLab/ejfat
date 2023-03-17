@@ -42,6 +42,9 @@ struct mmsghdr {
     unsigned int  msg_len;  /* Number of received bytes for header */
 };
 
+extern int recvmmsg(int sockfd, struct mmsghdr *msgvec, unsigned int vlen,
+                    int flags, struct timespec *timeout);
+
 #endif
 
 
@@ -79,6 +82,12 @@ namespace ejfat {
     //     };
 
 
+//        struct mmsghdr {
+//            struct msghdr msg_hdr;  /* Message header */
+//            unsigned int  msg_len;  /* Number of received bytes for header */
+//        };
+
+
         /** Place to store UDP packet data. */
         struct mmsghdr *packets;
 
@@ -103,8 +112,12 @@ namespace ejfat {
 
         PacketsItem & operator=(const PacketsItem & other) = delete;
 
+        struct mmsghdr * getPackets();
+        reHeader * getHeaders();
+
         struct mmsghdr * getPacket(uint32_t index);
         reHeader * getHeader(uint32_t index);
+        int getSource(uint32_t index);
 
         size_t getMaxPacketCount();
         size_t getPacketsFilled();
