@@ -85,7 +85,7 @@ namespace ejfat {
 
         BufferItem();
         BufferItem(const BufferItem & item);
-        ~BufferItem();
+//        ~BufferItem();
 
         BufferItem & operator=(const BufferItem & other) = delete;
 
