@@ -426,7 +426,7 @@ static void *rateThread(void *arg) {
                 currTotalBytes[i]     = stats[i]->acceptedBytes   = 0;
                 currTotalPackets[i]   = stats[i]->acceptedPackets = 0;
                 currDroppedPackets[i] = stats[i]->droppedPackets  = 0;
-                currDroppedPackets[i] = stats[i]->droppedTicks    = 0;
+                currDroppedPackets[i] = stats[i]->droppedBuffers    = 0;
                 currDroppedPackets[i] = stats[i]->builtBuffers    = 0;
             }
             if (allSources) skipFirst = false;
@@ -489,7 +489,7 @@ static void *rateThread(void *arg) {
 
 
         }
-        printf("     Combined Bufs:    %u\n\n", stats[0]->combinedBuffers);
+//        printf("     Combined Bufs:    %u\n\n", stats[0]->combinedBuffers);
 
         t1 = t2;
     }
@@ -921,17 +921,17 @@ static void *threadReadPackets(void *arg) {
                             exit(-1);
                         }
                         else {
-                            stats->droppedTicks += diff / tickPrescale;
-                            //printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedTicks, diff, packetTick, expectedTick);
+                            stats->droppedBuffers += diff / tickPrescale;
+                            //printf("Dropped %u, dif %lld, t %llu x %llu \n", stats->droppedBuffers, diff, packetTick, expectedTick);
                         }
                     }
 
                     // Total microsec to read buffer
                     stats->acceptedBytes += nBytes;
                     stats->acceptedPackets += sequence + 1;
-                    stats->droppedPackets = stats->droppedTicks * (sequence + 1);
+                    stats->droppedPackets = stats->droppedBuffers * (sequence + 1);
                     //printf("Pkts %llu, dropP %llu, dropT %u, t %llu x %llu \n",
-                    //             stats->acceptedPackets, stats->droppedPackets, stats->droppedTicks, packetTick, expectedTick);
+                    //             stats->acceptedPackets, stats->droppedPackets, stats->droppedBuffers, packetTick, expectedTick);
 
 #ifdef __linux__
                     // If core hasn't been pinned, track it
@@ -1282,9 +1282,9 @@ int main(int argc, char **argv) {
             }
         }
 //fprintf(stderr, "\n");
-        if (keepStats) {
-            stats[0]->combinedBuffers++;
-        }
+//        if (keepStats) {
+//            stats[0]->combinedBuffers++;
+//        }
     }
 
     return 0;
