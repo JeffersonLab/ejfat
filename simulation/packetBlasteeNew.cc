@@ -1024,7 +1024,7 @@ int main(int argc, char **argv) {
     //        stats = std::make_shared<packetRecvStats>();
     //        clearStats(stats);
     //    }
-    
+
 
     //---------------------------------------------------
     // Create socket to read data from source ID
@@ -1115,6 +1115,7 @@ int main(int argc, char **argv) {
     std::shared_ptr<Supplier<PacketsItem>> pktSupply =
             std::make_shared<Supplier<PacketsItem>>(pktRingSize, true);
 
+    fprintf(stderr, "1\n");
 
     //---------------------------------------------------
     // Supply in which each buf will hold reconstructed buffer.
@@ -1125,6 +1126,7 @@ int main(int argc, char **argv) {
     std::shared_ptr<Supplier<BufferItem>> supply =
             std::make_shared<Supplier<BufferItem>>(ringSize, true);
 
+    fprintf(stderr, "2\n");
 
     //---------------------------------------------------
     // Start thread to reassemble buffers of packets from all sources
@@ -1154,6 +1156,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "\n ******* error creating thread\n\n");
         return -1;
     }
+    fprintf(stderr, "3\n");
 
     //---------------------------------------------------
     // Thread to read and/or dump fully reassembled buffers
@@ -1182,6 +1185,7 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
+    fprintf(stderr, "4\n");
 
     //---------------------------------------------------
     // Start thread to do rate printout
@@ -1205,6 +1209,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    fprintf(stderr, "5\n");
 
     // Time Delay Here???
 
@@ -1224,6 +1229,7 @@ int main(int argc, char **argv) {
     again:
 
     while (true) {
+        fprintf(stderr, "6\n");
 
         // Read all UDP packets here
         item = pktSupply->get();
