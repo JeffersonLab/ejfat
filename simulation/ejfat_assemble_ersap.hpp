@@ -121,7 +121,8 @@ static inline uint64_t bswap_64(uint64_t x) {
             volatile uint64_t acceptedBytes;    /**< Number of bytes successfully read, NOT including RE header. */
             volatile uint64_t discardedBytes;   /**< Number of bytes dropped. */
 
-            volatile uint32_t droppedBuffers;    /**< Number of ticks/buffers for which no packets showed up. */
+            volatile uint32_t droppedBuffers;    /**< Number of ticks/buffers for which no packets showed up.
+                                                      Don't think it's possible to measure this in general. */
             volatile uint32_t discardedBuffers;  /**< Number of ticks/buffers discarded. */
             volatile uint32_t builtBuffers;      /**< Number of ticks/buffers fully reassembled. */
 
@@ -179,6 +180,11 @@ static inline uint64_t bswap_64(uint64_t x) {
             stats->cpuPkt = -1;
             stats->cpuBuf = -1;
             stats->cpuBuf = -1;
+        }
+
+
+        static void clearHeader(reHeader *hdr) {
+            std::memset(hdr, 0, sizeof(reHeader));
         }
 
 

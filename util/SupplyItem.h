@@ -72,6 +72,8 @@ namespace ejfat {
         SupplyItem();
         SupplyItem(const SupplyItem & item);
         ~SupplyItem() = default;
+
+    public:
         SupplyItem & operator=(const SupplyItem & other) = delete;
 
 

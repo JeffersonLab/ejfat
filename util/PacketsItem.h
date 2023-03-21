@@ -60,6 +60,7 @@ namespace ejfat {
 
     public:
 
+        /** Set dynamically by calling {@link #setEventFactorySettings(size_t)}. */
         static size_t factoryPacketCount;
 
     private:
@@ -124,10 +125,6 @@ namespace ejfat {
 
         void reset();
     };
-
-
-    static void parseReHeader(const char* buffer, reHeader* header);
-
 }
 
 

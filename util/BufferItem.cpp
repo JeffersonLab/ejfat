@@ -55,7 +55,6 @@ namespace ejfat {
         orderedRelease = SupplyItem::factoryOrderedRelease;
 
         buffer = std::make_shared<ByteBuffer>(bufferSize);
-        userInt = new int32_t[60];
         myId = idValue++;
     }
 
@@ -72,19 +71,13 @@ namespace ejfat {
             bufferSize       = item.bufferSize;
             order            = item.order;
             force            = item.force;
-            userInt          = new int32_t[60];
-            for (int i=0; i < getUserIntCount(); i++) {
-                userInt[i] = item.userInt[i];
-            }
+            isValidData      = item.isValidData;
+            userInt          = item.userInt;
             userLong         = item.userLong;
             userBoolean      = item.userBoolean;
+            header           = item.header;
         }
     }
-
-
-    BufferItem::~BufferItem() {
-        delete(userInt);
-    };
 
 
     /**
@@ -94,10 +87,12 @@ namespace ejfat {
         SupplyItem::reset();
 
         buffer->clear();
-        std::memset(userInt, 0, getUserIntCount()*sizeof(int32_t));
+        isValidData = true;
+        userInt = 0;
         userLong = 0L;
         force = false;
         userBoolean = false;
+        clearHeader(&header);
     }
 
 
@@ -106,6 +101,23 @@ namespace ejfat {
      * @return byte order used to build record.
      */
     ByteOrder BufferItem::getOrder() const {return order;}
+
+
+    /**
+     * Get a reference to stored reassembly header associated with data if any.
+     * @return reference to stored reassembly header associated with data if any, else nullptr.
+     */
+    reHeader & BufferItem::getHeader() {return header;}
+
+
+    /**
+     * Set the stored reassembly header associated with data if any.
+     * @param hdr reassembly header to copy.
+     */
+    void BufferItem::setHeader(reHeader *hdr) {
+        if (hdr == nullptr) return;
+        header = *hdr;
+    }
 
 
     /**
@@ -120,6 +132,20 @@ namespace ejfat {
      * @param frc flag used to suggest a forced write to a consumer.
      */
     void BufferItem::setForce(bool frc) {this->force = frc;}
+
+
+    /**
+     * Get whether buffer contains valid data or not.
+     * @return true if buffer contains valid data, else false.
+     */
+    bool BufferItem::validData() {return isValidData;}
+
+
+    /**
+     * Set whether buffer contains valid data or not.
+     * @param valid true if buffer contains valid data, else false.
+     */
+    void BufferItem::setValidData(bool valid) {isValidData = valid;}
 
 
     /**
@@ -138,18 +164,18 @@ namespace ejfat {
 
 
     /**
-    * Get the user integer array.
-    * Each int in array gets reset to 0 each time supply.get() is called.
-    * @return user integer array.
+    * Get the user integer.
+    * Gets reset to 0 each time supply.get() is called.
+    * @return user integer.
     */
-    int32_t* BufferItem::getUserInts() {return userInt;}
+    int32_t BufferItem::getUserInt() {return userInt;}
 
 
     /**
-     * Get the number of elements in user int array.
-     * @return number of elements in user int array.
+     * Set the user int.
+     * @param i user int.
      */
-    int BufferItem::getUserIntCount() {return 60;}
+    void BufferItem::setUserInt(int32_t i) {userInt = i;}
 
 
     /**

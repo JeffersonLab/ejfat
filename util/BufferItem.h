@@ -21,6 +21,7 @@
 #include "ByteOrder.h"
 #include "ByteBuffer.h"
 #include "SupplyItem.h"
+#include "ejfat_assemble_ersap.hpp"
 
 
 namespace ejfat {
@@ -50,6 +51,9 @@ namespace ejfat {
         /** Byte order of buffer. */
         ByteOrder order {ByteOrder::ENDIAN_LOCAL};
 
+        /** Reassembly header associated with this data, if any. */
+        reHeader header;
+
         /**
          * If true, and this item comes from a supply used in the sense of
          * single-producer-single-consumer, then this flag can relay to the
@@ -57,9 +61,12 @@ namespace ejfat {
          */
         bool force = false;
 
-        /** Extra integer array for user's convenience. Array will have 60 members.
-         *  Each int gets reset to 0 each time supply.get() is called. */
-        int32_t *userInt;
+        /** If true, the data contained in buffer is valid, else it isn't. */
+        bool isValidData = true;
+
+        /** Extra integer for user's convenience.
+         *  Gets reset to 0 each time supply.get() is called. */
+        int32_t userInt = 0;
 
         /** Extra long for user's convenience.
          *  Gets reset to 0 each time supply.get() is called. */
@@ -78,20 +85,32 @@ namespace ejfat {
 
         BufferItem();
         BufferItem(const BufferItem & item);
-        ~BufferItem();
+        ~BufferItem() = delete;
 
         BufferItem & operator=(const BufferItem & other) = delete;
 
         void reset();
 
         ByteOrder getOrder() const;
+
+        reHeader & getHeader();
+        void setHeader(reHeader *hdr);
+
         bool getForce() const;
         void setForce(bool force);
 
-        int32_t* getUserInts();
-        int      getUserIntCount();
+        int  getSourceId();
+        void setSourceId(int id);
+
+        bool validData();
+        void setValidData(bool valid);
+
+        int32_t  getUserInt();
+        void     setUserInt(int32_t i);
+
         int64_t  getUserLong() const;
         void     setUserLong(int64_t i);
+
         bool     getUserBoolean() const;
         void     setUserBoolean(bool usrBool);
 
