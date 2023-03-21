@@ -679,7 +679,7 @@ static void *threadAssemble(void *arg) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        std::cerr << "Run assemble reading thd for source " <<  sourceId << " on core " << core << "\n";
+        std::cerr << "Run assemble thd for all sources on core " << core << "\n";
         CPU_SET(core, &cpuset);
 
         pthread_t current_thread = pthread_self();
@@ -688,9 +688,9 @@ static void *threadAssemble(void *arg) {
             std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
         }
 
-        if (takeStats) {
-            stats->cpuBuf = sched_getcpu();
-        }
+//        if (takeStats) {
+//            stats->cpuBuf = sched_getcpu();
+//        }
     }
 
 #endif
@@ -906,7 +906,7 @@ static void *threadAssemble(void *arg) {
  * @param arg
  * @return
  */
-static void *threadReadPackets(void *arg) {
+static void *threadReadBuffers(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
 
@@ -916,33 +916,8 @@ static void *threadReadPackets(void *arg) {
     bool debug    = tArg->debug;
     auto stats    = tArg->stats;
     auto & mapp = (*(stats.get()));
-    int sourceCount = tArg->sourceCount;
 
     std::shared_ptr<BufferItem>  bufItem;
-
-
-#ifdef __linux__
-
-    if (core > -1) {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        std::cerr << "Run pkt reading thd for source " <<  sourceId << " on core " << core << "\n";
-        CPU_SET(core, &cpuset);
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-
-        if (takeStats) {
-            stats->cpuPkt = sched_getcpu();
-        }
-    }
-
-#endif
 
     while (true) {
         // Grab a fully reassembled buffer from Supplier
