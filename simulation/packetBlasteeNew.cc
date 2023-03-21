@@ -956,7 +956,7 @@ int main(int argc, char **argv) {
     char filename[101];
     memset(filename, 0, 101);
 
-    for (int i=0; i < 128; i++) {
+    for (int i = 0; i < 128; i++) {
         sourceIds[i] = -1;
     }
 
@@ -966,7 +966,7 @@ int main(int argc, char **argv) {
     pinCores = startingCore >= 0 ? true : false;
     pinBufCores = startingBufCore >= 0 ? true : false;
 
-    for (int i=0; i < 128; i++) {
+    for (int i = 0; i < 128; i++) {
         if (sourceIds[i] > -1) {
             sourceCount++;
             std::cerr << "Expecting source " << sourceIds[i] << " in position " << i << std::endl;
@@ -978,7 +978,7 @@ int main(int argc, char **argv) {
 
     if (sourceCount < 1) {
         sourceIds[0] = 0;
-        sourceCount  = 1;
+        sourceCount = 1;
         std::cerr << "Defaulting to (single) source id = 0" << std::endl;
     }
 
@@ -1003,8 +1003,8 @@ int main(int argc, char **argv) {
 
     // Shared pointer to map w/ key = source id & val = shared ptr of stats object
     auto stats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
-    auto & mapp = (*(stats.get()));
-    for (int i=0; i < sourceCount; i++) {
+    auto &mapp = (*(stats.get()));
+    for (int i = 0; i < sourceCount; i++) {
         if (keepStats) {
             mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
             clearStats(mapp[sourceIds[i]]);
@@ -1014,11 +1014,11 @@ int main(int argc, char **argv) {
         }
     }
 
-//    std::shared_ptr<packetRecvStats> stats = nullptr;
-//    if (keepStats) {
-//        stats = std::make_shared<packetRecvStats>();
-//        clearStats(stats);
-//    }
+    //    std::shared_ptr<packetRecvStats> stats = nullptr;
+    //    if (keepStats) {
+    //        stats = std::make_shared<packetRecvStats>();
+    //        clearStats(stats);
+    //    }
 
 
 
@@ -1131,11 +1131,11 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    tArg2->bufSupply  = supply;
-    tArg2->pktSupply  = pktSupply;
-    tArg2->stats      = stats;
-    tArg2->dump       = dumpBufs;
-    tArg2->debug      = debug;
+    tArg2->bufSupply = supply;
+    tArg2->pktSupply = pktSupply;
+    tArg2->stats = stats;
+    tArg2->dump = dumpBufs;
+    tArg2->debug = debug;
     tArg2->sourceCount = sourceCount;
     if (pinBufCores) {
         tArg2->core = startingBufCore;
@@ -1217,7 +1217,7 @@ int main(int argc, char **argv) {
 #endif
 
 
-again:
+    again:
 
     while (true) {
 
@@ -1234,13 +1234,13 @@ again:
                 goto again;
             }
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
-            exit (-1);
+            exit(-1);
         }
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
 
-        for (int i=0; i < packetCount; i++) {
+        for (int i = 0; i < packetCount; i++) {
             unsigned int dataLen = item->getPacket(i)->msg_len;
             if (dataLen < 20) {
                 // didn't read in enough data for even the header, ERROR
@@ -1264,6 +1264,7 @@ again:
         }
 #endif
 
-    return 0;
+        return 0;
+    }
 }
 
