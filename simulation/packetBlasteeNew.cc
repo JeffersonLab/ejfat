@@ -1246,6 +1246,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
+        fprintf(stderr, "7\n");
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
@@ -1259,8 +1260,10 @@ int main(int argc, char **argv) {
                                  item->getHeader(i));
         }
 
+        fprintf(stderr, "8\n");
         // Send data to reassembly thread for consumption
         pktSupply->publish(item);
+        fprintf(stderr, "9\n");
 
 #ifdef __linux__
         // Finish up some stats
@@ -1273,8 +1276,8 @@ int main(int argc, char **argv) {
             }
         }
 #endif
-
-        return 0;
     }
+
+    return 0;
 }
 
