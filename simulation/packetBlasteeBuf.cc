@@ -1228,9 +1228,10 @@ int main(int argc, char **argv) {
             // Release buffer back to supply for reuse
             supply->release(item);
         }
-        if (keepStats) {
-            stats[0]->combinedBuffers++;
-        }
+
+//        if (keepStats) {
+//            stats[0]->combinedBuffers++;
+//        }
     }
 
     return 0;
