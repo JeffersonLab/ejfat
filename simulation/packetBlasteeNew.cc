@@ -1172,7 +1172,7 @@ int main(int argc, char **argv) {
         tArg->tickPrescale = 1;
 
         pthread_t thd;
-        status = pthread_create(&thd, NULL, threadReadPackets, (void *) tArg);
+        status = pthread_create(&thd, NULL, threadReadBuffers, (void *) tArg);
         if (status != 0) {
             fprintf(stderr, "Error creating thread for reading pkts\n");
             return -1;
@@ -1257,7 +1257,7 @@ again:
         if (keepStats & !pinCores) {
             // If core hasn't been pinned, track it
             if ((startingCore < 0) && (loopCount-- < 1)) {
-                cpuPkt = sched_getcpu();
+                int cpuPkt = sched_getcpu();
                 loopCount = cpuLoops;
 //printf("Read pkt thd: get CPU\n");
             }
