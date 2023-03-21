@@ -13,26 +13,28 @@
  * <p>
  * Receive generated data sent by packetBlaster.c program(s).
  * This assumes there is an emulator or FPGA between this and the sending program.
- * Note that this program uses fast, non-locking, concurrent queues
- * (see blockingconcurrentqueue.h, concurrentqueue.h, readerwritercircularqueue.h,
- * readerwriterqueue.h, atomicops.h, and lightweightsemaphore.h).
+ * Note that this program uses fast, non-locking ring buffers.
  * </p>
  *
  * <p>
- * In this program, a single thread reads from a single socket in which packets from multiple data sources
- * are arriving. There is a concurrent queue with pre-allocated structures in which to store the
- * incoming packets. There is another thread which reads packets from that queue in order to do the
- * reassembly.
+ * In this program, a single, main thread reads from a single socket in which packets from multiple data sources
+ * are arriving. There is a ring buffer with pre-allocated structures in which to store the
+ * incoming packets. There is second thread which reads packets from that ring in order to do the
+ * reassembly. There are also threads to do calculate rates and to read/dump reassembled buffers.
  * </p>
  * <p>
- * There are other queues, each with buffers in which to store reassembled data, one for each incoming data source.
- * In a second thread, packets are retrieved from that packet queue. Depending on the source, a buffer from that
- * source's buffer queue will be filled with corresponding data. When a buffer is fully reassembled, it's put back
- * into the buffer queue from which it came. Note that while a buffer is being reassembled there is a place to store
+ * There are maps temporarily containing buffers in which to store reassembled data,
+ * one for each incoming data source and specific tick.
+ * The buffers come from a ring source much like the structs that hold packets also come from a (different) ring.
+ * In the second thread, packets are retrieved from that packet ring. These are placed in the proper buffer.
+ * A buffer for a specific source/tick may already exist
+ * (if not a new buf is grabbed) and it's filled with corresponding data.
+ * When a buffer is fully reassembled, it's put back into the buffer ring from which it came.
+ * Note that while a buffer is being reassembled there is a place to store
  * it and find it according to its tick value (in unordered_map).
  * </p>
  * </p>
- * Finally, there is a thread which pulls off all reassembled buffers.
+ * There is a thread which pulls off all reassembled buffers. Also another to do stats.
  * </p>
  *
  */
@@ -44,13 +46,9 @@
 #include <cmath>
 #include <chrono>
 #include <atomic>
-#include <algorithm>
 #include <cstring>
 #include <unordered_map>
 #include <errno.h>
-
-#include "BufferSupply.h"
-#include "BufferSupplyItem.h"
 
 #include "BufferItem.h"
 #include "PacketsItem.h"
@@ -919,13 +917,20 @@ static void *threadReadBuffers(void *arg) {
 
     std::shared_ptr<BufferItem>  bufItem;
 
-    while (true) {
-        // Grab a fully reassembled buffer from Supplier
-        bufItem = bufSupply->get();
+    // If bufs are not already dumped by the reassembly thread,
+    // we need to put them back into the supply now.
+    if (!dumpBufs) {
+        while (true) {
+            // Grab a fully reassembled buffer from Supplier
+            bufItem = bufSupply->get();
 
-        // Release item for reuse
-        bufSupply->release(bufItem);
+            // Release item for reuse
+            bufSupply->release(bufItem);
+        }
     }
+
+    // Thread not needed and can exit.
+    return nullptr;
 
 }
 
@@ -1019,8 +1024,7 @@ int main(int argc, char **argv) {
     //        stats = std::make_shared<packetRecvStats>();
     //        clearStats(stats);
     //    }
-
-
+    
 
     //---------------------------------------------------
     // Create socket to read data from source ID
