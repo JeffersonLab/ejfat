@@ -1239,7 +1239,7 @@ int main(int argc, char **argv) {
         // Collect packets until full or timeout expires.
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
         // @ 1MB/sec ---> 1.8 sec
-        int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
+        int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
         fprintf(stderr, "6.2\n");
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
