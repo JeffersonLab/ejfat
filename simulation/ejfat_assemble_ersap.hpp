@@ -38,7 +38,6 @@
 #include <arpa/inet.h>
 
 #include "Supplier.h"
-#include "PacketsItem.h"
 
 
 #ifdef __APPLE__
