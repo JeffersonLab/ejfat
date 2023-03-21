@@ -1234,10 +1234,13 @@ int main(int argc, char **argv) {
         // Read all UDP packets here
         item = pktSupply->get();
 
+        fprintf(stderr, "6.1\n");
+
         // Collect packets until full or timeout expires.
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
         // @ 1MB/sec ---> 1.8 sec
         int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
+        fprintf(stderr, "6.2\n");
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // if timeout, go 'round again
@@ -1246,6 +1249,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
+
         fprintf(stderr, "7\n");
 
         // Since all the packets have been read in, parse the headers
