@@ -669,6 +669,9 @@ static void *threadAssemble(void *arg) {
     std::shared_ptr<PacketsItem> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
 
+    printf("Assemble: 1\n");
+
+
 #ifdef __linux__
 
     if (core > -1) {
@@ -706,6 +709,7 @@ static void *threadAssemble(void *arg) {
     // One tick for each source: key = source id, val = largest tick value to be reassembled
     std::unordered_map<int, uint64_t> largestSavedTick;
 
+    printf("Assemble: 2\n");
 
     while (true) {
 
@@ -720,6 +724,7 @@ static void *threadAssemble(void *arg) {
         pmap = nullptr;
 
         // TODO: do we want to catch packetCount < 1 here?
+        printf("Assemble: 3\n");
 
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
@@ -763,6 +768,7 @@ static void *threadAssemble(void *arg) {
             int32_t pktsSoFar  = bufItem->getUserInt();
             int64_t bytesSoFar = bufItem->getUserLong();
             int64_t dataLen = pktItem->getPacket(i)->msg_len - HEADER_BYTES;
+            printf("Assemble: 4\n");
 
             // Do we have memory to store entire buf? If not, expand.
             if (hdr->length > bufItem->getBuffer()->capacity()) {
@@ -823,6 +829,7 @@ static void *threadAssemble(void *arg) {
                     bufSupply->publish(bufItem);
                 }
             }
+            printf("Assemble: 5\n");
         }
 
         // If here, we've gone thru a bundle of UDP packets,
@@ -834,6 +841,7 @@ static void *threadAssemble(void *arg) {
         // from being completely reassembled and need to cleared out.
         // So, for each source, take biggest tick to be saved and remove all existing ticks
         // less than 2*tickPrescale and still being constructed. Keep stats.
+        printf("Assemble: 6\n");
 
         // Iterate over map
         for (const auto& n : largestSavedTick) {
@@ -846,6 +854,7 @@ static void *threadAssemble(void *arg) {
                 for (const auto &nn: *pm) {
                     uint64_t tck = nn.first;
                     std::shared_ptr<BufferItem> bItem = nn.second;
+                    printf("Assemble: 7\n");
 
                     // Remember, tick values do NOT wrap around
                     if (tck < tick - 2 * tickPrescale) {
@@ -879,6 +888,7 @@ static void *threadAssemble(void *arg) {
             }
         }
 
+        printf("Assemble: 8\n");
 
         // Finish up some stats
         if (takeStats) {
