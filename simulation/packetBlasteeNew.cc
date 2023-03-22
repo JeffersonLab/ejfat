@@ -1243,7 +1243,7 @@ int main(int argc, char **argv) {
         //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
         int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
 
-//        fprintf(stderr, "6.2\n");
+        fprintf(stderr, "recvmmsg: pkt count = %d\n", packetCount);
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // if timeout, go 'round again
