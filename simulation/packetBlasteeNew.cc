@@ -775,6 +775,7 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
                 // Preserves all existing data while increasing underlying array
                 bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
             }
+            printf("Assemble: 4.1\n");
 
             // The neat thing about doing it this way is we don't have to track out-of-order packets.
             // We don't have to copy and store them!
@@ -792,6 +793,7 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
             memcpy(bufItem->getBuffer()->array() + hdr->offset,
                    pktItem->getPacket(i)->msg_hdr.msg_iov[1].iov_base,
                    dataLen);
+            printf("Assemble: 4.2\n");
 
             // Keep track of how much we've written so far
             bytesSoFar += dataLen;
@@ -800,11 +802,13 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
             // Track # of packets written so far (will double count for duplicate packets)
             pktsSoFar++;
             bufItem->setUserInt(pktsSoFar);
+            printf("Assemble: 4.3\n");
 
             // If we've written all data to this buf ...
             if (bytesSoFar >= hdr->length) {
                 // Done with this buffer, so set its limit to proper value
                 bufItem->getBuffer()->limit(bytesSoFar);
+                printf("Assemble: 4.4\n");
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
@@ -814,11 +818,13 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
                     mapp[srcId]->builtBuffers++;
                     mapp[srcId]->acceptedPackets += bufItem->getUserInt();
                 }
+                printf("Assemble: 4.5\n");
 
                 // Track the biggest tick to be saved from this source
                 if (hdr->tick > largestSavedTick[srcId]) {
                     largestSavedTick[srcId] = hdr->tick;
                 }
+                printf("Assemble: 4.6\n");
 
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
