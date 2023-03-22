@@ -909,11 +909,12 @@ static void *threadReadBuffers(void *arg) {
     threadArg *tArg = (threadArg *) arg;
 
     std::shared_ptr<Supplier<BufferItem>>  bufSupply = tArg->bufSupply;
-    std::shared_ptr<Supplier<PacketsItem>> pktSupply = tArg->pktSupply;
     bool dumpBufs = tArg->dump;
-    bool debug    = tArg->debug;
-    auto stats    = tArg->stats;
-    auto & mapp = (*(stats.get()));
+//    bool debug    = tArg->debug;
+//    auto stats    = tArg->stats;
+//    auto & mapp = (*(stats.get()));
+
+    int count = 0;
 
     std::shared_ptr<BufferItem>  bufItem;
 
@@ -921,6 +922,7 @@ static void *threadReadBuffers(void *arg) {
     // we need to put them back into the supply now.
     if (!dumpBufs) {
         while (true) {
+printf("ReadBufs: get buf #%d\n", count++);
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupply->consumerGet();
 
@@ -931,7 +933,6 @@ static void *threadReadBuffers(void *arg) {
 
     // Thread not needed and can exit.
     return nullptr;
-
 }
 
 
