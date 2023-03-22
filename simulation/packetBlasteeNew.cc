@@ -668,7 +668,7 @@ static void *threadAssemble(void *arg) {
     std::shared_ptr<BufferItem>  bufItem;
     std::shared_ptr<PacketsItem> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
-    
+
 #ifdef __linux__
 
     if (core > -1) {

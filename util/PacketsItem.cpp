@@ -47,61 +47,61 @@ namespace ejfat {
      */
     PacketsItem::PacketsItem() : SupplyItem() {
         maxPktCount = factoryPacketCount;
-        maxPktCount = 200;
+//        maxPktCount = 200;
         pktsFilled  = 0;
         myId        = idValue++;
 
-//        // Allocate array of reHeader structs each containing a single parsed RE header.
-//        // One of these for each UDP packet read in.
-//        headers = new reHeader[maxPktCount];
-//
-//        // Allocate array of mmsghdr structs each containing a single UDP packet
-//        // (spread over 2 buffers, 1 for hdr, 1 for data).
-//        packets = new struct mmsghdr[maxPktCount];
-//        memset(packets, 0, sizeof(*packets));
-//
-//        for (int i = 0; i < maxPktCount; i++) {
-////            packets[i].msg_hdr.msg_name = nullptr;
-////            packets[i].msg_hdr.msg_namelen = 0;
-//
-//            packets[i].msg_hdr.msg_iov = new struct iovec[2];
-//            packets[i].msg_hdr.msg_iovlen = 2;
-//            memset(packets[i].msg_hdr.msg_iov, 0, sizeof(struct iovec[2]));
-//
-//            // Where RE header goes
-//            packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
-//            packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
-//
-//            // Where data goes (can hold jumbo frame)
-//            packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
-//            packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
-//        }
-
         // Allocate array of reHeader structs each containing a single parsed RE header.
         // One of these for each UDP packet read in.
-        memset(hdrs, 0, sizeof(hdrs));
-        memset(iovecs, 0, sizeof(iovecs));
+        headers = new reHeader[maxPktCount];
 
         // Allocate array of mmsghdr structs each containing a single UDP packet
         // (spread over 2 buffers, 1 for hdr, 1 for data).
-        packets = msgs;
-        memset(msgs, 0, sizeof(msgs));
+        packets = new struct mmsghdr[maxPktCount];
+        memset(packets, 0, sizeof(*packets));
 
-        for (int i = 0; i < 200; i++) {
-            msgs[i].msg_hdr.msg_name = nullptr;
-            msgs[i].msg_hdr.msg_namelen = 0;
+        for (int i = 0; i < maxPktCount; i++) {
+//            packets[i].msg_hdr.msg_name = nullptr;
+//            packets[i].msg_hdr.msg_namelen = 0;
 
-            packets[i].msg_hdr.msg_iov = &iovecs[i*2];
+            packets[i].msg_hdr.msg_iov = new struct iovec[2];
             packets[i].msg_hdr.msg_iovlen = 2;
+            memset(packets[i].msg_hdr.msg_iov, 0, sizeof(struct iovec[2]));
 
             // Where RE header goes
-            packets[i].msg_hdr.msg_iov[0].iov_base = rcvHdr[i];
-            packets[i].msg_hdr.msg_iov[0].iov_len = 20;
+            packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
+            packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
 
             // Where data goes (can hold jumbo frame)
-            packets[i].msg_hdr.msg_iov[1].iov_base = rcvBuf[i];
+            packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
             packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
         }
+
+//        // Allocate array of reHeader structs each containing a single parsed RE header.
+//        // One of these for each UDP packet read in.
+//        memset(hdrs, 0, sizeof(hdrs));
+//        memset(iovecs, 0, sizeof(iovecs));
+//
+//        // Allocate array of mmsghdr structs each containing a single UDP packet
+//        // (spread over 2 buffers, 1 for hdr, 1 for data).
+//        packets = msgs;
+//        memset(msgs, 0, sizeof(msgs));
+//
+//        for (int i = 0; i < 200; i++) {
+//            msgs[i].msg_hdr.msg_name = nullptr;
+//            msgs[i].msg_hdr.msg_namelen = 0;
+//
+//            packets[i].msg_hdr.msg_iov = &iovecs[i*2];
+//            packets[i].msg_hdr.msg_iovlen = 2;
+//
+//            // Where RE header goes
+//            packets[i].msg_hdr.msg_iov[0].iov_base = rcvHdr[i];
+//            packets[i].msg_hdr.msg_iov[0].iov_len = 20;
+//
+//            // Where data goes (can hold jumbo frame)
+//            packets[i].msg_hdr.msg_iov[1].iov_base = rcvBuf[i];
+//            packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
+//        }
 
     }
 
@@ -153,57 +153,57 @@ namespace ejfat {
             maxPktCount = item.maxPktCount;
             pktsFilled = item.pktsFilled;
 
-//            // Allocate mem for parsed hdrs
-//            headers = new reHeader[maxPktCount];
-//            // Copy over valid headers
-//            memcpy(headers, item.headers, maxPktCount * sizeof(reHeader));
-//
-//            // Allocate mem for packets
-//            packets = new mmsghdr[maxPktCount];
-//            memset(packets, 0, sizeof(*packets));
-//
-//            for (int i = 0; i < maxPktCount; i++) {
-//                packets[i].msg_hdr.msg_name = nullptr;
-//                packets[i].msg_hdr.msg_namelen = 0;
-//
-//                packets[i].msg_hdr.msg_iov = new struct iovec[2];
-//                packets[i].msg_hdr.msg_iovlen = 2;
-//                memset(packets[i].msg_hdr.msg_iov, 0, sizeof(struct iovec[2]));
-//
-//                // Where RE header goes
-//                packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
-//                packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
-//
-//                // Where data goes
-//                packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
-//                packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
-//            }
+            // Allocate mem for parsed hdrs
+            headers = new reHeader[maxPktCount];
+            // Copy over valid headers
+            memcpy(headers, item.headers, maxPktCount * sizeof(reHeader));
 
-            // Allocate array of reHeader structs each containing a single parsed RE header.
-            // One of these for each UDP packet read in.
-            memset(hdrs, 0, sizeof(hdrs));
-            memset(iovecs, 0, sizeof(iovecs));
+            // Allocate mem for packets
+            packets = new mmsghdr[maxPktCount];
+            memset(packets, 0, sizeof(*packets));
 
-            // Allocate array of mmsghdr structs each containing a single UDP packet
-            // (spread over 2 buffers, 1 for hdr, 1 for data).
-            packets = msgs;
-            memset(msgs, 0, sizeof(msgs));
+            for (int i = 0; i < maxPktCount; i++) {
+                packets[i].msg_hdr.msg_name = nullptr;
+                packets[i].msg_hdr.msg_namelen = 0;
 
-            for (int i = 0; i < 200; i++) {
-                msgs[i].msg_hdr.msg_name = nullptr;
-                msgs[i].msg_hdr.msg_namelen = 0;
-
-                packets[i].msg_hdr.msg_iov = &iovecs[i*2];
+                packets[i].msg_hdr.msg_iov = new struct iovec[2];
                 packets[i].msg_hdr.msg_iovlen = 2;
+                memset(packets[i].msg_hdr.msg_iov, 0, sizeof(struct iovec[2]));
 
                 // Where RE header goes
-                packets[i].msg_hdr.msg_iov[0].iov_base = rcvHdr[i];
-                packets[i].msg_hdr.msg_iov[0].iov_len = 20;
+                packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
+                packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
 
-                // Where data goes (can hold jumbo frame)
-                packets[i].msg_hdr.msg_iov[1].iov_base = rcvBuf[i];
+                // Where data goes
+                packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
                 packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
             }
+
+//            // Allocate array of reHeader structs each containing a single parsed RE header.
+//            // One of these for each UDP packet read in.
+//            memset(hdrs, 0, sizeof(hdrs));
+//            memset(iovecs, 0, sizeof(iovecs));
+//
+//            // Allocate array of mmsghdr structs each containing a single UDP packet
+//            // (spread over 2 buffers, 1 for hdr, 1 for data).
+//            packets = msgs;
+//            memset(msgs, 0, sizeof(msgs));
+//
+//            for (int i = 0; i < 200; i++) {
+//                msgs[i].msg_hdr.msg_name = nullptr;
+//                msgs[i].msg_hdr.msg_namelen = 0;
+//
+//                packets[i].msg_hdr.msg_iov = &iovecs[i*2];
+//                packets[i].msg_hdr.msg_iovlen = 2;
+//
+//                // Where RE header goes
+//                packets[i].msg_hdr.msg_iov[0].iov_base = rcvHdr[i];
+//                packets[i].msg_hdr.msg_iov[0].iov_len = 20;
+//
+//                // Where data goes (can hold jumbo frame)
+//                packets[i].msg_hdr.msg_iov[1].iov_base = rcvBuf[i];
+//                packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
+//            }
 
 
             // Copy over packet data
