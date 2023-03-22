@@ -812,6 +812,7 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
+                printf("Assemble: 4.4.1\n");
 
                 if (takeStats) {
                     mapp[srcId]->acceptedBytes += hdr->length;
