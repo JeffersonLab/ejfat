@@ -50,30 +50,60 @@ namespace ejfat {
         pktsFilled  = 0;
         myId        = idValue++;
 
+        fprintf(stderr, "PacketsItem: 1\n");
         // Allocate array of reHeader structs each containing a single parsed RE header.
         // One of these for each UDP packet read in.
         headers = new reHeader[maxPktCount];
+        fprintf(stderr, "PacketsItem: 2\n");
 
         // Allocate array of mmsghdr structs each containing a single UDP packet
         // (spread over 2 buffers, 1 for hdr, 1 for data).
-        packets = new mmsghdr[maxPktCount];
+        packets = new struct mmsghdr[maxPktCount];
+        memset(packets, 0, sizeof(*packets));
+        fprintf(stderr, "PacketsItem: 3\n");
 
         for (int i = 0; i < maxPktCount; i++) {
             packets[i].msg_hdr.msg_iov = new struct iovec[2];
             packets[i].msg_hdr.msg_iovlen = 2;
+            fprintf(stderr, "PacketsItem: 4\n");
 
             // Where RE header goes
             packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];
             packets[i].msg_hdr.msg_iov[0].iov_len = HEADER_BYTES;
+            fprintf(stderr, "PacketsItem: 5\n");
 
             // Where data goes (can hold jumbo frame)
             packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
             packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
+            fprintf(stderr, "PacketsItem: 6\n");
         }
     }
 
 
-    /**
+
+//            #define VLEN 10
+//            #define BUFSIZE 200
+//            #define TIMEOUT 1
+//                int i;
+//                struct mmsghdr msgs[VLEN];
+//                struct iovec iovecs[VLEN];
+//                char bufs[VLEN][BUFSIZE+1];
+//
+//
+//            memset(msgs, 0, sizeof(msgs));
+//            for (i = 0; i < VLEN; i++) {
+//            iovecs[i].iov_base         = bufs[i];
+//            iovecs[i].iov_len          = BUFSIZE;
+//            msgs[i].msg_hdr.msg_iov    = &iovecs[i];
+//            msgs[i].msg_hdr.msg_iovlen = 1;
+//            }
+//
+
+//
+//            retval = recvmmsg(sockfd, msgs, VLEN, 0, &timeout);
+
+
+/**
      * Copy constructor.
      * @param item ring item to copy.
      */
@@ -91,6 +121,7 @@ namespace ejfat {
 
             // Allocate mem for packets
             packets = new mmsghdr[maxPktCount];
+            memset(packets, 0, sizeof(*packets));
 
             for (int i = 0; i < maxPktCount; i++) {
                 packets[i].msg_hdr.msg_iov = new struct iovec[2];
