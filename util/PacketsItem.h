@@ -95,6 +95,14 @@ namespace ejfat {
         /** Place to store parsed reassembly header info. */
         reHeader *headers;
 
+
+        reHeader hdrs[200];
+        char rcvBuf[200][9000];
+        char rcvHdr[200][20];
+        struct iovec iovecs[400];
+        struct mmsghdr msgs[200];
+
+
         /** Max number of UDP packets that can be stored. */
         size_t maxPktCount;
 
