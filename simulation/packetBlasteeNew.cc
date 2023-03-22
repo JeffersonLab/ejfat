@@ -1254,8 +1254,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
         // @ 1MB/sec ---> 1.8 sec
         //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
-        int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
-
+        int packetCount = 0;
+#ifdef __linux__
+        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
+#endif
         fprintf(stderr, "recvmmsg: pkt count = %d\n", packetCount);
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
