@@ -815,8 +815,11 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
                 printf("Assemble: 4.4.1\n");
 
                 if (takeStats) {
+                    printf("Assemble: 4.4.2\n");
                     mapp[srcId]->acceptedBytes += hdr->length;
+                    printf("Assemble: 4.4.3\n");
                     mapp[srcId]->builtBuffers++;
+                    printf("Assemble: 4.4.4\n");
                     mapp[srcId]->acceptedPackets += bufItem->getUserInt();
                 }
                 printf("Assemble: 4.5\n");
