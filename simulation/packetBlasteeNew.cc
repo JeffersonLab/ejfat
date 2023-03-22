@@ -815,6 +815,7 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
                 printf("Assemble: 4.4.1\n");
 
                 if (takeStats) {
+                    fprintf(stderr, "Look up stat for source %d\n", srcId);
                     printf("Assemble: 4.4.2\n");
                     mapp[srcId]->acceptedBytes += hdr->length;
                     printf("Assemble: 4.4.3\n");
@@ -1028,11 +1029,12 @@ int main(int argc, char **argv) {
 
     // Shared pointer to map w/ key = source id & val = shared ptr of stats object
     auto stats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
-    auto &mapp = (*(stats.get()));
+    auto &mapp = *stats;
     for (int i = 0; i < sourceCount; i++) {
         if (keepStats) {
-            stats->insert(std::make_pair(sourceIds[i], std::make_shared<packetRecvStats>()));
-            //mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
+      //      stats->insert(std::make_pair(sourceIds[i], std::make_shared<packetRecvStats>()));
+fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
+            mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
             clearStats(mapp[sourceIds[i]]);
         }
         else {
