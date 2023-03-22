@@ -47,6 +47,7 @@ namespace ejfat {
      */
     PacketsItem::PacketsItem() : SupplyItem() {
         maxPktCount = factoryPacketCount;
+        maxPktCount = 200;
         pktsFilled  = 0;
         myId        = idValue++;
 
