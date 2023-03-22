@@ -643,7 +643,7 @@ static void *threadAssemble(void *arg) {
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
     auto stats    = tArg->stats;
-    auto & mapp = (*(stats.get()));
+    auto & mapp = *stats;
 
     int core = tArg->core;
     int sourceCount = tArg->sourceCount;
@@ -1031,7 +1031,8 @@ int main(int argc, char **argv) {
     auto &mapp = (*(stats.get()));
     for (int i = 0; i < sourceCount; i++) {
         if (keepStats) {
-            mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
+            stats->insert(std::make_pair(sourceIds[i], std::make_shared<packetRecvStats>()));
+            //mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
             clearStats(mapp[sourceIds[i]]);
         }
         else {
