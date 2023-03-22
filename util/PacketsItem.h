@@ -129,7 +129,9 @@ namespace ejfat {
         int getSource(uint32_t index);
 
         size_t getMaxPacketCount();
+
         size_t getPacketsFilled();
+        void setPacketsFilled(size_t count);
 
         void reset();
     };

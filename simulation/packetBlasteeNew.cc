@@ -1267,6 +1267,9 @@ int main(int argc, char **argv) {
                                  item->getHeader(i));
         }
 
+        // Keep tabs on how many valid packets we have
+        item->setPacketsFilled(packetCount);
+
 //        fprintf(stderr, "8\n");
         // Send data to reassembly thread for consumption
         pktSupply->publish(item);

@@ -304,4 +304,12 @@ namespace ejfat {
      * @return current number of valid packets that are stored in this item.
      */
     size_t PacketsItem::getPacketsFilled() {return pktsFilled;}
+
+
+    /**
+     * set the current number of valid packets that are stored in this item.
+     * @param count current number of valid packets that are stored in this item.
+     */
+    void PacketsItem::setPacketsFilled(size_t count) {pktsFilled = count;}
+
 }
