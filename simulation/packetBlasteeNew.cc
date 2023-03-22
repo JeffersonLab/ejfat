@@ -1234,7 +1234,7 @@ int main(int argc, char **argv) {
         // Read all UDP packets here
         item = pktSupply->get();
 
-        fprintf(stderr, "6.1\n");
+        fprintf(stderr, "6.1, item = %p\n", item.get());
 
         // Collect packets until full or timeout expires.
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
