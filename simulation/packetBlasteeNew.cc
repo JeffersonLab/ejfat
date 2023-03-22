@@ -922,9 +922,10 @@ static void *threadReadBuffers(void *arg) {
     // we need to put them back into the supply now.
     if (!dumpBufs) {
         while (true) {
-printf("ReadBufs: get buf #%d\n", count++);
+printf("ReadBufs: get buf #%d, supply = %p\n", count++, bufSupply.get());
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupply->consumerGet();
+printf("ReadBufs: release bufItem\n");
 
             // Release item for reuse
             bufSupply->release(bufItem);
@@ -1133,7 +1134,7 @@ int main(int argc, char **argv) {
     // Start thread to reassemble buffers of packets from all sources
     //---------------------------------------------------
     threadArg *tArg2 = (threadArg *) calloc(1, sizeof(threadArg));
-    if (tArg2 == NULL) {
+    if (tArg2 == nullptr) {
         fprintf(stderr, "\n ******* ran out of memory\n\n");
         exit(1);
     }
