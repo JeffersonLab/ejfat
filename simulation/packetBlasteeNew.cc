@@ -668,9 +668,7 @@ static void *threadAssemble(void *arg) {
     std::shared_ptr<BufferItem>  bufItem;
     std::shared_ptr<PacketsItem> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
-
-    printf("ReadBufs: buf supply = %p\n", bufSupply.get());
-
+    
 #ifdef __linux__
 
     if (core > -1) {
@@ -923,10 +921,9 @@ static void *threadReadBuffers(void *arg) {
     // we need to put them back into the supply now.
     if (!dumpBufs) {
         while (true) {
-printf("ReadBufs: get buf #%d, supply = %p\n", count++, bufSupply.get());
+//printf("ReadBufs: get buf #%d, supply = %p\n", count++, bufSupply.get());
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupply->consumerGet();
-printf("ReadBufs: release bufItem\n");
 
             // Release item for reuse
             bufSupply->release(bufItem);
@@ -1118,8 +1115,6 @@ int main(int argc, char **argv) {
     std::shared_ptr<Supplier<PacketsItem>> pktSupply =
             std::make_shared<Supplier<PacketsItem>>(pktRingSize, true);
 
-    fprintf(stderr, "1\n");
-
     //---------------------------------------------------
     // Supply in which each buf will hold reconstructed buffer.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
@@ -1128,8 +1123,6 @@ int main(int argc, char **argv) {
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
     std::shared_ptr<Supplier<BufferItem>> supply =
             std::make_shared<Supplier<BufferItem>>(ringSize, true);
-
-    fprintf(stderr, "2\n");
 
     //---------------------------------------------------
     // Start thread to reassemble buffers of packets from all sources
@@ -1159,7 +1152,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "\n ******* error creating thread\n\n");
         return -1;
     }
-    fprintf(stderr, "3\n");
 
     //---------------------------------------------------
     // Thread to read and/or dump fully reassembled buffers
@@ -1171,12 +1163,11 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        tArg2->bufSupply = supply;
-        tArg2->pktSupply = pktSupply;
-        tArg2->stats = stats;
-        tArg2->dump = dumpBufs;
-        tArg2->debug = debug;
-        tArg2->sourceCount = sourceCount;
+        tArg->bufSupply = supply;
+        tArg->stats = stats;
+        tArg->dump = dumpBufs;
+        tArg->debug = debug;
+        tArg->sourceCount = sourceCount;
 
         tArg->expectedTick = 0;
         tArg->tickPrescale = 1;
@@ -1188,7 +1179,6 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
-    fprintf(stderr, "4\n");
 
     //---------------------------------------------------
     // Start thread to do rate printout
@@ -1212,8 +1202,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    fprintf(stderr, "5\n");
-
     // Time Delay Here???
 
     std::shared_ptr<PacketsItem> item;
@@ -1232,12 +1220,12 @@ int main(int argc, char **argv) {
     again:
 
     while (true) {
-        fprintf(stderr, "6\n");
+//        fprintf(stderr, "6\n");
 
         // Read all UDP packets here
         item = pktSupply->get();
 
-        fprintf(stderr, "6.1, item = %p\n", item.get());
+//        fprintf(stderr, "6.1, item = %p\n", item.get());
 
         // Collect packets until full or timeout expires.
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
@@ -1245,7 +1233,7 @@ int main(int argc, char **argv) {
         //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
         int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
 
-        fprintf(stderr, "6.2\n");
+//        fprintf(stderr, "6.2\n");
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // if timeout, go 'round again
@@ -1255,7 +1243,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
 
-        fprintf(stderr, "7\n");
+//        fprintf(stderr, "7\n");
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
@@ -1269,10 +1257,10 @@ int main(int argc, char **argv) {
                                  item->getHeader(i));
         }
 
-        fprintf(stderr, "8\n");
+//        fprintf(stderr, "8\n");
         // Send data to reassembly thread for consumption
         pktSupply->publish(item);
-        fprintf(stderr, "9\n");
+//        fprintf(stderr, "9\n");
 
 #ifdef __linux__
         // Finish up some stats
