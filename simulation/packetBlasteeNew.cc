@@ -669,6 +669,7 @@ static void *threadAssemble(void *arg) {
     std::shared_ptr<PacketsItem> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
 
+    printf("ReadBufs: buf supply = %p\n", bufSupply.get());
 
 #ifdef __linux__
 
