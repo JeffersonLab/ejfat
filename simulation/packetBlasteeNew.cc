@@ -724,7 +724,7 @@ static void *threadAssemble(void *arg) {
         pmap = nullptr;
 
         // TODO: do we want to catch packetCount < 1 here?
-        printf("Assemble: 3\n");
+printf("Assemble: 3, packetCount = %lu\n", packetCount);
 
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
@@ -841,7 +841,7 @@ static void *threadAssemble(void *arg) {
         // from being completely reassembled and need to cleared out.
         // So, for each source, take biggest tick to be saved and remove all existing ticks
         // less than 2*tickPrescale and still being constructed. Keep stats.
-        printf("Assemble: 6\n");
+printf("Assemble: 6\n");
 
         // Iterate over map
         for (const auto& n : largestSavedTick) {
@@ -888,7 +888,7 @@ static void *threadAssemble(void *arg) {
             }
         }
 
-        printf("Assemble: 8\n");
+printf("Assemble: 8\n");
 
         // Finish up some stats
         if (takeStats) {
