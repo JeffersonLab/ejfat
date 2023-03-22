@@ -922,7 +922,7 @@ static void *threadReadBuffers(void *arg) {
     if (!dumpBufs) {
         while (true) {
             // Grab a fully reassembled buffer from Supplier
-            bufItem = bufSupply->get();
+            bufItem = bufSupply->consumerGet();
 
             // Release item for reuse
             bufSupply->release(bufItem);
