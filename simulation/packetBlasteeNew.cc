@@ -1241,7 +1241,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
 
-//fprintf(stderr, "recvmmsg: pkt count = %d\n", packetCount);
+if (packetCount > 1) fprintf(stderr, "pkt count %d\n", packetCount);
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // if timeout, go 'round again
