@@ -486,9 +486,9 @@ int main(int argc, char **argv) {
     setLbMetadata(buf, tick, version, protocol, entropy);
 
     // Write RE meta data into buffer
-    setReMetadata(buf + LB_HEADER_BYTES,
-                  veryFirstPacket, veryLastPacket,
-                  tick, offset, version, dataId);
+    setReMetadataOld(buf + LB_HEADER_BYTES,
+                     veryFirstPacket, veryLastPacket,
+                     tick, offset, version, dataId);
 
 
     fprintf(stderr, "\npacketBlaster2: finished preparing buffer\n");
