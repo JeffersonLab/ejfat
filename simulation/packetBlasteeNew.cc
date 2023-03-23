@@ -669,9 +669,6 @@ static void *threadAssemble(void *arg) {
     std::shared_ptr<PacketsItem> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
 
-    printf("Assemble: 1\n");
-
-
 #ifdef __linux__
 
     if (core > -1) {
@@ -709,7 +706,6 @@ static void *threadAssemble(void *arg) {
     // One tick for each source: key = source id, val = largest tick value to be reassembled
     std::unordered_map<int, uint64_t> largestSavedTick;
 
-    printf("Assemble: 2\n");
 
     while (true) {
 
@@ -724,7 +720,6 @@ static void *threadAssemble(void *arg) {
         pmap = nullptr;
 
         // TODO: do we want to catch packetCount < 1 here?
-printf("Assemble: 3, packetCount = %lu\n", packetCount);
 
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
@@ -768,14 +763,12 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
             int32_t pktsSoFar  = bufItem->getUserInt();
             int64_t bytesSoFar = bufItem->getUserLong();
             int64_t dataLen = pktItem->getPacket(i)->msg_len - HEADER_BYTES;
-            printf("Assemble: 4\n");
 
             // Do we have memory to store entire buf? If not, expand.
             if (hdr->length > bufItem->getBuffer()->capacity()) {
                 // Preserves all existing data while increasing underlying array
                 bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
             }
-            printf("Assemble: 4.1\n");
 
             // The neat thing about doing it this way is we don't have to track out-of-order packets.
             // We don't have to copy and store them!
@@ -793,7 +786,6 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
             memcpy(bufItem->getBuffer()->array() + hdr->offset,
                    pktItem->getPacket(i)->msg_hdr.msg_iov[1].iov_base,
                    dataLen);
-            printf("Assemble: 4.2\n");
 
             // Keep track of how much we've written so far
             bytesSoFar += dataLen;
@@ -802,34 +794,26 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
             // Track # of packets written so far (will double count for duplicate packets)
             pktsSoFar++;
             bufItem->setUserInt(pktsSoFar);
-            printf("Assemble: 4.3\n");
 
             // If we've written all data to this buf ...
             if (bytesSoFar >= hdr->length) {
                 // Done with this buffer, so set its limit to proper value
                 bufItem->getBuffer()->limit(bytesSoFar);
-                printf("Assemble: 4.4\n");
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
-                printf("Assemble: 4.4.1\n");
 
                 if (takeStats) {
-                    fprintf(stderr, "Look up stat for source %d\n", srcId);
-                    printf("Assemble: 4.4.2\n");
+                    //fprintf(stderr, "Look up stat for source %d\n", srcId);
                     mapp[srcId]->acceptedBytes += hdr->length;
-                    printf("Assemble: 4.4.3\n");
                     mapp[srcId]->builtBuffers++;
-                    printf("Assemble: 4.4.4\n");
                     mapp[srcId]->acceptedPackets += bufItem->getUserInt();
                 }
-                printf("Assemble: 4.5\n");
 
                 // Track the biggest tick to be saved from this source
                 if (hdr->tick > largestSavedTick[srcId]) {
                     largestSavedTick[srcId] = hdr->tick;
                 }
-                printf("Assemble: 4.6\n");
 
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
@@ -840,7 +824,6 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
                     bufSupply->publish(bufItem);
                 }
             }
-            printf("Assemble: 5\n");
         }
 
         // If here, we've gone thru a bundle of UDP packets,
@@ -852,7 +835,6 @@ printf("Assemble: 3, packetCount = %lu\n", packetCount);
         // from being completely reassembled and need to cleared out.
         // So, for each source, take biggest tick to be saved and remove all existing ticks
         // less than 2*tickPrescale and still being constructed. Keep stats.
-printf("Assemble: 6\n");
 
         // Iterate over map
         for (const auto& n : largestSavedTick) {
@@ -865,7 +847,6 @@ printf("Assemble: 6\n");
                 for (const auto &nn: *pm) {
                     uint64_t tck = nn.first;
                     std::shared_ptr<BufferItem> bItem = nn.second;
-                    printf("Assemble: 7\n");
 
                     // Remember, tick values do NOT wrap around
                     if (tck < tick - 2 * tickPrescale) {
@@ -899,7 +880,6 @@ printf("Assemble: 6\n");
             }
         }
 
-printf("Assemble: 8\n");
 
         // Finish up some stats
         if (takeStats) {
@@ -1248,7 +1228,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // Read all UDP packets here
         item = pktSupply->get();
 
-fprintf(stderr, "Main: pkt item = %p\n", item.get());
+//fprintf(stderr, "Main: pkt item = %p\n", item.get());
 
         // Collect packets until full or timeout expires.
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
@@ -1261,7 +1241,7 @@ fprintf(stderr, "Main: pkt item = %p\n", item.get());
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
 
-        fprintf(stderr, "recvmmsg: pkt count = %d\n", packetCount);
+//fprintf(stderr, "recvmmsg: pkt count = %d\n", packetCount);
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // if timeout, go 'round again
@@ -1278,17 +1258,15 @@ fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
         // We could shift this code to the reassembly thread
 
         for (int i = 0; i < packetCount; i++) {
-            fprintf(stderr, "recvmmsg: loop %d of parsing header\n", i);
-
             unsigned int dataLen = item->getPacket(i)->msg_len;
-            PacketsItem::printPacketItem(item, 0);
+//PacketsItem::printPacketItem(item, 0);
             if (dataLen < 20) {
                 // didn't read in enough data for even the header, ERROR
             }
             ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
                                  item->getHeader(i));
 
-            ejfat::printReHeader(item->getHeader(i));
+//ejfat::printReHeader(item->getHeader(i));
         }
 
 
