@@ -850,7 +850,7 @@ static void *threadAssemble(void *arg) {
 
                     // Remember, tick values do NOT wrap around
                     if (tck < tick - 4 * tickPrescale) {
-std::cout << "Cleaning out incomplete buf for tick " << tck << std::endl;
+//std::cout << "Cleaning out incomplete buf for tick " << tck << std::endl;
                         pm->erase(tck);
                         // Release resources here
                         if (dumpBufs) {
