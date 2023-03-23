@@ -849,7 +849,7 @@ static void *threadAssemble(void *arg) {
                     std::shared_ptr<BufferItem> bItem = nn.second;
 
                     // Remember, tick values do NOT wrap around
-                    if (tck < tick - 4 * tickPrescale) {
+                    if (tck < tick - 2 * tickPrescale) {
 //std::cout << "Cleaning out incomplete buf for tick " << tck << std::endl;
                         pm->erase(tck);
                         // Release resources here
