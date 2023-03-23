@@ -1275,6 +1275,8 @@ fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
         // We could shift this code to the reassembly thread
 
         for (int i = 0; i < packetCount; i++) {
+            fprintf(stderr, "recvmmsg: loop %d of parsing header\n", i);
+
             unsigned int dataLen = item->getPacket(i)->msg_len;
             PacketsItem::printPacketItem(item, 0);
             if (dataLen < 20) {
