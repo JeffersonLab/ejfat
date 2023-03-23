@@ -45,7 +45,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-sendnocp]",
             "        [-bufdelay] (delay between each buffer, not packet)",
@@ -62,8 +62,6 @@ static void printHelp(char *programName) {
             "        [-bufrate <buffers sent per sec>]",
             "        [-byterate <bytes sent per sec>]",
             "        [-s <UDP send buffer size>]",
-            "        [-fifo (Use SCHED_FIFO realtime scheduler for process - linux)]",
-            "        [-rr (Use SCHED_RR realtime scheduler for process - linux)]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
@@ -507,7 +505,6 @@ int main(int argc, char **argv) {
     uint64_t tick = 0;
     int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
-    int rtPriority = 0;
     uint16_t dataId = 1;
     bool debug = false, sendnocp = false;
     bool useIPv6 = false, bufDelay = false;
