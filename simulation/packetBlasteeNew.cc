@@ -1248,7 +1248,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // Read all UDP packets here
         item = pktSupply->get();
 
-//        fprintf(stderr, "6.1, item = %p\n", item.get());
+fprintf(stderr, "Main: pkt item = %p\n", item.get());
 
         // Collect packets until full or timeout expires.
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
@@ -1258,6 +1258,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 #ifdef __linux__
         packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
 #endif
+        // Keep tabs on how many valid packets we have
+        item->setPacketsFilled(packetCount);
+
         fprintf(stderr, "recvmmsg: pkt count = %d\n", packetCount);
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -1288,8 +1291,6 @@ fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             ejfat::printReHeader(item->getHeader(i));
         }
 
-        // Keep tabs on how many valid packets we have
-        item->setPacketsFilled(packetCount);
 
 //        fprintf(stderr, "8\n");
         // Send data to reassembly thread for consumption
