@@ -1236,7 +1236,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
         int packetCount = 0;
 #ifdef __linux__
-        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
+        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), 0, &timeout);
 #endif
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
