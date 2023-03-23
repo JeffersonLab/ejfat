@@ -90,10 +90,10 @@ namespace ejfat {
 
 
         /** Place to store UDP packet data. */
-        struct mmsghdr *packets;
+        struct mmsghdr *packets = nullptr;
 
         /** Place to store parsed reassembly header info. */
-        reHeader *headers;
+        reHeader *headers = nullptr;
 
 
 //        reHeader hdrs[200];
@@ -107,12 +107,13 @@ namespace ejfat {
         size_t maxPktCount;
 
         /** Actual number of UDP packets (read from network) stored here. */
-        size_t pktsFilled;
+        size_t pktsFilled = 0;
 
     public:
 
         static void setEventFactorySettings(size_t pktCount);
         static const std::function< std::shared_ptr<PacketsItem> () >& eventFactory();
+        static void printPacketItem(std::shared_ptr<PacketsItem> item, int index);
 
 
         PacketsItem();

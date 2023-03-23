@@ -43,6 +43,23 @@ namespace ejfat {
 
 
     /**
+     * Print a couple things from the given packet in a PacketItem.
+     * @param index index of specific packet in PacketItem.
+     */
+    void PacketsItem::printPacketItem(std::shared_ptr<PacketsItem> item, int index) {
+        if (item == nullptr || item->getPacket(index) == nullptr) {
+            fprintf(stderr, "no PacketItem data\n" );
+            return;
+        }
+        struct mmsghdr *hdr = item->getPacket(index);
+        fprintf(stderr, "%u bytes for item %d, %d bufs,\n", hdr->msg_len, index, hdr->msg_hdr.msg_iovlen );
+        for (int i=0; i < hdr->msg_hdr.msg_iovlen; i++) {
+            fprintf(stderr, "   buf %d: %zu bytes\n", i, hdr->msg_hdr.msg_iov[i].iov_len);
+        }
+    }
+
+
+    /**
      * Default constructor which uses values set by {@link #setEventFactorySetting()}.
      */
     PacketsItem::PacketsItem() : SupplyItem() {
