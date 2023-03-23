@@ -658,6 +658,7 @@ static void *threadAssemble(void *arg) {
     }
 
     uint32_t tickPrescale = tArg->tickPrescale;
+    std::cerr << "Assemble thd tickPrescale = " << tickPrescale << "\n";
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 2000;
@@ -1142,7 +1143,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg2->dump = dumpBufs;
     tArg2->debug = debug;
     tArg2->sourceCount = sourceCount;
-    tArg2->tickPrescale = 1;
     if (pinBufCores) {
         tArg2->core = startingBufCore;
     }
