@@ -1262,9 +1262,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // if timeout, go 'round again
+fprintf(stderr, "recvmmsg timeout, loop again\n");
                 goto again;
             }
-            fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
+fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
 
@@ -1275,6 +1276,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         for (int i = 0; i < packetCount; i++) {
             unsigned int dataLen = item->getPacket(i)->msg_len;
+            PacketsItem::printPacketItem(item, 0);
             if (dataLen < 20) {
                 // didn't read in enough data for even the header, ERROR
             }
