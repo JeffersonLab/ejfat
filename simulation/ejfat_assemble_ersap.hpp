@@ -2288,7 +2288,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         // Already have trouble, looks like we dropped the first packet of a tick,
                         // and possibly others after it.
                         // So go ahead and dump the rest of the tick in an effort to keep up.
-                        if (debug) printf("Skip pkt from id %hu, %llu - %u, expected seq 0\n", packetDataId, packetTick, sequence);
+                        if (debug) printf("Skip pkt from id %hu, %" PRIu64 " - %u, expected seq 0\n", packetDataId, packetTick, sequence);
                         veryFirstRead = true;
                         dumpTick = true;
                         prevTick = packetTick;
@@ -2301,7 +2301,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     if (putDataAt != dataBuf) {
                         // The last tick's buffer was not fully contructed
                         // before this new tick showed up!
-                        if (debug) printf("Discard tick %llu\n", packetTick);
+                        if (debug) printf("Discard tick %" PRIu64 "\n", packetTick);
 
                         // We have a problem here, the first packet of this tick, unfortunately,
                         // is at the end of the buffer storing the previous tick. We must move it
@@ -2343,7 +2343,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                         prevSequence = sequence;
                         prevPacketLast = packetLast;
 
-                        if (debug) printf("Dump pkt from id %hu, %llu - %u\n", packetDataId, packetTick, sequence);
+                        if (debug) printf("Dump pkt from id %hu, %" PRIu64 " - %u\n", packetDataId, packetTick, sequence);
                         continue;
                     }
                 }
