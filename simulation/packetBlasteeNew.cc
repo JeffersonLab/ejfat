@@ -850,7 +850,7 @@ static void *threadAssemble(void *arg) {
 
                     // Remember, tick values do NOT wrap around
                     if (tck < tick - 4 * tickPrescale) {
-                        std::cout << "Cleaning out incomplete buf for tick " << tck << std::endl;
+std::cout << "Cleaning out incomplete buf for tick " << tck << std::endl;
                         pm->erase(tck);
                         // Release resources here
                         if (dumpBufs) {
@@ -1142,6 +1142,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg2->dump = dumpBufs;
     tArg2->debug = debug;
     tArg2->sourceCount = sourceCount;
+    tArg2->tickPrescale = 1;
     if (pinBufCores) {
         tArg2->core = startingBufCore;
     }
