@@ -52,7 +52,11 @@ namespace ejfat {
             return;
         }
         struct mmsghdr *hdr = item->getPacket(index);
+#ifdef __APPLE__
         fprintf(stderr, "%u bytes for item %d, %d bufs,\n", hdr->msg_len, index, hdr->msg_hdr.msg_iovlen );
+#else
+        fprintf(stderr, "%u bytes for item %d, %zu bufs,\n", hdr->msg_len, index, hdr->msg_hdr.msg_iovlen );
+#endif
         for (int i=0; i < hdr->msg_hdr.msg_iovlen; i++) {
             fprintf(stderr, "   buf %d: %zu bytes\n", i, hdr->msg_hdr.msg_iov[i].iov_len);
         }
