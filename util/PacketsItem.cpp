@@ -47,10 +47,16 @@ namespace ejfat {
      * @param index index of specific packet in PacketItem.
      */
     void PacketsItem::printPacketItem(std::shared_ptr<PacketsItem> item, int index) {
-        if (item == nullptr || item->getPacket(index) == nullptr) {
-            fprintf(stderr, "no PacketItem data\n" );
+        if (item == nullptr) {
+            fprintf(stderr, "printPacketItem: item arg is null\n");
             return;
         }
+
+        if (item->getPacket(index) == nullptr) {
+            fprintf(stderr, "printPacketItem: no item data\n");
+            return;
+        }
+
         struct mmsghdr *hdr = item->getPacket(index);
 #ifdef __APPLE__
         fprintf(stderr, "%u bytes for item %d, %d bufs,\n", hdr->msg_len, index, hdr->msg_hdr.msg_iovlen );
