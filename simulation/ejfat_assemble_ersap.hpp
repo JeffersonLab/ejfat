@@ -185,17 +185,31 @@ static inline uint64_t bswap_64(uint64_t x) {
 
 
         /**
+         * Print reHeader structure.
+         * @param hdr reHeader structure to be printed.
+         */
+        static void printReHeader(reHeader *hdr) {
+            if (hdr == nullptr) {
+                fprintf(stderr, "null pointer\n");
+                return;
+            }
+            fprintf(stderr,  "reHeader: ver %" PRIu8 ", id %" PRIu16 ", off %" PRIu32 ", len %" PRIu32 ", tick %" PRIu64 "\n",
+                    hdr->version, hdr->dataId, hdr->offset, hdr->length, hdr->tick);
+         }
+
+
+        /**
          * Print some of the given packetRecvStats structure.
          * @param stats shared pointer to structure to be printed.
          */
-        static void printStats(std::shared_ptr<packetRecvStats> stats, std::string prefix) {
+        static void printStats(std::shared_ptr<packetRecvStats> const & stats, std::string const & prefix) {
             if (!prefix.empty()) {
                 fprintf(stderr, "%s: ", prefix.c_str());
             }
             fprintf(stderr,  "bytes = %" PRIu64 ", pkts = %" PRIu64 ", dropped bytes = %" PRIu64 ", dropped pkts = %" PRIu64 ", dropped ticks = %u\n",
-                         stats->acceptedBytes, stats->acceptedPackets, stats->droppedBytes,
-                         stats->droppedPackets, stats->droppedBuffers);
-         }
+                    stats->acceptedBytes, stats->acceptedPackets, stats->droppedBytes,
+                    stats->droppedPackets, stats->droppedBuffers);
+        }
 
 
         /**

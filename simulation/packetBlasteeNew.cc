@@ -1280,6 +1280,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             }
             ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
                                  item->getHeader(i));
+
+            ejfat::printReHeader(item->getHeader(i));
         }
 
         // Keep tabs on how many valid packets we have
