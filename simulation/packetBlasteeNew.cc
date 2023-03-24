@@ -604,7 +604,7 @@ typedef struct threadArg_t {
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
 
     uint64_t expectedTick;
-    uint32_t tickPrescale;
+    int tickPrescale;
     int core;
 
 } threadArg;
@@ -657,7 +657,7 @@ static void *threadAssemble(void *arg) {
         mtu = 1400;
     }
 
-    uint32_t tickPrescale = tArg->tickPrescale;
+    int tickPrescale = tArg->tickPrescale;
     std::cerr << "Assemble thd tickPrescale = " << tickPrescale << "\n";
 
     // Track cpu by calling sched_getcpu roughly once per sec or 2
