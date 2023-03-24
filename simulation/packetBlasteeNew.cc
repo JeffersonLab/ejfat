@@ -732,34 +732,34 @@ static void *threadAssemble(void *arg) {
                 // Get the right map if there is one, else make one
                 pmap = maps[srcId];
                 if (pmap == nullptr) {
-std::cout << "Create map " << srcId << std::endl;
+std::cout << "Create map for src " << srcId << std::endl;
                     maps[srcId] = pmap = new std::unordered_map<uint64_t, std::shared_ptr<BufferItem>>();
                 }
                 else {
-                    std::cout << "Found map " << srcId << std::endl;
+                    std::cout << "Found map for src " << srcId << std::endl;
                 }
 
                 // Get buffer in which to reassemble
                 bufItem = (*pmap)[hdr->tick];
                 // If there is no buffer existing for this tick, get one
                 if (bufItem == nullptr) {
-                    std::cout << "  create buf 4 tick " << hdr->tick << std::endl;
+                    std::cout << "  create buf for tick " << hdr->tick << std::endl;
                     // This call gets a reset bufItem
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                 }
                 else {
-                    std::cout << "  got buf 4 tick " << hdr->tick << std::endl;
+                    std::cout << "  got buf for tick " << hdr->tick << std::endl;
                 }
             }
             else if (hdr->tick != prevTick) {
                 // Same source as last pkt, but if NOT the same tick ...
                 bufItem = (*pmap)[hdr->tick];
                 if (bufItem == nullptr) {
-                    std::cout << "same source, create buf 4 tick " << hdr->tick << std::endl;
+                    std::cout << "same source, create buf for tick " << hdr->tick << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                 }
                 else {
-                    std::cout << "same source, have buf 4 tick " << hdr->tick << std::endl;
+                    std::cout << "same source, have buf for tick " << hdr->tick << std::endl;
                 }
             }
 
@@ -815,6 +815,7 @@ std::cout << "Create map " << srcId << std::endl;
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
+std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map" << std::endl;
 
                 if (takeStats) {
                     //fprintf(stderr, "Look up stat for source %d\n", srcId);
@@ -859,8 +860,12 @@ std::cout << "Create map " << srcId << std::endl;
             std::cout << "clear biggest " << bigTick  << std::endl;
 
             // Compare this tick with the ticks in maps[source] and remove if too old
-            std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
-            if (pm != nullptr) {
+            if (maps.count(source) > 0) {
+                std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
+                if (pm == nullptr) {
+                    std::cout << "PROBLEMS, null ptr!!"  << std::endl;
+                }
+                
                 for (const auto &nn: *pm) {
                     uint64_t tck = nn.first;
                     std::shared_ptr<BufferItem> bItem = nn.second;
