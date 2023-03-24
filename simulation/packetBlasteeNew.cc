@@ -872,10 +872,10 @@ std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map" << st
                     uint64_t tck = nn.first;
                     std::shared_ptr<BufferItem> bItem = nn.second;
 
-std::cout << "stored " << tck << ", compare to (bigT - 2*pre) = " <<  (bigTick - 2 * tickPrescale)  << std::endl;
+std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
 
                     // Remember, tick values do NOT wrap around
-                    if (tck < bigTick - 2 * tickPrescale) {
+                    if (tck + 2 * tickPrescale < bigTick) {
 std::cout << "Remove " << tck << std::endl;
                         pm->erase(tck);
                         // Release resources here
