@@ -958,8 +958,6 @@ static void *threadReadBuffers(void *arg) {
 //    auto stats    = tArg->stats;
 //    auto & mapp = (*(stats.get()));
 
-    int count = 0;
-
     std::shared_ptr<BufferItem>  bufItem;
 
     // If bufs are not already dumped by the reassembly thread,
@@ -969,6 +967,10 @@ static void *threadReadBuffers(void *arg) {
 //printf("ReadBufs: get buf #%d, supply = %p\n", count++, bufSupply.get());
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupply->consumerGet();
+
+            if (bufItem->validData()) {
+                // do something with buffer here
+            }
 
             // Release item for reuse
             bufSupply->release(bufItem);
