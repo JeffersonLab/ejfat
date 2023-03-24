@@ -701,10 +701,9 @@ static void *threadAssemble(void *arg) {
 
     // For a single source, a map keeps buffers being worked on: key = tick, val = buffer
     std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> buffers;
-
     std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pmap;
 
-    // One tick for each source: key = source id, val = largest tick value to be reassembled
+    // One tick for each source: key = source id, val = largest tick value received
     std::unordered_map<int, uint64_t> largestSavedTick;
 
 
@@ -746,6 +745,17 @@ std::cout << "Create map for src " << srcId << std::endl;
                     std::cout << "  create buf for tick " << hdr->tick << std::endl;
                     // This call gets a reset bufItem
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
+
+                    // Copy header so that whoever gets the reassembled buffer has info about tick, src id, etc
+                    bufItem->setHeader(hdr);
+
+                    // Track the biggest tick to be RECEIVED from this source.
+                    // Anything too much smaller will be tossed since a late packet cannot be
+                    // really, really late.
+                    if (hdr->tick > largestSavedTick[srcId]) {
+                        std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
+                        largestSavedTick[srcId] = hdr->tick;
+                    }
                 }
                 else {
                     std::cout << "  got buf for tick " << hdr->tick << std::endl;
@@ -757,21 +767,15 @@ std::cout << "Create map for src " << srcId << std::endl;
                 if (bufItem == nullptr) {
                     std::cout << "same source, create buf for tick " << hdr->tick << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
+                    bufItem->setHeader(hdr);
+                    if (hdr->tick > largestSavedTick[srcId]) {
+                        std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
+                        largestSavedTick[srcId] = hdr->tick;
+                    }
                 }
                 else {
                     std::cout << "same source, have buf for tick " << hdr->tick << std::endl;
                 }
-            }
-
-            // Copy header
-            bufItem->setHeader(hdr);
-
-            // Track the biggest tick to be RECEIVED from this source.
-            // Anything too much smaller will be tossed since a late packet cannot be
-            // really, really late.
-            if (hdr->tick > largestSavedTick[srcId]) {
-                std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
-                largestSavedTick[srcId] = hdr->tick;
             }
 
             // Keep track so if next packet is same source/tick, we don't have to look it up
@@ -783,10 +787,12 @@ std::cout << "Create map for src " << srcId << std::endl;
             // This will enable us to tell if we're done w/ reassembly.
             int32_t pktsSoFar  = bufItem->getUserInt();
             int64_t bytesSoFar = bufItem->getUserLong();
-            int64_t dataLen = pktItem->getPacket(i)->msg_len - HEADER_BYTES;
+            int64_t dataLen    = pktItem->getPacket(i)->msg_len - HEADER_BYTES;
+std::cout << "pkt len " << dataLen << std::endl;
 
             // Do we have memory to store entire buf? If not, expand.
             if (hdr->length > bufItem->getBuffer()->capacity()) {
+std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 // Preserves all existing data while increasing underlying array
                 bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
             }
@@ -823,7 +829,7 @@ std::cout << "Create map for src " << srcId << std::endl;
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
-std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map" << std::endl;
+std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
 
                 if (takeStats) {
                     //fprintf(stderr, "Look up stat for source %d\n", srcId);
@@ -859,7 +865,7 @@ std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map" << st
         for (const auto& n : largestSavedTick) {
             int source = n.first;
             uint64_t bigTick = n.second;
-            std::cout << "clear biggest " << bigTick  << std::endl;
+std::cout << "clear biggest " << bigTick  << std::endl;
 
             // Compare this tick with the ticks in maps[source] and remove if too old
             if (maps.count(source) > 0) {
@@ -874,7 +880,12 @@ std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map" << st
 
 std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
 
-                    // Remember, tick values do NOT wrap around
+                    // Remember, tick values do NOT wrap around.
+                    // It may make more sense to have the inequality as:
+                    // tck < bigTick - 2*tickPrescale
+                    // Except then we run into trouble early with negative # in unsigned arithemtic
+                    // showing up as huge #s. So have negative term switch sides.
+                    // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
                     if (tck + 2 * tickPrescale < bigTick) {
 std::cout << "Remove " << tck << std::endl;
                         pm->erase(tck);
