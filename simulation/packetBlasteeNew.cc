@@ -1175,6 +1175,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg2->dump = dumpBufs;
     tArg2->debug = debug;
     tArg2->sourceCount = sourceCount;
+    tArg2->tickPrescale = 1;
     if (pinBufCores) {
         tArg2->core = startingBufCore;
     }
