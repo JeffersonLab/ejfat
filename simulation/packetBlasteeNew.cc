@@ -856,6 +856,7 @@ std::cout << "Create map " << srcId << std::endl;
         for (const auto& n : largestSavedTick) {
             int source = n.first;
             uint64_t bigTick = n.second;
+            std::cout << "clear biggest " << bigTick  << std::endl;
 
             // Compare this tick with the ticks in maps[source] and remove if too old
             std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
@@ -864,7 +865,7 @@ std::cout << "Create map " << srcId << std::endl;
                     uint64_t tck = nn.first;
                     std::shared_ptr<BufferItem> bItem = nn.second;
 
-std::cout << "biggest " << bigTick << ", stored " << tck << std::endl;
+std::cout << "stored " << tck << std::endl;
 
                     // Remember, tick values do NOT wrap around
                     if (tck < bigTick - 2 * tickPrescale) {
@@ -896,8 +897,12 @@ std::cout << "Remove " << tck << std::endl;
                     }
                 }
             }
+            else {
+                std::cout << "nothing stored" << std::endl;
+            }
         }
 
+        std::cout << std::endl << std::endl;
 
         // Finish up some stats
         if (takeStats) {
