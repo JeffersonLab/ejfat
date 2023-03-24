@@ -109,18 +109,18 @@ static inline uint64_t bswap_64(uint64_t x) {
             volatile int64_t  startTime;        /**< End time in microsec from clock_gettime. */
             volatile int64_t  readTime;         /**< Microsec taken to read (all packets forming) one complete buffer. */
 
-            volatile uint64_t droppedPackets;   /**< Number of dropped packets. This cannot be known exactly, only estimate. */
-            volatile uint64_t acceptedPackets;  /**< Number of packets successfully read. */
-            volatile uint64_t discardedPackets; /**< Number of bytes discarded because reassembly was impossible. */
+            volatile int64_t droppedPackets;   /**< Number of dropped packets. This cannot be known exactly, only estimate. */
+            volatile int64_t acceptedPackets;  /**< Number of packets successfully read. */
+            volatile int64_t discardedPackets; /**< Number of bytes discarded because reassembly was impossible. */
 
-            volatile uint64_t droppedBytes;     /**< Number of bytes dropped. */
-            volatile uint64_t acceptedBytes;    /**< Number of bytes successfully read, NOT including RE header. */
-            volatile uint64_t discardedBytes;   /**< Number of bytes dropped. */
+            volatile int64_t droppedBytes;     /**< Number of bytes dropped. */
+            volatile int64_t acceptedBytes;    /**< Number of bytes successfully read, NOT including RE header. */
+            volatile int64_t discardedBytes;   /**< Number of bytes dropped. */
 
-            volatile uint32_t droppedBuffers;    /**< Number of ticks/buffers for which no packets showed up.
+            volatile int32_t droppedBuffers;    /**< Number of ticks/buffers for which no packets showed up.
                                                       Don't think it's possible to measure this in general. */
-            volatile uint32_t discardedBuffers;  /**< Number of ticks/buffers discarded. */
-            volatile uint32_t builtBuffers;      /**< Number of ticks/buffers fully reassembled. */
+            volatile int32_t discardedBuffers;  /**< Number of ticks/buffers discarded. */
+            volatile int32_t builtBuffers;      /**< Number of ticks/buffers fully reassembled. */
 
             volatile int cpuPkt;               /**< CPU that thread to read pkts is running on. */
             volatile int cpuBuf;               /**< CPU that thread to read build buffers is running on. */
