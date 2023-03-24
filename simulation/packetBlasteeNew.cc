@@ -356,10 +356,10 @@ typedef struct threadStruct_t {
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
 
-    uint64_t byteCount, bufCount, pktCount;
-    uint64_t discardByteCount, discardBufCount, discardPktCount;
-    uint64_t dropByteCount, dropBufCount, dropPktCount;
-    uint64_t missingByteCount; // discarded + dropped
+    int64_t byteCount, bufCount, pktCount;
+    int64_t discardByteCount, discardBufCount, discardPktCount;
+    int64_t dropByteCount, dropBufCount, dropPktCount;
+    int64_t missingByteCount; // discarded + dropped
 
     // Ignore the first rate calculation as it's most likely a bad value
     bool skipFirst = true;
@@ -373,31 +373,31 @@ static void *rateThread(void *arg) {
     auto & mapp = (*(stats.get()));
 
 
-    uint64_t prevTotalPkts[sourceCount];
-    uint64_t prevTotalBytes[sourceCount];
-    uint64_t prevBuiltBufs[sourceCount];
+    int64_t prevTotalPkts[sourceCount];
+    int64_t prevTotalBytes[sourceCount];
+    int64_t prevBuiltBufs[sourceCount];
 
-    uint64_t prevDiscardPkts[sourceCount];
-    uint64_t prevDiscardBytes[sourceCount];
-    uint64_t prevDiscardBufs[sourceCount];
+    int64_t prevDiscardPkts[sourceCount];
+    int64_t prevDiscardBytes[sourceCount];
+    int64_t prevDiscardBufs[sourceCount];
 
-    uint64_t prevDropPkts[sourceCount];
-    uint64_t prevDropBytes[sourceCount];
-    uint64_t prevDropBufs[sourceCount];
+    int64_t prevDropPkts[sourceCount];
+    int64_t prevDropBytes[sourceCount];
+    int64_t prevDropBufs[sourceCount];
 
 
 
-    uint64_t currTotalPkts[sourceCount];
-    uint64_t currTotalBytes[sourceCount];
-    uint64_t currBuiltBufs[sourceCount];
+    int64_t currTotalPkts[sourceCount];
+    int64_t currTotalBytes[sourceCount];
+    int64_t currBuiltBufs[sourceCount];
 
-    uint64_t currDiscardPkts[sourceCount];
-    uint64_t currDiscardBytes[sourceCount];
-    uint64_t currDiscardBufs[sourceCount];
+    int64_t currDiscardPkts[sourceCount];
+    int64_t currDiscardBytes[sourceCount];
+    int64_t currDiscardBufs[sourceCount];
 
-    uint64_t currDropPkts[sourceCount];
-    uint64_t currDropBytes[sourceCount];
-    uint64_t currDropBufs[sourceCount];
+    int64_t currDropPkts[sourceCount];
+    int64_t currDropBytes[sourceCount];
+    int64_t currDropBufs[sourceCount];
 
 
 
@@ -538,7 +538,7 @@ static void *rateThread(void *arg) {
                 printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
             }
             else {
-                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, missing bytes = %" PRIu64 "\n",
+                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, missing bytes = %" PRId64 "\n",
                        src, pktRate, pktAvgRate, missingByteCount);
             }
 
@@ -553,7 +553,7 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
 
            if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRIu64 ",%" PRIu64 ",%d,%d\n", totalMicroSec/1000000, src,
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 ",%d,%d\n", totalMicroSec/1000000, src,
                         (int)(pktRate/1000), (int)(dataRate),
                         missingByteCount, (currDiscardBytes[i] + currDropBytes[i]),
                         mapp[src]->cpuPkt, mapp[src]->cpuBuf);
@@ -564,7 +564,7 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, mapp[src]->builtBuffers);
 
             if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRIu64 ",%" PRIu64 "\n", totalMicroSec/1000000, src,
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n", totalMicroSec/1000000, src,
                         (int)(pktRate/1000), (int)(dataRate),
                         missingByteCount, (currDiscardBytes[i] + currDropBytes[i]));
                 fflush(fp);
