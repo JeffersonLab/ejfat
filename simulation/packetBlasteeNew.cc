@@ -766,6 +766,14 @@ std::cout << "Create map for src " << srcId << std::endl;
             // Copy header
             bufItem->setHeader(hdr);
 
+            // Track the biggest tick to be RECEIVED from this source.
+            // Anything too much smaller will be tossed since a late packet cannot be
+            // really, really late.
+            if (hdr->tick > largestSavedTick[srcId]) {
+                std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
+                largestSavedTick[srcId] = hdr->tick;
+            }
+
             // Keep track so if next packet is same source/tick, we don't have to look it up
             prevSrcId = srcId;
             prevTick  = hdr->tick;
@@ -824,12 +832,6 @@ std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map" << st
                     mapp[srcId]->acceptedPackets += bufItem->getUserInt();
                 }
 
-                // Track the biggest tick to be saved from this source
-                if (hdr->tick > largestSavedTick[srcId]) {
-                    std::cout << "big tick " << hdr->tick << " for src " << srcId << std::endl;
-                    largestSavedTick[srcId] = hdr->tick;
-                }
-
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
                     std::cout << "release tck " << hdr->tick << " src " << srcId << std::endl;
@@ -865,12 +867,12 @@ std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map" << st
                 if (pm == nullptr) {
                     std::cout << "PROBLEMS, null ptr!!"  << std::endl;
                 }
-                
+
                 for (const auto &nn: *pm) {
                     uint64_t tck = nn.first;
                     std::shared_ptr<BufferItem> bItem = nn.second;
 
-std::cout << "stored " << tck << std::endl;
+std::cout << "stored " << tck << ", compare to (bigT - 2*pre) = " <<  (bigTick - 2 * tickPrescale)  << std::endl;
 
                     // Remember, tick values do NOT wrap around
                     if (tck < bigTick - 2 * tickPrescale) {
