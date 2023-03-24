@@ -895,6 +895,9 @@ std::cout << "Remove " << tck << std::endl;
                             mapp[source]->droppedPackets += mapp[source]->discardedBytes/mtu;
                         }
                     }
+                    else {
+                        std::cout << "DON't remove" << std::endl;
+                    }
                 }
             }
             else {
