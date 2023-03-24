@@ -732,22 +732,34 @@ static void *threadAssemble(void *arg) {
                 // Get the right map if there is one, else make one
                 pmap = maps[srcId];
                 if (pmap == nullptr) {
+std::cout << "Create map " << srcId << std::endl;
                     maps[srcId] = pmap = new std::unordered_map<uint64_t, std::shared_ptr<BufferItem>>();
+                }
+                else {
+                    std::cout << "Found map " << srcId << std::endl;
                 }
 
                 // Get buffer in which to reassemble
                 bufItem = (*pmap)[hdr->tick];
                 // If there is no buffer existing for this tick, get one
                 if (bufItem == nullptr) {
+                    std::cout << "  create buf 4 tick " << hdr->tick << std::endl;
                     // This call gets a reset bufItem
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
+                }
+                else {
+                    std::cout << "  got buf 4 tick " << hdr->tick << std::endl;
                 }
             }
             else if (hdr->tick != prevTick) {
                 // Same source as last pkt, but if NOT the same tick ...
                 bufItem = (*pmap)[hdr->tick];
                 if (bufItem == nullptr) {
+                    std::cout << "same source, create buf 4 tick " << hdr->tick << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
+                }
+                else {
+                    std::cout << "same source, have buf 4 tick " << hdr->tick << std::endl;
                 }
             }
 
@@ -813,15 +825,18 @@ static void *threadAssemble(void *arg) {
 
                 // Track the biggest tick to be saved from this source
                 if (hdr->tick > largestSavedTick[srcId]) {
+                    std::cout << "big tick " << hdr->tick << " for src " << srcId << std::endl;
                     largestSavedTick[srcId] = hdr->tick;
                 }
 
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
+                    std::cout << "release tck " << hdr->tick << " src " << srcId << std::endl;
                     bufSupply->release(bufItem);
                 }
                 else {
                     // TODO: Somehow this must be tagged with tick and source
+                    std::cout << "publish tck " << hdr->tick << " src " << srcId << std::endl;
                     bufSupply->publish(bufItem);
                 }
             }
@@ -840,7 +855,7 @@ static void *threadAssemble(void *arg) {
         // Iterate over map
         for (const auto& n : largestSavedTick) {
             int source = n.first;
-            uint64_t tick = n.second;
+            uint64_t bigTick = n.second;
 
             // Compare this tick with the ticks in maps[source] and remove if too old
             std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
@@ -849,9 +864,11 @@ static void *threadAssemble(void *arg) {
                     uint64_t tck = nn.first;
                     std::shared_ptr<BufferItem> bItem = nn.second;
 
+std::cout << "biggest " << bigTick << ", stored " << tck << std::endl;
+
                     // Remember, tick values do NOT wrap around
-                    if (tck < tick - 2 * tickPrescale) {
-//std::cout << "Cleaning out incomplete buf for tick " << tck << std::endl;
+                    if (tck < bigTick - 2 * tickPrescale) {
+std::cout << "Remove " << tck << std::endl;
                         pm->erase(tck);
                         // Release resources here
                         if (dumpBufs) {
@@ -1235,9 +1252,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
         // @ 1MB/sec ---> 1.8 sec
         //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
+        //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITALL, &timeout);
         int packetCount = 0;
 #ifdef __linux__
-        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITALL, &timeout);
+        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
 #endif
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
