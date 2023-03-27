@@ -877,10 +877,25 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
             assert(pm != nullptr);
 
-            for (const auto &nn: *pm) {
-                uint64_t tck = nn.first;
+//            for (auto it = m.cbegin(); it != m.cend() /* not hoisted */; /* no increment */)
+//            {
+//                if (must_delete)
+//                {
+//                    m.erase(it++);    // or "it = m.erase(it)" since C++11
+//                }
+//                else
+//                {
+//                    ++it;
+//                }
+//            }
+
+            for (auto it = pm->cbegin(); it != pm->cend();) {
+
+            //for (const auto &nn: *pm) {
+
+                uint64_t tck = it->first;
 std::cout << "   try " << tck << std::endl;
-                std::shared_ptr<BufferItem> bItem = nn.second;
+                std::shared_ptr<BufferItem> bItem = it->second;
 
 //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
 
@@ -893,7 +908,8 @@ std::cout << "   try " << tck << std::endl;
                 if (tck + 2 * tickPrescale < bigTick) {
                     //std::cout << "Remove " << tck << std::endl;
 std::cout << "   purge " << tck << std::endl;
-                    pm->erase(tck);
+                    //pm->erase(it++);
+                    it = pm->erase(it);
 
                     if (takeStats) {
                         mapp[source]->discardedBuffers++;
@@ -919,6 +935,9 @@ std::cout << "   purge " << tck << std::endl;
                         bufSupply->publish(bItem);
                     }
 
+                }
+                else {
+                    ++it;
                 }
 //                    else {
 //                        std::cout << "DON't remove" << std::endl;
