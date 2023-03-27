@@ -872,61 +872,54 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 //std::cout << "clear biggest " << bigTick  << std::endl;
 
             // Compare this tick with the ticks in maps[source] and remove if too old
-            if (maps.count(source) > 0) {
-                std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
-                if (pm == nullptr) {
-                    std::cout << "PROBLEMS, null ptr!!"  << std::endl;
-                }
+            std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
+            assert(pm == nullptr);
 
-                for (const auto &nn: *pm) {
-                    uint64_t tck = nn.first;
-                    std::shared_ptr<BufferItem> bItem = nn.second;
+            for (const auto &nn: *pm) {
+                uint64_t tck = nn.first;
+                std::shared_ptr<BufferItem> bItem = nn.second;
 
 //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
 
-                    // Remember, tick values do NOT wrap around.
-                    // It may make more sense to have the inequality as:
-                    // tck < bigTick - 2*tickPrescale
-                    // Except then we run into trouble early with negative # in unsigned arithemtic
-                    // showing up as huge #s. So have negative term switch sides.
-                    // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
-                    if (tck + 2 * tickPrescale < bigTick) {
-//std::cout << "Remove " << tck << std::endl;
-                        pm->erase(tck);
+                // Remember, tick values do NOT wrap around.
+                // It may make more sense to have the inequality as:
+                // tck < bigTick - 2*tickPrescale
+                // Except then we run into trouble early with negative # in unsigned arithemtic
+                // showing up as huge #s. So have negative term switch sides.
+                // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
+                if (tck + 2 * tickPrescale < bigTick) {
+                    //std::cout << "Remove " << tck << std::endl;
+                    pm->erase(tck);
 
-                        if (takeStats) {
-                            mapp[source]->discardedBuffers++;
-                            mapp[source]->discardedBytes   += bItem->getUserLong();
-                            mapp[source]->discardedPackets += bItem->getUserInt();
+                    if (takeStats) {
+                        mapp[source]->discardedBuffers++;
+                        mapp[source]->discardedBytes   += bItem->getUserLong();
+                        mapp[source]->discardedPackets += bItem->getUserInt();
 
-                            // We can't count buffers that were entirely dropped
-                            // unless we know exactly what's coming in.
-                            mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
-                            // guesstimate
-                            mapp[source]->droppedPackets += mapp[source]->discardedBytes/mtu;
-                        }
-
-                        // Release resources here
-                        if (dumpBufs) {
-                            bufSupply->release(bItem);
-                        }
-                        else {
-                            // We need to label bad buffers.
-                            // Perhaps we could reuse them. But if we do that,
-                            // things will be out of order and access to filled buffers will be delayed!
-                            bItem->setValidData(false);
-                            bufSupply->publish(bItem);
-                        }
-
+                        // We can't count buffers that were entirely dropped
+                        // unless we know exactly what's coming in.
+                        mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
+                        // guesstimate
+                        mapp[source]->droppedPackets += mapp[source]->discardedBytes/mtu;
                     }
+
+                    // Release resources here
+                    if (dumpBufs) {
+                        bufSupply->release(bItem);
+                    }
+                    else {
+                        // We need to label bad buffers.
+                        // Perhaps we could reuse them. But if we do that,
+                        // things will be out of order and access to filled buffers will be delayed!
+                        bItem->setValidData(false);
+                        bufSupply->publish(bItem);
+                    }
+
+                }
 //                    else {
 //                        std::cout << "DON't remove" << std::endl;
 //                    }
-                }
             }
-//            else {
-//                std::cout << "nothing stored" << std::endl;
-//            }
         }
 
 //std::cout << std::endl << std::endl;
