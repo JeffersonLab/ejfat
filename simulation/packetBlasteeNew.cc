@@ -873,7 +873,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
             // Compare this tick with the ticks in maps[source] and remove if too old
             std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
-            assert(pm == nullptr);
+            assert(pm != nullptr);
 
             for (const auto &nn: *pm) {
                 uint64_t tck = nn.first;
