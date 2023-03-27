@@ -893,6 +893,19 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                     if (tck + 2 * tickPrescale < bigTick) {
 //std::cout << "Remove " << tck << std::endl;
                         pm->erase(tck);
+
+                        if (takeStats) {
+                            mapp[source]->discardedBuffers++;
+                            mapp[source]->discardedBytes   += bItem->getUserLong();
+                            mapp[source]->discardedPackets += bItem->getUserInt();
+
+                            // We can't count buffers that were entirely dropped
+                            // unless we know exactly what's coming in.
+                            mapp[source]->droppedBytes += bItem->getHeader().length - mapp[source]->discardedBytes;
+                            // guesstimate
+                            mapp[source]->droppedPackets += mapp[source]->discardedBytes/mtu;
+                        }
+
                         // Release resources here
                         if (dumpBufs) {
                             bufSupply->release(bItem);
@@ -905,17 +918,6 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                             bufSupply->publish(bItem);
                         }
 
-                        if (takeStats) {
-                            mapp[source]->discardedBuffers++;
-                            mapp[source]->discardedBytes += bItem->getUserLong();
-                            mapp[source]->discardedPackets += bItem->getUserInt();
-
-                            // We can't count buffers that were entirely dropped
-                            // unless we know exactly what's coming in.
-                            mapp[source]->droppedBytes += bItem->getHeader().length - mapp[source]->discardedBytes;
-                            // guesstimate
-                            mapp[source]->droppedPackets += mapp[source]->discardedBytes/mtu;
-                        }
                     }
 //                    else {
 //                        std::cout << "DON't remove" << std::endl;
