@@ -8,8 +8,8 @@
 // (757)-269-7100
 
 
-#ifndef UTIL_PACKETSITEM_H
-#define UTIL_PACKETSITEM_H
+#ifndef UTIL_PACKETSITEM2_H
+#define UTIL_PACKETSITEM2_H
 
 
 #include <memory>
@@ -53,10 +53,10 @@ namespace ejfat {
     /**
      * This class defines the UDP packet containing items which are supplied by the Supplier class.
      *
-     * @date 03/13/2023
+     * @date 03/27/2023
      * @author timmer
      */
-    class PacketsItem : public SupplyItem {
+    class PacketsItem2 : public SupplyItem {
 
     public:
 
@@ -83,10 +83,10 @@ namespace ejfat {
     //     };
 
 
-//        struct mmsghdr {
-//            struct msghdr msg_hdr;  /* Message header */
-//            unsigned int  msg_len;  /* Number of received bytes for header */
-//        };
+    //        struct mmsghdr {
+    //            struct msghdr msg_hdr;  /* Message header */
+    //            unsigned int  msg_len;  /* Number of received bytes for header */
+    //        };
 
 
         /** Place to store UDP packet data. */
@@ -94,14 +94,6 @@ namespace ejfat {
 
         /** Place to store parsed reassembly header info. */
         reHeader *headers = nullptr;
-
-
-//        reHeader hdrs[200];
-//        char rcvBuf[200][9000];
-//        char rcvHdr[200][20];
-//        struct iovec iovecs[400];
-//        struct mmsghdr msgs[200];
-
 
         /** Max number of UDP packets that can be stored. */
         size_t maxPktCount;
@@ -112,15 +104,15 @@ namespace ejfat {
     public:
 
         static void setEventFactorySettings(size_t pktCount);
-        static const std::function< std::shared_ptr<PacketsItem> () >& eventFactory();
-        static void printPacketItem(std::shared_ptr<PacketsItem> item, int index);
+        static const std::function< std::shared_ptr<PacketsItem2> () >& eventFactory();
+        static void printPacketItem(std::shared_ptr<PacketsItem2> item, int index);
 
 
-        PacketsItem();
-        PacketsItem(const PacketsItem & item);
-        ~PacketsItem();
+        PacketsItem2();
+        PacketsItem2(const PacketsItem2 & item);
+        ~PacketsItem2();
 
-        PacketsItem & operator=(const PacketsItem & other) = delete;
+        PacketsItem2 & operator=(const PacketsItem2 & other) = delete;
 
         struct mmsghdr * getPackets();
         reHeader * getHeaders();
@@ -139,4 +131,4 @@ namespace ejfat {
 }
 
 
-#endif // UTIL_PACKETSITEM_H
+#endif // UTIL_PACKETSITEM2_H

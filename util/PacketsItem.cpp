@@ -88,12 +88,12 @@ namespace ejfat {
         memset(packets, 0, sizeof(*packets));
 
         for (int i = 0; i < maxPktCount; i++) {
-//            packets[i].msg_hdr.msg_name = nullptr;
-//            packets[i].msg_hdr.msg_namelen = 0;
+            packets[i].msg_hdr.msg_name = nullptr;
+            packets[i].msg_hdr.msg_namelen = 0;
 
             packets[i].msg_hdr.msg_iov = new struct iovec[2];
             packets[i].msg_hdr.msg_iovlen = 2;
-            memset(packets[i].msg_hdr.msg_iov, 0, sizeof(struct iovec[2]));
+            //memset(packets[i].msg_hdr.msg_iov, 0, sizeof(struct iovec[2]));
 
             // Where RE header goes
             packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[HEADER_BYTES];

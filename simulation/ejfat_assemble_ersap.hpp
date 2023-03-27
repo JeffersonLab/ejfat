@@ -59,6 +59,20 @@
 #endif
 
 
+#ifdef __APPLE__
+
+// Put this here so we can compile on MAC
+struct mmsghdr {
+    struct msghdr msg_hdr;  /* Message header */
+    unsigned int  msg_len;  /* Number of received bytes for header */
+};
+
+extern int recvmmsg(int sockfd, struct mmsghdr *msgvec, unsigned int vlen,
+                    int flags, struct timespec *timeout);
+
+#endif
+
+
 #ifndef EJFAT_BYTESWAP_H
 #define EJFAT_BYTESWAP_H
 

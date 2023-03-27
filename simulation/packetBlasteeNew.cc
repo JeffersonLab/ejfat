@@ -52,6 +52,7 @@
 
 #include "BufferItem.h"
 #include "PacketsItem.h"
+#include "PacketsItem2.h"
 #include "SupplyItem.h"
 #include "Supplier.h"
 
@@ -603,6 +604,7 @@ typedef struct threadArg_t {
 
     bool debug;
     bool dump;
+    bool useOneIovecBuf;
 
     // shared ptr of map of stats
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
@@ -646,6 +648,7 @@ static void *threadAssemble(void *arg) {
     std::shared_ptr<Supplier<PacketsItem>> pktSupply = tArg->pktSupply;
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
+    bool useOneIovecBuf = tArg->useOneIovecBuf;
     auto stats    = tArg->stats;
     auto & mapp = *stats;
 
@@ -814,10 +817,18 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             // The alternative is to add a sequential number to RE header to be able to track this.
             // That requires more bookkeeping on this receiving end.
 
-            // Copy things into buf
-            memcpy(bufItem->getBuffer()->array() + hdr->offset,
-                   pktItem->getPacket(i)->msg_hdr.msg_iov[1].iov_base,
-                   dataLen);
+//            if (useOneIovecBuf) {
+                // Copy things into buf from the 1 iovec buffer
+                memcpy(bufItem->getBuffer()->array() + hdr->offset,
+                       (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES,
+                       dataLen);
+//            }
+//            else {
+//                // Copy things into buf from 2nd iovec buffer
+//                memcpy(bufItem->getBuffer()->array() + hdr->offset,
+//                       pktItem->getPacket(i)->msg_hdr.msg_iov[1].iov_base,
+//                       dataLen);
+//            }
 
             // Keep track of how much we've written so far
             bytesSoFar += dataLen;
@@ -883,21 +894,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
                 assert(pm != nullptr);
 
-                //            for (auto it = m.cbegin(); it != m.cend() /* not hoisted */; /* no increment */)
-                //            {
-                //                if (must_delete)
-                //                {
-                //                    m.erase(it++);    // or "it = m.erase(it)" since C++11
-                //                }
-                //                else
-                //                {
-                //                    ++it;
-                //                }
-                //            }
-
                 for (auto it = pm->cbegin(); it != pm->cend();) {
-
-                    //for (const auto &nn: *pm) {
 
                     uint64_t tck = it->first;
                     //std::cout << "   try " << tck << std::endl;
@@ -945,9 +942,6 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                     else {
                         ++it;
                     }
-                    //                    else {
-                    //                        std::cout << "DON't remove" << std::endl;
-                    //                    }
                 }
             }
 
@@ -1188,6 +1182,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
     }
 
+    // Use one read on one iovec buf to get packet and hdr together.
+    // If false, read into 2 bufs, one just for header.
+    bool useOneIovecBuf = true;
 
     //---------------------------------------------------
     // Supply in which each item holds 60 UDP packets
@@ -1197,6 +1194,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     PacketsItem::setEventFactorySettings(60);
     std::shared_ptr<Supplier<PacketsItem>> pktSupply =
             std::make_shared<Supplier<PacketsItem>>(pktRingSize, true);
+
+    PacketsItem2::setEventFactorySettings(60);
+    std::shared_ptr<Supplier<PacketsItem2>> pktSupply2 =
+            std::make_shared<Supplier<PacketsItem2>>(pktRingSize, true);
 
     //---------------------------------------------------
     // Supply in which each buf will hold reconstructed buffer.
@@ -1222,6 +1223,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg2->dump = dumpBufs;
     tArg2->debug = debug;
     tArg2->sourceCount = sourceCount;
+    tArg2->useOneIovecBuf = useOneIovecBuf;
     tArg2->tickPrescale = 1;
     if (pinBufCores) {
         tArg2->core = startingBufCore;
@@ -1304,16 +1306,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     again:
 
     while (true) {
-//        fprintf(stderr, "6\n");
-
         // Read all UDP packets here
         item = pktSupply->get();
 
-//fprintf(stderr, "Main: pkt item = %p\n", item.get());
-
-        // Collect packets until full or timeout expires.
-        // How much time to collect 200 packets @ 100Gb (12.5GB) / sec ? ---> (200*9000) / 12.5e9 = .14 millisec
-        // @ 1MB/sec ---> 1.8 sec
+        // Collect packets
         //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, &timeout);
         //int packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITALL, &timeout);
         int packetCount = 0;
@@ -1324,39 +1320,32 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
 
-//if (packetCount > 1) fprintf(stderr, "pkt count %d\n", packetCount);
         if (packetCount == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // if timeout, go 'round again
-fprintf(stderr, "recvmmsg timeout, loop again\n");
                 goto again;
             }
-fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
+            fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
-
-//        fprintf(stderr, "7\n");
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
 
         for (int i = 0; i < packetCount; i++) {
             unsigned int dataLen = item->getPacket(i)->msg_len;
-//PacketsItem::printPacketItem(item, 0);
             if (dataLen < 20) {
                 // didn't read in enough data for even the header, ERROR
+                fprintf(stderr, "\n ******* too little data in Datagram, bad data\n\n");
+                exit(-1);
             }
             ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
                                  item->getHeader(i));
 
-//ejfat::printReHeader(item->getHeader(i));
         }
 
-
-//        fprintf(stderr, "8\n");
         // Send data to reassembly thread for consumption
         pktSupply->publish(item);
-//        fprintf(stderr, "9\n");
 
 #ifdef __linux__
         // Finish up some stats
