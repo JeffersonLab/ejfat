@@ -901,7 +901,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                             // We can't count buffers that were entirely dropped
                             // unless we know exactly what's coming in.
-                            mapp[source]->droppedBytes += bItem->getHeader().length - mapp[source]->discardedBytes;
+                            mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
                             // guesstimate
                             mapp[source]->droppedPackets += mapp[source]->discardedBytes/mtu;
                         }
