@@ -833,7 +833,9 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
-//std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
+                std::cout << "   remove " << hdr->tick << std::endl;
+
+                //std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
 
                 if (takeStats) {
                     //fprintf(stderr, "Look up stat for source %d\n", srcId);
@@ -877,6 +879,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
             for (const auto &nn: *pm) {
                 uint64_t tck = nn.first;
+std::cout << "   purge " << tck << std::endl;
                 std::shared_ptr<BufferItem> bItem = nn.second;
 
 //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
