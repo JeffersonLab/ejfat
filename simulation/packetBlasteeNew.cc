@@ -1190,7 +1190,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Supply in which each buf will hold reconstructed buffer.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
     //---------------------------------------------------
-    int ringSize = 512;
+    int ringSize = 2048;
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
     std::shared_ptr<Supplier<BufferItem>> supply =
             std::make_shared<Supplier<BufferItem>>(ringSize, true);
