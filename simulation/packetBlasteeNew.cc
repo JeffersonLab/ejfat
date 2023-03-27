@@ -525,9 +525,13 @@ static void *rateThread(void *arg) {
             pktCount  = currTotalPkts[i]  - prevTotalPkts[i];
             bufCount  = currBuiltBufs[i]  - prevBuiltBufs[i];
 
+            // TODO: Sign on this is WRONG!!!
             missingByteCount = (currDiscardBytes[i] + currDropBytes[i]) - (prevDiscardBytes[i] + prevDropBytes[i]);
+            printf("  Packets:  currDiscardBytes = %" PRId64 ", currDropBytes = %" PRId64 ", prevDiscardBytes = %" PRId64 ", prevDropBytes = %" PRId64 "\n",
+                   currDiscardBytes[i], currDropBytes[i], prevDiscardBytes[i], prevDropBytes[i]);
 
-//            // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
+
+                    //            // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
 //            discardByteCount = currDiscardBytes[i] - prevDiscardBytes[i];
 //            discardPktCount  = currDiscardPkts[i]  - prevDiscardPkts[i];
 //            discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
