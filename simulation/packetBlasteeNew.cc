@@ -870,9 +870,9 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
 
 
-        // Iterate over map, once every 8 loops
+        // Iterate over map, once every 4 loops
 
-        if (clearLoop % 8 == 0) {
+        if (clearLoop % 4 == 0) {
 
             for (const auto &n: largestSavedTick) {
                 int source = n.first;
