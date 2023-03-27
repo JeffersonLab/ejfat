@@ -1181,7 +1181,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Supply in which each item holds 60 UDP packets
     // and parsed header info.
     //---------------------------------------------------
-    int pktRingSize = 16;
+    int pktRingSize = 64;
     PacketsItem::setEventFactorySettings(60);
     std::shared_ptr<Supplier<PacketsItem>> pktSupply =
             std::make_shared<Supplier<PacketsItem>>(pktRingSize, true);
