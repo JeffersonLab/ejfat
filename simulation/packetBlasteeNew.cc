@@ -1178,10 +1178,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
 
     //---------------------------------------------------
-    // Supply in which each item holds 50 UDP packets
+    // Supply in which each item holds 60 UDP packets
     // and parsed header info.
     //---------------------------------------------------
-    int pktRingSize = 32;
+    int pktRingSize = 128;
     PacketsItem::setEventFactorySettings(60);
     std::shared_ptr<Supplier<PacketsItem>> pktSupply =
             std::make_shared<Supplier<PacketsItem>>(pktRingSize, true);
@@ -1307,7 +1307,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         int packetCount = 0;
 #ifdef __linux__
         // Getting rid of the timeout greatly speeds things up !!
-        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, nullptr);
+        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONEq, nullptr);
 #endif
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
