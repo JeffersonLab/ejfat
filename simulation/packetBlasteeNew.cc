@@ -833,7 +833,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
-                std::cout << "   remove " << hdr->tick << std::endl;
+//std::cout << "   remove " << hdr->tick << std::endl;
 
                 //std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
 
@@ -894,7 +894,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             //for (const auto &nn: *pm) {
 
                 uint64_t tck = it->first;
-std::cout << "   try " << tck << std::endl;
+//std::cout << "   try " << tck << std::endl;
                 std::shared_ptr<BufferItem> bItem = it->second;
 
 //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
@@ -907,7 +907,7 @@ std::cout << "   try " << tck << std::endl;
                 // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
                 if (tck + 2 * tickPrescale < bigTick) {
                     //std::cout << "Remove " << tck << std::endl;
-std::cout << "   purge " << tck << std::endl;
+//std::cout << "   purge " << tck << std::endl;
                     //pm->erase(it++);
                     it = pm->erase(it);
 
