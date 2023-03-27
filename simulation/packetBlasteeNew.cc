@@ -667,6 +667,7 @@ static void *threadAssemble(void *arg) {
     // Track cpu by calling sched_getcpu roughly once per sec or 2
     int cpuLoops = 2000;
     int loopCount = cpuLoops;
+    int clearLoop = 1;
 
     bool takeStats = stats != nullptr;
 
@@ -867,85 +868,96 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
         // So, for each source, take biggest tick to be saved and remove all existing ticks
         // less than 2*tickPrescale and still being constructed. Keep stats.
 
-        // Iterate over map
-        for (const auto& n : largestSavedTick) {
-            int source = n.first;
-            uint64_t bigTick = n.second;
-//std::cout << "clear biggest " << bigTick  << std::endl;
 
-            // Compare this tick with the ticks in maps[source] and remove if too old
-            std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
-            assert(pm != nullptr);
 
-//            for (auto it = m.cbegin(); it != m.cend() /* not hoisted */; /* no increment */)
-//            {
-//                if (must_delete)
-//                {
-//                    m.erase(it++);    // or "it = m.erase(it)" since C++11
-//                }
-//                else
-//                {
-//                    ++it;
-//                }
-//            }
+        // Iterate over map, once every 16 loops
 
-            for (auto it = pm->cbegin(); it != pm->cend();) {
+        if (clearLoop % 16 == 0) {
 
-            //for (const auto &nn: *pm) {
+            for (const auto &n: largestSavedTick) {
+                int source = n.first;
+                uint64_t bigTick = n.second;
+                //std::cout << "clear biggest " << bigTick  << std::endl;
 
-                uint64_t tck = it->first;
-//std::cout << "   try " << tck << std::endl;
-                std::shared_ptr<BufferItem> bItem = it->second;
+                // Compare this tick with the ticks in maps[source] and remove if too old
+                std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
+                assert(pm != nullptr);
 
-//std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
+                //            for (auto it = m.cbegin(); it != m.cend() /* not hoisted */; /* no increment */)
+                //            {
+                //                if (must_delete)
+                //                {
+                //                    m.erase(it++);    // or "it = m.erase(it)" since C++11
+                //                }
+                //                else
+                //                {
+                //                    ++it;
+                //                }
+                //            }
 
-                // Remember, tick values do NOT wrap around.
-                // It may make more sense to have the inequality as:
-                // tck < bigTick - 2*tickPrescale
-                // Except then we run into trouble early with negative # in unsigned arithemtic
-                // showing up as huge #s. So have negative term switch sides.
-                // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
-                if (tck + 2 * tickPrescale < bigTick) {
-                    //std::cout << "Remove " << tck << std::endl;
-//std::cout << "   purge " << tck << std::endl;
-                    //pm->erase(it++);
-                    it = pm->erase(it);
+                for (auto it = pm->cbegin(); it != pm->cend();) {
 
-                    if (takeStats) {
-                        mapp[source]->discardedBuffers++;
-                        mapp[source]->discardedBytes   += bItem->getUserLong();
-                        mapp[source]->discardedPackets += bItem->getUserInt();
+                    //for (const auto &nn: *pm) {
 
-                        // We can't count buffers that were entirely dropped
-                        // unless we know exactly what's coming in.
-                        mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
-                        // guesstimate
-                        mapp[source]->droppedPackets += mapp[source]->discardedBytes/mtu;
-                    }
+                    uint64_t tck = it->first;
+                    //std::cout << "   try " << tck << std::endl;
+                    std::shared_ptr<BufferItem> bItem = it->second;
 
-                    // Release resources here
-                    if (dumpBufs) {
-                        bufSupply->release(bItem);
+                    //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
+
+                    // Remember, tick values do NOT wrap around.
+                    // It may make more sense to have the inequality as:
+                    // tck < bigTick - 2*tickPrescale
+                    // Except then we run into trouble early with negative # in unsigned arithemtic
+                    // showing up as huge #s. So have negative term switch sides.
+                    // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
+                    if (tck + 2 * tickPrescale < bigTick) {
+                        //std::cout << "Remove " << tck << std::endl;
+                        //std::cout << "   purge " << tck << std::endl;
+                        //pm->erase(it++);
+                        it = pm->erase(it);
+
+                        if (takeStats) {
+                            mapp[source]->discardedBuffers++;
+                            mapp[source]->discardedBytes += bItem->getUserLong();
+                            mapp[source]->discardedPackets += bItem->getUserInt();
+
+                            // We can't count buffers that were entirely dropped
+                            // unless we know exactly what's coming in.
+                            mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
+                            // guesstimate
+                            mapp[source]->droppedPackets += mapp[source]->discardedBytes / mtu;
+                        }
+
+                        // Release resources here
+                        if (dumpBufs) {
+                            bufSupply->release(bItem);
+                        }
+                        else {
+                            // We need to label bad buffers.
+                            // Perhaps we could reuse them. But if we do that,
+                            // things will be out of order and access to filled buffers will be delayed!
+                            bItem->setValidData(false);
+                            bufSupply->publish(bItem);
+                        }
+
                     }
                     else {
-                        // We need to label bad buffers.
-                        // Perhaps we could reuse them. But if we do that,
-                        // things will be out of order and access to filled buffers will be delayed!
-                        bItem->setValidData(false);
-                        bufSupply->publish(bItem);
+                        ++it;
                     }
-
+                    //                    else {
+                    //                        std::cout << "DON't remove" << std::endl;
+                    //                    }
                 }
-                else {
-                    ++it;
-                }
-//                    else {
-//                        std::cout << "DON't remove" << std::endl;
-//                    }
             }
+
+            clearLoop = 0;
         }
 
-//std::cout << std::endl << std::endl;
+        clearLoop++;
+
+
+        //std::cout << std::endl << std::endl;
 
         // Finish up some stats
         if (takeStats) {
@@ -1190,7 +1202,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Supply in which each buf will hold reconstructed buffer.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
     //---------------------------------------------------
-    int ringSize = 2048;
+    int ringSize = 1024;
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
     std::shared_ptr<Supplier<BufferItem>> supply =
             std::make_shared<Supplier<BufferItem>>(ringSize, true);
