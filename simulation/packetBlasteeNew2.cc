@@ -745,17 +745,10 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-        reHeader header;
-        reHeader *hdr = &header;
-
         assert(packetCount < 1);
 
         for (int i = 0; i < packetCount; i++) {
-
-            ejfat::parseReHeader(reinterpret_cast<char *>(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
-                                 hdr);
-
-            //reHeader *hdr = pktItem->getHeader(i);
+            reHeader *hdr = pktItem->getHeader(i);
             tick = hdr->tick;
             bool tickEven = tick % 2 == 0;
 
@@ -1430,8 +1423,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 fprintf(stderr, "\n ******* too little data in Datagram, bad data\n\n");
                 exit(-1);
             }
-//            ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
-//                                 item->getHeader(i));
+
+            // Tried to move to reassembly thread but that slowed things down!
+            ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
+                                 item->getHeader(i));
 
         }
 
