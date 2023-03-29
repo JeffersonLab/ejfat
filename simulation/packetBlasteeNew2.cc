@@ -36,7 +36,8 @@
  * it and find it according to its tick value (in unordered_map).
  * </p>
  * </p>
- * There is a thread which pulls off all reassembled buffers. Also another to do stats.
+ * There are 2 threads which pull off all reassembled buffers (one for each supply). Also another to do stats.
+ * There is some sensitivity to the number of packets in each PacketsItem. Best value seems to be 60.
  * </p>
  *
  */
@@ -53,7 +54,6 @@
 #include <errno.h>
 
 #include "BufferItem.h"
-#include "PacketsItem.h"
 #include "PacketsItem2.h"
 #include "SupplyItem.h"
 #include "Supplier.h"
@@ -600,7 +600,7 @@ typedef struct threadArg_t {
     std::shared_ptr<Supplier<BufferItem>> bufSupply2;
 
     /** Supply of structures holding UDP packets. */
-    std::shared_ptr<SupplierN<PacketsItem>> pktSupply;
+    std::shared_ptr<SupplierN<PacketsItem2>> pktSupply;
 
     /** Byte size of buffers contained in supply. */
     int bufferSize;
@@ -663,7 +663,7 @@ static void *threadAssemble(void *arg) {
         bufSupply = tArg->bufSupply2;
     };
 
-    std::shared_ptr<SupplierN<PacketsItem>> pktSupply = tArg->pktSupply;
+    std::shared_ptr<SupplierN<PacketsItem2>> pktSupply = tArg->pktSupply;
 
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
@@ -693,7 +693,7 @@ static void *threadAssemble(void *arg) {
     bool takeStats = stats != nullptr;
 
     std::shared_ptr<BufferItem>  bufItem;
-    std::shared_ptr<PacketsItem> pktItem;
+    std::shared_ptr<PacketsItem2> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
 
 #ifdef __linux__
@@ -1209,14 +1209,11 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Supply in which each item holds 60 UDP packets
     // and parsed header info.
     //---------------------------------------------------
+    int numConsumers = 2;
     int pktRingSize = 32;
-    PacketsItem::setEventFactorySettings(60);
-    std::shared_ptr<SupplierN<PacketsItem>> pktSupply =
-            std::make_shared<SupplierN<PacketsItem>>(pktRingSize, true, 2);
-
-    PacketsItem2::setEventFactorySettings(60);
-    std::shared_ptr<Supplier<PacketsItem2>> pktSupply2 =
-            std::make_shared<Supplier<PacketsItem2>>(pktRingSize, true);
+    PacketsItem2::setEventFactorySettings(60, numConsumers);
+    std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
+            std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, numConsumers);
 
     //---------------------------------------------------
     // Supply in which each buf will hold reconstructed buffer.
@@ -1374,7 +1371,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
     // Time Delay Here???
 
-    std::shared_ptr<PacketsItem> item;
+    std::shared_ptr<PacketsItem2> item;
 
     struct timespec timeout;
     timeout.tv_sec = TIMEOUT;
