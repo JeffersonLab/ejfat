@@ -52,7 +52,6 @@
 
 #include "BufferItem.h"
 #include "PacketsItem.h"
-#include "PacketsItem2.h"
 #include "SupplyItem.h"
 #include "Supplier.h"
 
@@ -1194,10 +1193,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     PacketsItem::setEventFactorySettings(60);
     std::shared_ptr<Supplier<PacketsItem>> pktSupply =
             std::make_shared<Supplier<PacketsItem>>(pktRingSize, true);
-
-    PacketsItem2::setEventFactorySettings(60);
-    std::shared_ptr<Supplier<PacketsItem2>> pktSupply2 =
-            std::make_shared<Supplier<PacketsItem2>>(pktRingSize, true);
 
     //---------------------------------------------------
     // Supply in which each buf will hold reconstructed buffer.
