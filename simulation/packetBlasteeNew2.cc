@@ -1210,7 +1210,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // and parsed header info.
     //---------------------------------------------------
     int pktRingSize = 32;
-    PacketsItem::setEventFactorySettings(40);
+    PacketsItem::setEventFactorySettings(30);
     std::shared_ptr<SupplierN<PacketsItem>> pktSupply =
             std::make_shared<SupplierN<PacketsItem>>(pktRingSize, true, 2);
 
