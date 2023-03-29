@@ -993,31 +993,34 @@ static void *threadReadBuffers(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
 
-    std::shared_ptr<Supplier<BufferItem>>  bufSupply1 = tArg->bufSupply1;
-    std::shared_ptr<Supplier<BufferItem>>  bufSupply2 = tArg->bufSupply2;
+    int id = tArg->consumerId;
+    std::shared_ptr<Supplier<BufferItem>>  bufSupply;
+    if (id == 0) {
+        bufSupply = tArg->bufSupply1;
+    }
+    else {
+        bufSupply = tArg->bufSupply2;
+    };
     bool dumpBufs = tArg->dump;
 //    bool debug    = tArg->debug;
 //    auto stats    = tArg->stats;
 //    auto & mapp = (*(stats.get()));
 
-    std::shared_ptr<BufferItem> bufItem1, bufItem2;
+    std::shared_ptr<BufferItem> bufItem;
 
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
     if (!dumpBufs) {
         while (true) {
-//printf("ReadBufs: get buf #%d, supply = %p\n", count++, bufSupply.get());
             // Grab a fully reassembled buffer from Supplier
-            bufItem1 = bufSupply1->consumerGet();
-            bufItem2 = bufSupply2->consumerGet();
+            bufItem = bufSupply->consumerGet();
 
-            if (bufItem1->validData()) {
+            if (bufItem->validData()) {
                 // do something with buffer here
             }
 
             // Release item for reuse
-            bufSupply1->release(bufItem1);
-            bufSupply2->release(bufItem2);
+            bufSupply->release(bufItem);
         }
     }
 
@@ -1295,7 +1298,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
 
     //---------------------------------------------------
-    // Thread to read and/or dump fully reassembled buffers
+    // Thread(s) to read and/or dump fully reassembled buffers
     //---------------------------------------------------
     if (!dumpBufs) {
         threadArg *tArg = (threadArg *) calloc(1, sizeof(threadArg));
@@ -1310,12 +1313,37 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         tArg->dump = dumpBufs;
         tArg->debug = debug;
         tArg->sourceCount = sourceCount;
+        tArg->consumerId = 0;
 
         tArg->expectedTick = 0;
         tArg->tickPrescale = 1;
 
         pthread_t thd;
         status = pthread_create(&thd, NULL, threadReadBuffers, (void *) tArg);
+        if (status != 0) {
+            fprintf(stderr, "Error creating thread for reading pkts\n");
+            return -1;
+        }
+
+        threadArg *tArg22 = (threadArg *) calloc(1, sizeof(threadArg));
+        if (tArg2 == nullptr) {
+            fprintf(stderr, "out of mem\n");
+            return -1;
+        }
+
+        tArg22->bufSupply1 = supply1;
+        tArg22->bufSupply2 = supply2;
+        tArg22->stats = stats;
+        tArg22->dump = dumpBufs;
+        tArg22->debug = debug;
+        tArg22->sourceCount = sourceCount;
+        tArg22->consumerId = 1;
+
+        tArg22->expectedTick = 0;
+        tArg22->tickPrescale = 1;
+
+        pthread_t thd22;
+        status = pthread_create(&thd22, NULL, threadReadBuffers, (void *) tArg22);
         if (status != 0) {
             fprintf(stderr, "Error creating thread for reading pkts\n");
             return -1;
