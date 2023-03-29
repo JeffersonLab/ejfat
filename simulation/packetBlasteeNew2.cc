@@ -1423,8 +1423,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 fprintf(stderr, "\n ******* too little data in Datagram, bad data\n\n");
                 exit(-1);
             }
-
-            // Tried to move to reassembly thread but that slowed things down!
             ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
                                  item->getHeader(i));
 
@@ -1433,17 +1431,17 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // Send data to reassembly thread for consumption
         pktSupply->publish(item);
 
-#ifdef __linux__
-        // Finish up some stats
-        if (keepStats & !pinCores) {
-            // If core hasn't been pinned, track it
-            if ((startingCore < 0) && (loopCount-- < 1)) {
-                int cpuPkt = sched_getcpu();
-                loopCount = cpuLoops;
-//printf("Read pkt thd: get CPU\n");
-            }
-        }
-#endif
+//#ifdef __linux__
+//        // Finish up some stats
+//        if (keepStats & !pinCores) {
+//            // If core hasn't been pinned, track it
+//            if ((startingCore < 0) && (loopCount-- < 1)) {
+//                int cpuPkt = sched_getcpu();
+//                loopCount = cpuLoops;
+////printf("Read pkt thd: get CPU\n");
+//            }
+//        }
+//#endif
     }
 
     return 0;
