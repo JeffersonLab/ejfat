@@ -125,6 +125,7 @@ set(DIS_EXEC_FILES
         simulation/packetBlasteeFast.cc
         simulation/packetBlasterFat.cc
         simulation/packetBlasteeNew.cc
+        simulation/packetBlasteeNew2.cc
         simulation/packetBlasteeTcpMT.cc
         )
 
@@ -172,6 +173,7 @@ set(CPP_HEADER_FILES
         util/ByteBuffer.h
         util/BufferSupplyItem.h
         util/BufferSupply.h
+        util/SupplierN.h
         util/Supplier.h
         util/SupplyItem.h
         util/BufferItem.h

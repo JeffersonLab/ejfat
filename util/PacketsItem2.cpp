@@ -18,6 +18,7 @@ namespace ejfat {
     //--------------------------------
 
     size_t PacketsItem2::factoryPacketCount {200};
+    uint32_t  PacketsItem2::consumerCount {1};
 
 
     /**
@@ -27,9 +28,13 @@ namespace ejfat {
      * needed for construction of each PacketsItem2, must be passed in as global parameters.
      *
      * @param pktCount number of UDP packets that can be stored in this item.
+     * @param consumers number consumers whose related info will be stored in this item (8 max, 1 min).
      */
-    void PacketsItem2::setEventFactorySettings(size_t pktCount) {
+    void PacketsItem2::setEventFactorySettings(size_t pktCount, uint32_t consumers) {
         PacketsItem2::factoryPacketCount = pktCount;
+        consumers = consumers > 8 ? 8 : consumers;
+        consumers = consumers < 1 ? 1 : consumers;
+        PacketsItem2::consumerCount = consumers;
     }
 
 
@@ -72,7 +77,7 @@ namespace ejfat {
     /**
      * Default constructor which uses values set by {@link #setEventFactorySetting()}.
      */
-    PacketsItem2::PacketsItem2() : SupplyItem() {
+    PacketsItem2::PacketsItem2() : SupplyItem(PacketsItem2::consumerCount) {
         maxPktCount = factoryPacketCount;
         pktsFilled  = 0;
         myId        = idValue++;

@@ -19,17 +19,19 @@
  * <p>
  * In this program, a single, main thread reads from a single socket in which packets from multiple data sources
  * are arriving. There is a ring buffer with pre-allocated structures in which to store the
- * incoming packets. There is second thread which reads packets from that ring in order to do the
- * reassembly. There are also threads to do calculate rates and to read/dump reassembled buffers.
+ * incoming packets. There is 2 additional threads which read packets from that ring in order to do the
+ * reassembly. One of these reassembles even numbered ticks and the other odd.
+ * There are also threads to do calculate rates and to read/dump reassembled buffers.
  * </p>
  * <p>
  * There are maps temporarily containing buffers in which to store reassembled data,
  * one for each incoming data source and specific tick.
  * The buffers come from a ring source much like the structs that hold packets also come from a (different) ring.
- * In the second thread, packets are retrieved from that packet ring. These are placed in the proper buffer.
+ * In the 2nd/3rd threads, packets are retrieved from that packet ring. These are placed in the proper buffer.
  * A buffer for a specific source/tick may already exist
  * (if not a new buf is grabbed) and it's filled with corresponding data.
  * When a buffer is fully reassembled, it's put back into the buffer ring from which it came.
+ * There is one buffer supply for each of these 2 reassembly threads.
  * Note that while a buffer is being reassembled there is a place to store
  * it and find it according to its tick value (in unordered_map).
  * </p>
@@ -55,6 +57,7 @@
 #include "PacketsItem2.h"
 #include "SupplyItem.h"
 #include "Supplier.h"
+#include "SupplierN.h"
 
 #include "ByteBuffer.h"
 #include "ByteOrder.h"
@@ -591,20 +594,24 @@ static void *rateThread(void *arg) {
 
 // Arg to pass to buffer reassembly thread
 typedef struct threadArg_t {
-    /** Supply of buffers for holding reassembled data. */
-    std::shared_ptr<Supplier<BufferItem>> bufSupply;
+    /** Supply of buffers for holding reassembled data.
+     *  One for each reassembly thread. */
+    std::shared_ptr<Supplier<BufferItem>> bufSupply1;
+    std::shared_ptr<Supplier<BufferItem>> bufSupply2;
 
-    /** Supply of sstructures holding UDP packets. */
-    std::shared_ptr<Supplier<PacketsItem>> pktSupply;
+    /** Supply of structures holding UDP packets. */
+    std::shared_ptr<SupplierN<PacketsItem>> pktSupply;
 
     /** Byte size of buffers contained in supply. */
     int bufferSize;
     int mtu;
     int sourceCount;
+    int consumerId;
 
     bool debug;
     bool dump;
     bool useOneIovecBuf;
+    bool buildEvenTicks;
 
     // shared ptr of map of stats
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
@@ -644,16 +651,27 @@ static void *threadAssemble(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
 
-    std::shared_ptr<Supplier<BufferItem>>  bufSupply = tArg->bufSupply;
-    std::shared_ptr<Supplier<PacketsItem>> pktSupply = tArg->pktSupply;
+    int core = tArg->core;
+    int sourceCount = tArg->sourceCount;
+    int id = tArg->consumerId;
+
+    std::shared_ptr<Supplier<BufferItem>> bufSupply;
+    if (id == 0) {
+        bufSupply = tArg->bufSupply1;
+    }
+    else {
+        bufSupply = tArg->bufSupply2;
+    };
+
+    std::shared_ptr<SupplierN<PacketsItem>> pktSupply = tArg->pktSupply;
+
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
     bool useOneIovecBuf = tArg->useOneIovecBuf;
+    bool buildEven = tArg->buildEvenTicks;
+
     auto stats    = tArg->stats;
     auto & mapp = *stats;
-
-    int core = tArg->core;
-    int sourceCount = tArg->sourceCount;
 
     // expected max size of packets
     int mtu = tArg->mtu;
@@ -720,17 +738,24 @@ static void *threadAssemble(void *arg) {
         //-------------------------------------------------------------
         // Get item containing packets previously read in by another thd
         //-------------------------------------------------------------
-        pktItem = pktSupply->consumerGet();
+        pktItem = pktSupply->consumerGet(id);
         size_t packetCount = pktItem->getPacketsFilled();
 
         int srcId, prevSrcId = -1;
-        uint64_t prevTick = UINT64_MAX;
+        uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-        // TODO: do we want to catch packetCount < 1 here?
+        assert(packetCount < 1);
 
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
+            tick = hdr->tick;
+            bool tickEven = tick % 2 == 0;
+
+            // Skip this tick and go to the next if looking for odd and have even or vice versa
+            if ((tickEven && !buildEven) || (!tickEven && buildEven)) {
+                continue;
+            }
 
             srcId = hdr->dataId;
             if (srcId != prevSrcId) {
@@ -871,7 +896,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
         // If here, we've gone thru a bundle of UDP packets,
         // time to get the next bundle.
-        pktSupply->release(pktItem);
+        pktSupply->release(pktItem, id);
 
         // May want to do some house cleaning at this point.
         // There may be missing packets which have kept some ticks from some sources
@@ -879,79 +904,67 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
         // So, for each source, take biggest tick to be saved and remove all existing ticks
         // less than 2*tickPrescale and still being constructed. Keep stats.
 
+        for (const auto &n: largestSavedTick) {
+            int source = n.first;
+            uint64_t bigTick = n.second;
+            //std::cout << "clear biggest " << bigTick  << std::endl;
 
+            // Compare this tick with the ticks in maps[source] and remove if too old
+            std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
+            assert(pm != nullptr);
 
-        // Iterate over map, once every 4 loops
+            // Using the iterator and the "erase" method, as shown,
+            // will avoid problems invalidating the iterator
+            for (auto it = pm->cbegin(); it != pm->cend();) {
 
- //       if (clearLoop % 4 == 0) {
+                uint64_t tck = it->first;
+                //std::cout << "   try " << tck << std::endl;
+                std::shared_ptr<BufferItem> bItem = it->second;
 
-            for (const auto &n: largestSavedTick) {
-                int source = n.first;
-                uint64_t bigTick = n.second;
-                //std::cout << "clear biggest " << bigTick  << std::endl;
+                //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
 
-                // Compare this tick with the ticks in maps[source] and remove if too old
-                std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pm = maps[source];
-                assert(pm != nullptr);
+                // Remember, tick values do NOT wrap around.
+                // It may make more sense to have the inequality as:
+                // tck < bigTick - 2*tickPrescale
+                // Except then we run into trouble early with negative # in unsigned arithemtic
+                // showing up as huge #s. So have negative term switch sides.
+                // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
+                if (tck + 2 * tickPrescale < bigTick) {
+                    //std::cout << "Remove " << tck << std::endl;
+                    //std::cout << "   purge " << tck << std::endl;
+                    //pm->erase(it++);
+                    it = pm->erase(it);
 
-                for (auto it = pm->cbegin(); it != pm->cend();) {
+                    if (takeStats) {
+                        mapp[source]->discardedBuffers++;
+                        mapp[source]->discardedBytes += bItem->getUserLong();
+                        mapp[source]->discardedPackets += bItem->getUserInt();
 
-                    uint64_t tck = it->first;
-                    //std::cout << "   try " << tck << std::endl;
-                    std::shared_ptr<BufferItem> bItem = it->second;
+                        // We can't count buffers that were entirely dropped
+                        // unless we know exactly what's coming in.
+                        mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
+                        // guesstimate
+                        mapp[source]->droppedPackets += mapp[source]->discardedBytes / mtu;
+                    }
 
-                    //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
-
-                    // Remember, tick values do NOT wrap around.
-                    // It may make more sense to have the inequality as:
-                    // tck < bigTick - 2*tickPrescale
-                    // Except then we run into trouble early with negative # in unsigned arithemtic
-                    // showing up as huge #s. So have negative term switch sides.
-                    // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
-                    if (tck + 2 * tickPrescale < bigTick) {
-                        //std::cout << "Remove " << tck << std::endl;
-                        //std::cout << "   purge " << tck << std::endl;
-                        //pm->erase(it++);
-                        it = pm->erase(it);
-
-                        if (takeStats) {
-                            mapp[source]->discardedBuffers++;
-                            mapp[source]->discardedBytes += bItem->getUserLong();
-                            mapp[source]->discardedPackets += bItem->getUserInt();
-
-                            // We can't count buffers that were entirely dropped
-                            // unless we know exactly what's coming in.
-                            mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
-                            // guesstimate
-                            mapp[source]->droppedPackets += mapp[source]->discardedBytes / mtu;
-                        }
-
-                        // Release resources here
-                        if (dumpBufs) {
-                            bufSupply->release(bItem);
-                        }
-                        else {
-                            // We need to label bad buffers.
-                            // Perhaps we could reuse them. But if we do that,
-                            // things will be out of order and access to filled buffers will be delayed!
-                            bItem->setValidData(false);
-                            bufSupply->publish(bItem);
-                        }
-
+                    // Release resources here
+                    if (dumpBufs) {
+                        bufSupply->release(bItem);
                     }
                     else {
-                        ++it;
+                        // We need to label bad buffers.
+                        // Perhaps we could reuse them. But if we do that,
+                        // things will be out of order and access to filled buffers will be delayed!
+                        bItem->setValidData(false);
+                        bufSupply->publish(bItem);
                     }
+
+                }
+                else {
+                    ++it;
                 }
             }
-
-//            clearLoop = 0;
-//        }
-//
-//        clearLoop++;
-
-
-        //std::cout << std::endl << std::endl;
+        }
 
         // Finish up some stats
         if (takeStats) {
@@ -980,13 +993,14 @@ static void *threadReadBuffers(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
 
-    std::shared_ptr<Supplier<BufferItem>>  bufSupply = tArg->bufSupply;
+    std::shared_ptr<Supplier<BufferItem>>  bufSupply1 = tArg->bufSupply1;
+    std::shared_ptr<Supplier<BufferItem>>  bufSupply2 = tArg->bufSupply2;
     bool dumpBufs = tArg->dump;
 //    bool debug    = tArg->debug;
 //    auto stats    = tArg->stats;
 //    auto & mapp = (*(stats.get()));
 
-    std::shared_ptr<BufferItem>  bufItem;
+    std::shared_ptr<BufferItem> bufItem1, bufItem2;
 
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
@@ -994,14 +1008,16 @@ static void *threadReadBuffers(void *arg) {
         while (true) {
 //printf("ReadBufs: get buf #%d, supply = %p\n", count++, bufSupply.get());
             // Grab a fully reassembled buffer from Supplier
-            bufItem = bufSupply->consumerGet();
+            bufItem1 = bufSupply1->consumerGet();
+            bufItem2 = bufSupply2->consumerGet();
 
-            if (bufItem->validData()) {
+            if (bufItem1->validData()) {
                 // do something with buffer here
             }
 
             // Release item for reuse
-            bufSupply->release(bufItem);
+            bufSupply1->release(bufItem1);
+            bufSupply2->release(bufItem2);
         }
     }
 
@@ -1192,8 +1208,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     //---------------------------------------------------
     int pktRingSize = 32;
     PacketsItem::setEventFactorySettings(60);
-    std::shared_ptr<Supplier<PacketsItem>> pktSupply =
-            std::make_shared<Supplier<PacketsItem>>(pktRingSize, true);
+    std::shared_ptr<SupplierN<PacketsItem>> pktSupply =
+            std::make_shared<SupplierN<PacketsItem>>(pktRingSize, true, 2);
 
     PacketsItem2::setEventFactorySettings(60);
     std::shared_ptr<Supplier<PacketsItem2>> pktSupply2 =
@@ -1203,13 +1219,49 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Supply in which each buf will hold reconstructed buffer.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
     //---------------------------------------------------
-    int ringSize = 1024;
+    int ringSize = 512;
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
-    std::shared_ptr<Supplier<BufferItem>> supply =
+    std::shared_ptr<Supplier<BufferItem>> supply1 =
+            std::make_shared<Supplier<BufferItem>>(ringSize, true);
+
+    std::shared_ptr<Supplier<BufferItem>> supply2 =
             std::make_shared<Supplier<BufferItem>>(ringSize, true);
 
     //---------------------------------------------------
-    // Start thread to reassemble buffers of packets from all sources
+    // Start 1st thread to reassemble buffers of packets from all sources
+    //---------------------------------------------------
+    threadArg *tArg1 = (threadArg *) calloc(1, sizeof(threadArg));
+    if (tArg1 == nullptr) {
+        fprintf(stderr, "\n ******* ran out of memory\n\n");
+        exit(1);
+    }
+
+    tArg1->bufSupply1 = supply1;
+    tArg1->pktSupply = pktSupply;
+    tArg1->stats = stats;
+    tArg1->dump = dumpBufs;
+    tArg1->debug = debug;
+    tArg1->sourceCount = sourceCount;
+    tArg1->useOneIovecBuf = useOneIovecBuf;
+    tArg1->tickPrescale = 2;
+    tArg1->consumerId = 0;
+    tArg1->buildEvenTicks = true;
+    if (pinBufCores) {
+        tArg1->core = startingBufCore;
+    }
+    else {
+        tArg1->core = -1;
+    }
+
+    pthread_t thd1;
+    status = pthread_create(&thd1, NULL, threadAssemble, (void *) tArg1);
+    if (status != 0) {
+        fprintf(stderr, "\n ******* error creating thread\n\n");
+        return -1;
+    }
+
+    //---------------------------------------------------
+    // Start 2nd thread to reassemble buffers of packets from all sources
     //---------------------------------------------------
     threadArg *tArg2 = (threadArg *) calloc(1, sizeof(threadArg));
     if (tArg2 == nullptr) {
@@ -1217,27 +1269,30 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         exit(1);
     }
 
-    tArg2->bufSupply = supply;
+    tArg2->bufSupply2 = supply2;
     tArg2->pktSupply = pktSupply;
     tArg2->stats = stats;
     tArg2->dump = dumpBufs;
     tArg2->debug = debug;
     tArg2->sourceCount = sourceCount;
     tArg2->useOneIovecBuf = useOneIovecBuf;
-    tArg2->tickPrescale = 1;
+    tArg2->tickPrescale = 2;
+    tArg2->consumerId = 1;
+    tArg2->buildEvenTicks = false;
     if (pinBufCores) {
-        tArg2->core = startingBufCore;
+        tArg2->core = startingBufCore + 1;
     }
     else {
         tArg2->core = -1;
     }
 
-    pthread_t thd1;
-    status = pthread_create(&thd1, NULL, threadAssemble, (void *) tArg2);
+    pthread_t thd2;
+    status = pthread_create(&thd2, NULL, threadAssemble, (void *) tArg2);
     if (status != 0) {
         fprintf(stderr, "\n ******* error creating thread\n\n");
         return -1;
     }
+
 
     //---------------------------------------------------
     // Thread to read and/or dump fully reassembled buffers
@@ -1249,7 +1304,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             return -1;
         }
 
-        tArg->bufSupply = supply;
+        tArg->bufSupply1 = supply1;
+        tArg->bufSupply2 = supply2;
         tArg->stats = stats;
         tArg->dump = dumpBufs;
         tArg->debug = debug;

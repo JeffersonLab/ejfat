@@ -18,6 +18,7 @@ namespace ejfat {
     // STATIC INITIALIZATION
     //--------------------------------
 
+    uint32_t  BufferItem::consumerCount {1};
     uint32_t  BufferItem::factoryBufferSize {0};
     ByteOrder BufferItem::factoryByteOrder {ByteOrder::ENDIAN_LOCAL};
 
@@ -30,10 +31,14 @@ namespace ejfat {
      *
      * @param order   byte order.
      * @param bufSize max number of uncompressed data bytes each record can hold.
+     * @param consumers number consumers whose related info will be stored in this item (8 max, 1 min).
      */
-    void BufferItem::setEventFactorySettings(const ByteOrder & order, uint32_t bufSize) {
+    void BufferItem::setEventFactorySettings(const ByteOrder & order, uint32_t bufSize, uint32_t consumers) {
         BufferItem::factoryByteOrder = order;
         BufferItem::factoryBufferSize = bufSize;
+        consumers = consumers > 8 ? 8 : consumers;
+        consumers = consumers < 1 ? 1 : consumers;
+        BufferItem::consumerCount = consumers;
     }
 
 
@@ -49,7 +54,7 @@ namespace ejfat {
     /**
      * Default constructor which uses values set by {@link #setEventFactorySetting()}.
      */
-    BufferItem::BufferItem() : SupplyItem() {
+    BufferItem::BufferItem() : SupplyItem(BufferItem::consumerCount) {
         order          = BufferItem::factoryByteOrder;
         bufferSize     = BufferItem::factoryBufferSize;
         orderedRelease = SupplyItem::factoryOrderedRelease;

@@ -16,6 +16,7 @@
 #include <atomic>
 #include <functional>
 #include <cstring>
+#include <string>
 
 
 namespace ejfat {
@@ -23,20 +24,29 @@ namespace ejfat {
     /**
      * This class provides the base class for items which are supplied by the Supplier class.
      * Use this to inherit from and provide basic supply logic.
+     * This allows for up to 8 consumers to have access to this item at any one time
+     * (ie they share the same ring buffer's barrier).
      *
      * @date 3/13/2023
      * @author timmer
      */
     class SupplyItem {
 
+        template<typename T> friend class Supplier;
+        template<typename T> friend class SupplierN;
+
     public:
 
         /** Assign each record a unique id for debugging purposes. */
         static uint64_t idValue;
+        /** Max number of consumers whose associated data can be stored here. */
+        static uint32_t maxConsumers;
         /** True if user releases SupplyItems in same order as acquired (set when constructing Supplier). */
         static bool factoryOrderedRelease;
 
     protected:
+        /** How many consumers have access to this item (share same ring buffer barrier)? */
+        int consumerCount = 1;
 
         /** True if user releases SupplyItems in same order as acquired. */
         bool orderedRelease = false;
@@ -44,17 +54,17 @@ namespace ejfat {
         /** Sequence in which this object was taken from ring for use by a producer with get(). */
         int64_t producerSequence = 0UL;
 
-        /** Sequence in which this object was taken from ring for use by a consumer with consumerGet(). */
-        int64_t consumerSequence = 0UL;
+        /** Sequences for multiple consumers in which this object was taken from ring for use with consumerGet(). */
+        int64_t consumerSequences[8];
 
         /** Track more than one user so this object can be released for reuse. */
-        std::atomic<int> atomicCounter {0};
+        std::atomic<int> atomicCounters[8];
 
         /** Track more than one user so this object can be released for reuse. */
-        volatile int volatileCounter {0};
+        volatile int volatileCounters[8];
 
-        /** If true, we're tracking more than one user. */
-        bool multipleUsers = false;
+        /** If true, we're tracking more than one user (for each consumer). */
+        bool multipleUsers[8];
 
         /**
          * Need to track whether this item was obtained through consumerGet() or
@@ -69,34 +79,35 @@ namespace ejfat {
         uint32_t myId;
 
 
-        SupplyItem();
+        SupplyItem(uint32_t consumerCount = 1);
         SupplyItem(const SupplyItem & item);
         ~SupplyItem() = default;
 
+
     public:
+
         SupplyItem & operator=(const SupplyItem & other) = delete;
 
 
-    public:
-
         void reset();
         uint32_t getMyId() const;
+
         bool isFromConsumerGet() const;
         void setFromConsumerGet(bool fromConsumer);
 
+        void setUsers(int users, uint32_t id = 0);
+        int  getUsers(uint32_t id = 0) const;
+        void addUsers(int additionalUsers, uint32_t id = 0);
 
-        // User should not call these, only called by Supplier ...........
+    protected:
 
-        bool decrementCounter();
+        bool decrementCounter(uint32_t id = 0);
+
         int64_t getProducerSequence() const;
         void setProducerSequence(int64_t sequence);
-        int64_t getConsumerSequence() const;
-        void setConsumerSequence(int64_t sequence);
 
-        void setUsers(int users);
-        int getUsers() const;
-        void addUsers(int additionalUsers);
-
+        int64_t getConsumerSequence(uint32_t id = 0) const;
+        void setConsumerSequence(int64_t sequence, uint32_t id = 0);
     };
 
 }

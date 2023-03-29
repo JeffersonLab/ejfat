@@ -62,6 +62,7 @@ namespace ejfat {
 
         /** Set dynamically by calling {@link #setEventFactorySettings(size_t)}. */
         static size_t factoryPacketCount;
+        static uint32_t consumerCount;
 
     private:
 
@@ -103,7 +104,7 @@ namespace ejfat {
 
     public:
 
-        static void setEventFactorySettings(size_t pktCount);
+        static void setEventFactorySettings(size_t pktCount, uint32_t consumerCount = 1);
         static const std::function< std::shared_ptr<PacketsItem2> () >& eventFactory();
         static void printPacketItem(std::shared_ptr<PacketsItem2> item, int index);
 

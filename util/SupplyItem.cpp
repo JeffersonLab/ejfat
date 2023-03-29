@@ -14,15 +14,29 @@
 namespace ejfat {
 
     uint64_t  SupplyItem::idValue {0};
+    uint32_t  SupplyItem::maxConsumers {8};
     bool      SupplyItem::factoryOrderedRelease {false};
 
 
-    /**
+     /**
      * Default constructor which uses value set in {@link Supplier#Supplier(int, bool)}.
-     */
-    SupplyItem::SupplyItem() {
+      * @param consumers total number of consumers sharing the same supply items at the
+      * same time. Max is 8!
+      */
+    SupplyItem::SupplyItem(uint32_t consumers) {
+        if (consumers > maxConsumers) {
+            throw std::runtime_error("too many consumers, " + std::to_string(maxConsumers) + "  max");
+        }
+
+        consumerCount  = consumers;
         orderedRelease = factoryOrderedRelease;
         myId = idValue++;
+        for (int i=0; i < consumers; i++) {
+            consumerSequences[i] = 0UL;
+            atomicCounters[i]    = 0;
+            volatileCounters[i]  = 0;
+            multipleUsers[i]     = false;
+        }
     }
 
     /**
@@ -32,14 +46,17 @@ namespace ejfat {
     SupplyItem::SupplyItem(const SupplyItem & item) {
         // Avoid self copy ...
         if (this != &item) {
-            orderedRelease   = item.orderedRelease;
-            producerSequence = item.producerSequence;
-            consumerSequence = item.consumerSequence;
-            atomicCounter    = item.atomicCounter.load();
-            volatileCounter  = item.volatileCounter;
-            multipleUsers    = item.multipleUsers;
-            fromConsumerGet  = item.fromConsumerGet;
-            myId             = item.myId;
+            consumerCount     = item.consumerCount;
+            orderedRelease    = item.orderedRelease;
+            producerSequence  = item.producerSequence;
+            for (int i=0; i < consumerCount; i++) {
+                consumerSequences[i] = item.consumerSequences[i];
+                atomicCounters[i]    = item.atomicCounters[i].load();
+                volatileCounters[i]  = item.volatileCounters[i];
+                multipleUsers[i]     = item.multipleUsers[i];
+            }
+            fromConsumerGet   = item.fromConsumerGet;
+            myId              = item.myId;
         }
     }
 
@@ -48,9 +65,14 @@ namespace ejfat {
       * Method to reset this item each time it is retrieved from the supply.
       */
     void SupplyItem::reset() {
-        multipleUsers = false;
         fromConsumerGet = false;
-        producerSequence = consumerSequence = 0L;
+        producerSequence = 0L;
+        for (int i=0; i < 8; i++) {
+            consumerSequences[i] = 0UL;
+            atomicCounters[i]    = 0;
+            volatileCounters[i]  = 0;
+            multipleUsers[i]     = false;
+        }
     }
 
 
@@ -81,20 +103,23 @@ namespace ejfat {
     /**
      * Called internally by {@link Supplier#release(SupplyItem)}
      * if no longer using item so it may be reused later.
-     * <b>User should NEVER call this.</b>
+     * @param id id of consumer of this item.
      * @return {@code true} if no one using buffer now, else {@code false}.
      */
-    bool SupplyItem::decrementCounter() {
-        if (!multipleUsers) return true;
-        if (orderedRelease) return (--volatileCounter < 1);
-        int result = atomicCounter.fetch_sub(1) - 1;
+    bool SupplyItem::decrementCounter(uint32_t id) {
+        if (id > 7) {
+            throw std::overflow_error("too many consumers, 8 max");
+        }
+
+        if (!multipleUsers[id]) return true;
+        if (orderedRelease) return (--volatileCounters[id] < 1);
+        int result = atomicCounters[id].fetch_sub(1) - 1;
         return (result < 1);
     }
 
 
     /**
      * Get the sequence of this item for producer.
-     * <b>User will NOT need to call this.</b>
      * @return sequence of this item for producer.
      */
     int64_t SupplyItem::getProducerSequence() const {return producerSequence;}
@@ -102,26 +127,39 @@ namespace ejfat {
 
     /**
      * Set the sequence of this item for producer.
-     * <b>User will NOT need to and should NOT call this.</b>
      * @param sequence sequence of this item for producer.
      */
     void SupplyItem::setProducerSequence(int64_t sequence) {this->producerSequence = sequence;}
 
 
     /**
-     * Get the sequence of this item for consumer.
+     * Get the sequence of this item for this consumer.
      * <b>User will NOT need to call this.</b>
-     * @return sequence of this item for consumer.
+     * @param id id of this consumer (0 to 7).
+     * @return sequence of this item for this consumer.
      */
-    int64_t SupplyItem::getConsumerSequence() const {return consumerSequence;}
+    int64_t SupplyItem::getConsumerSequence(uint32_t id) const {
+        if (id > 7) {
+            throw std::overflow_error("too many consumers, 8 max");
+        }
+
+        return consumerSequences[id];
+    }
 
 
     /**
-     * Set the sequence of this item for consumer.
+     * Set the sequence of this item for this consumer.
      * <b>User will NOT need to and should NOT call this.</b>
-     * @param sequence sequence of this item for consumer.
+     * @param sequence sequence of this item for this consumer.
+     * @param id id of this consumer (0 to 7).
      */
-    void SupplyItem::setConsumerSequence(int64_t sequence) {this->consumerSequence = sequence;}
+    void SupplyItem::setConsumerSequence(int64_t sequence, uint32_t id) {
+        if (id > 7) {
+            throw std::overflow_error("too many consumers, 8 max");
+        }
+
+        this->consumerSequences[id] = sequence;
+    }
 
 
     /**
@@ -131,31 +169,40 @@ namespace ejfat {
      *
      * @param users number of buffer users
      */
-    void SupplyItem::setUsers(int users) {
+    void SupplyItem::setUsers(int users, uint32_t id) {
+        if (id > 7) {
+            throw std::overflow_error("too many consumers, 8 max");
+        }
+
         if (users > 1) {
-            multipleUsers = true;
+            multipleUsers[id] = true;
 
             if (orderedRelease) {
-                volatileCounter = users;
+                volatileCounters[id] = users;
             }
             else {
-                atomicCounter = users;
+                atomicCounters[id] = users;
             }
         }
     }
 
 
     /**
-     * Get the number of users of this item.
-     * @return number of users of this item.
+     * Get the number of users of this item by given consumer.
+     * @param id id of consumer of this item.
+     * @return number of users of this item by this consumer.
      */
-    int SupplyItem::getUsers() const {
-        if (multipleUsers) {
+    int SupplyItem::getUsers(uint32_t id) const {
+        if (id > 7) {
+            throw std::overflow_error("too many consumers, 8 max");
+        }
+
+        if (multipleUsers[id]) {
             if (orderedRelease) {
-                return volatileCounter;
+                return volatileCounters[id];
             }
             else {
-                return atomicCounter;
+                return atomicCounters[id];
             }
         }
         return 1;
@@ -171,30 +218,35 @@ namespace ejfat {
      * item must be copied and placed on all extra output channels. In this case,
      * there is always at least one existing user.
      *
+     * @param id id of consumer of this item.
      * @param additionalUsers number of users to add
      */
-    void SupplyItem::addUsers(int additionalUsers) {
+    void SupplyItem::addUsers(int additionalUsers, uint32_t id) {
+        if (id > 7) {
+            throw std::overflow_error("too many consumers, 8 max");
+        }
+
         if (additionalUsers < 1) return;
 
         // If there was only 1 original user of the ByteBuffer ...
-        if (!multipleUsers) {
+        if (!multipleUsers[id]) {
             // The original user's BB is now in the process of being copied
             // so it still exists (decrementCounter not called yet).
             // Total users now = 1 + additionalUsers.
             if (orderedRelease) {
-                volatileCounter = additionalUsers + 1;
+                volatileCounters[id] = additionalUsers + 1;
             }
             else {
-                atomicCounter = (additionalUsers + 1);
+                atomicCounters[id] = (additionalUsers + 1);
             }
         }
         else {
             if (orderedRelease) {
                 // Warning, this is not an atomic operation!
-                volatileCounter += additionalUsers;
+                volatileCounters[id] += additionalUsers;
             }
             else {
-                atomicCounter += additionalUsers;
+                atomicCounters[id] += additionalUsers;
             }
         }
     }

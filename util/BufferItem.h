@@ -36,6 +36,7 @@ namespace ejfat {
 
     public:
 
+        static uint32_t  consumerCount;
         static uint32_t  factoryBufferSize;
         static ByteOrder factoryByteOrder;
 
@@ -79,7 +80,7 @@ namespace ejfat {
 
     public:
 
-        static void setEventFactorySettings(const ByteOrder & order, uint32_t bufSize);
+        static void setEventFactorySettings(const ByteOrder & order, uint32_t bufSize, uint32_t consumers = 1);
         static const std::function< std::shared_ptr<BufferItem> () >& eventFactory();
 
 

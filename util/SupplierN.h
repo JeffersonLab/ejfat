@@ -8,8 +8,8 @@
 // (757)-269-7100
 
 
-#ifndef UTIL_SUPPLIER_H
-#define UTIL_SUPPLIER_H
+#ifndef UTIL_SUPPLIERN_H
+#define UTIL_SUPPLIERN_H
 
 
 #include <string>
@@ -31,29 +31,23 @@ namespace ejfat {
 
     /**
      * <p>
-     * This class was originally written in Java and is translated to C++ here.
-     * It was originally used to provide a very fast supply of ByteBuffer objects
-     * (actually ByteBufferItem objects each of which wraps a ByteBuffer)
-     * for reuse in 2 different modes (uses Disruptor software package).</p>
-     * <p>
-     * Here it's been rewritten in templated form so the fast Disruptor ring buffer
+     * This class is written in templated form so the fast Disruptor ring buffer
      * can be used to supply different types of items/objects.</p>
      *
-     * 1) It can be used as a simple supply of items.
-     * In this mode, only get() and release() are called. A user does a {@link #get()},
-     * uses that item, then calls {@link #release(std::shared_ptr<T>)} when done with it.
-     * If there are multiple users of a single item (say 5), then call item.setUsers(5)
-     * BEFORE it is used and the item is only released when all 5 users have
-     * called release().<p>
-     *
-     * 2) It can be used as a supply of items in which a single
-     * producer provides data/content for a single consumer which is waiting for that data.
+     * It is to be used as a supply of items in which a single
+     * producer provides data/content for N consumers which are waiting for that data.
      * The producer does a {@link #get()}, fills the item with data, and finally does a
      * {@link #publish(std::shared_ptr<T>)}
-     * to let the consumer know the data is ready. Simultaneously, a consumer does a
+     * to let the consumer know the data is ready. Simultaneously, each consumer does a
      * {@link #consumerGet()} to access the item and its data once it is ready.
      * The consumer then calls {@link #release()} when finished
-     * which allows the producer to reuse the now unused item.<p>
+     * which allows the producer to reuse the now unused item.
+     * <p>
+     * The number of clients must be set in the constructor. It is completely up to
+     * the N consumers as to any orchestration needed over who does what to which
+     * ring entries. For example, with 2 consumers, one may operate on all "odd" items
+     * and the other on "even" items. This, of course, depends on the type of items
+     * being supplied.
      *
      *
      * <pre><code>
@@ -87,46 +81,53 @@ namespace ejfat {
      * @since 6.0 4/28/22
      * @author timmer
      */
-    template <class T> class Supplier {
+    template <class T> class SupplierN {
 
         // Ensure that SupplyItem is the base class for the T class
         static_assert(std::is_base_of<SupplyItem, T>::value, "template T must derive from SupplyItem");
 
     protected:
 
-        /** Mutex for thread safety when releasing resources that were out-of-order. */
-        std::mutex supplyMutex;
+        /** Mutex for thread safety when releasing resources that were out-of-order. One per consumer. */
+        std::mutex *supplyMutex;
 
         /** Number of records held in this supply. */
         uint32_t ringSize = 0;
 
+        /** Number of consumers to be consuming ring items. */
+        uint32_t consumerCount = 1;
+
         /** Ring buffer. Variable ringSize needs to be defined first. */
         std::shared_ptr<Disruptor::RingBuffer<std::shared_ptr<T>>> ringBuffer = nullptr;
 
-
-        /** Barrier to prevent items from being used again, before being released. */
+        /** One barrier to prevent items from being used again, before being released. */
         std::shared_ptr<Disruptor::ISequenceBarrier> barrier;
-        /** Which item is this one? */
-        std::shared_ptr<Disruptor::ISequence> sequence;
+
+        /** One sequence for each consumer (array)
+         * since each is consuming a different item at ony one time. */
+        std::shared_ptr<Disruptor::ISequence> *sequence;
+
         /** All sequences for barrier. */
         std::vector<std::shared_ptr<Disruptor::ISequence>> allSeqs;
-        /** Which item is next for the consumer? */
-        int64_t nextConsumerSequence = 0L;
-        /** Up to which item is available for the consumer? */
-        int64_t availableConsumerSequence = 0L;
 
-    
+        /** Which item is next for a consumer (array)? */
+        int64_t *nextConsumerSequence;
+
+        /** Up to which item is available for a consumer (array)? */
+        int64_t *availableConsumerSequence;
+
         // For thread safety
 
         /** True if user releases items in same order as acquired. */
         bool orderedRelease;
-        /** When releasing in sequence, the last sequence to have been released. */
-        int64_t lastSequenceReleased = -1L;
-        /** When releasing in sequence, the highest sequence to have asked for release. */
-        int64_t maxSequence = -1L;
+        /** When releasing in sequence, the last sequence to have been released. One per consumer. */
+        int64_t *lastSequenceReleased;
+        /** When releasing in sequence, the highest sequence to have asked for release. One per consumer. */
+        int64_t *maxSequence;
         /** When releasing in sequence, the number of sequences between maxSequence &
-         * lastSequenceReleased which have called release(), but not been released yet. */
-        uint32_t between = 0;
+         * lastSequenceReleased which have called release(), but not been released yet.
+         * One per consumer. */
+        uint32_t *between;
 
         // For item id
         int itemCounter;
@@ -135,16 +136,26 @@ namespace ejfat {
     public:
 
 
-        Supplier(const Supplier & supply) = delete;
+        SupplierN(const SupplierN & supply) = delete;
 
-        ~Supplier() {ringBuffer.reset();}
+        ~SupplierN() {
+            delete(sequence);
+            delete(availableConsumerSequence);
+            delete(nextConsumerSequence);
+            delete(lastSequenceReleased);
+            delete(maxSequence);
+            delete(between);
+            delete(supplyMutex);
+
+            ringBuffer.reset();
+        }
 
 
         /**
-         * Default Constructor. Ring has 16 bufs, no ordered release.
+         * Default Constructor. Ring has 16 bufs, no ordered release, only 1 consumer.
          */
-        Supplier() :
-                Supplier(16, false) {
+        SupplierN() :
+                SupplierN(16, false, 1) {
         }
 
         
@@ -161,18 +172,26 @@ namespace ejfat {
          * @param orderedRelease  if true, the user promises to release the T items
          *                        in the same order as acquired. This avoids using
          *                        synchronized code (no locks).
+         * @param consumersCount  number of consumers who will be operating on each ring item.
          * @throws IllegalArgumentException if ringSize arg &lt; 1 or not power of 2.
          */
-        Supplier(int ringSize, bool orderedRelease) :
+        SupplierN(uint32_t ringSize, bool orderedRelease, uint32_t consumerCount) :
                 orderedRelease(orderedRelease) {
 
-            if (ringSize < 1) {
+            if (consumerCount > 8) {
+                throw std::runtime_error("too many consumers, 8 max");
+            }
+
+            if (ringSize < 1 || consumerCount < 1) {
                 throw std::runtime_error("positive args only");
             }
 
             if (!Disruptor::Util::isPowerOf2(ringSize)) {
                 throw std::runtime_error("ringSize must be a power of 2");
             }
+
+            this->ringSize = ringSize;
+            this->consumerCount = consumerCount;
 
             // All the supply items need to know if the release is ordered
             SupplyItem::factoryOrderedRelease = orderedRelease;
@@ -189,15 +208,32 @@ namespace ejfat {
             ringBuffer = Disruptor::RingBuffer<std::shared_ptr<T>>::createSingleProducer(
                     T::eventFactory(), ringSize, waitStrategy);
 
-            // Barrier to keep unreleased buffers from being reused
-            barrier  = ringBuffer->newBarrier();
-            sequence = std::make_shared<Disruptor::Sequence>(Disruptor::Sequence::InitialCursorValue);
-            allSeqs.push_back(sequence);
-            ringBuffer->addGatingSequences(allSeqs);
-            availableConsumerSequence = -1L;
-            nextConsumerSequence = sequence->value() + 1;
-        }
+            // All csonsumers share 1 barrier to keep unreleased buffers from being reused
+            barrier = ringBuffer->newBarrier();
 
+            // One sequence for each consumer
+            sequence = new std::shared_ptr<Disruptor::ISequence>[consumerCount];
+            availableConsumerSequence = new int64_t[consumerCount];
+            nextConsumerSequence = new int64_t[consumerCount];
+            lastSequenceReleased = new int64_t[consumerCount];
+            maxSequence = new int64_t[consumerCount];
+            between = new uint32_t[consumerCount];
+            supplyMutex = new std::mutex[consumerCount];
+
+            for (int i=0; i < consumerCount; i++) {
+                sequence[i] = std::make_shared<Disruptor::Sequence>(Disruptor::Sequence::InitialCursorValue);
+                allSeqs.push_back(sequence[i]);
+
+                availableConsumerSequence[i] = -1L;
+                nextConsumerSequence[i] = sequence[i]->value() + 1;
+                lastSequenceReleased[i] = -1L;
+                maxSequence[i] = -1L;
+                between[i] = 0;
+            }
+
+            // All consumers must release a ring item before it becomes available for reuse
+            ringBuffer->addGatingSequences(allSeqs);
+        }
 
 
         /**
@@ -220,7 +256,7 @@ namespace ejfat {
 //        uint32_t getMaxRingBytes() const {
 //            uint32_t totalBytes = 0;
 //            for (int i=0; i < ringSize; i++) {
-//                // TODO: How does one iterate over contents??
+//                // How does one iterate over contents??
 //                totalBytes += 1; // TODO: fix
 //            }
 //            return totalBytes; //(int) (ringSize*1.1*bufferSize);
@@ -334,21 +370,25 @@ namespace ejfat {
         /**
          * Get the next available item in ring buffer for getting data already written into.
          * Not sure if this method is thread-safe.
+         * @param id which consumer is this (0 to N-1).
          * @return next available item in ring buffer for getting data already written into.
          * @throws InterruptedException if thread interrupted.
          */
-        std::shared_ptr<T> consumerGet() {
+        std::shared_ptr<T> consumerGet(uint32_t id = 0) {
+            if (id > consumerCount - 1) {
+                throw std::runtime_error("too many consumers, id = " + std::to_string(consumerCount - 1) + " max");
+            }
 
             std::shared_ptr<T> item = nullptr;
 
             try  {
                 // Only wait for read-volatile-memory if necessary ...
-                if (availableConsumerSequence < nextConsumerSequence) {
-                    availableConsumerSequence = barrier->waitFor(nextConsumerSequence);
+                if (availableConsumerSequence[id] < nextConsumerSequence[id]) {
+                    availableConsumerSequence[id] = barrier->waitFor(nextConsumerSequence[id]);
                 }
 
-                item = (*ringBuffer.get())[nextConsumerSequence];
-                item->setConsumerSequence(nextConsumerSequence++);
+                item = (*ringBuffer.get())[nextConsumerSequence[id]];
+                item->setConsumerSequence(nextConsumerSequence[id]++, id);
                 item->setFromConsumerGet(true);
             }
             catch (Disruptor::AlertException & ex) {
@@ -365,16 +405,22 @@ namespace ejfat {
          * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
          * @param item item in ring buffer to release for reuse.
          */
-        void release(std::shared_ptr<T> & item) {
+        void release(std::shared_ptr<T> & item, uint32_t id = 0) {
+            if (id > consumerCount - 1) {
+                throw std::runtime_error("too many consumers, id = " + std::to_string(consumerCount - 1) + " max");
+            }
+
             if (item == nullptr) return;
 
-            // Each item may be used by several objects/threads. It will
-            // only be released for reuse if everyone releases their claim.
+            // For a single consumer, each item may be used by several objects/threads.
+            // It will only be released, by a consumer, for reuse if everyone releases their claim.
+            // Note also that, in addition, all consumers must release an item for it to become
+            // available for useuse.
 
             int64_t seq;
             bool isConsumerGet = item->isFromConsumerGet();
             if (isConsumerGet) {
-                seq = item->getConsumerSequence();
+                seq = item->getConsumerSequence(id);
                 //System.out.println(" S" + seq + "P" + item.auxIndex);
             }
             else {
@@ -382,51 +428,49 @@ namespace ejfat {
                 //System.out.print(" P" + seq);
             }
 
-            if (item->decrementCounter()) {
+            if (item->decrementCounter(id)) {
                 if (orderedRelease) {
                     //System.out.println(" <" + maxSequence + ">" );
-                    sequence->setValue(seq);
+                    sequence[id]->setValue(seq);
                     return;
                 }
 
-                supplyMutex.lock();
+                supplyMutex[id].lock();
                 {
                     // If we got a new max ...
-                    if (seq > maxSequence) {
+                    if (seq > maxSequence[id]) {
                         // If the old max was > the last released ...
-                        if (maxSequence > lastSequenceReleased) {
+                        if (maxSequence[id] > lastSequenceReleased[id]) {
                             // we now have a sequence between last released & new max
-                            between++;
+                            between[id]++;
                         }
 
                         // Set the new max
-                        maxSequence = seq;
+                        maxSequence[id] = seq;
                     }
                         // If we're < max and > last, then we're in between
-                    else if (seq > lastSequenceReleased) {
-                        between++;
+                    else if (seq > lastSequenceReleased[id]) {
+                        between[id]++;
                     }
 
                     // If we now have everything between last & max, release it all.
                     // This way higher sequences are never released before lower.
-                    if ((maxSequence - lastSequenceReleased - 1L) == between) {
-                        //System.out.println("\n**" + maxSequence + "**" );
-                        sequence->setValue(maxSequence);
-                        lastSequenceReleased = maxSequence;
-                        between = 0;
+                    if ((maxSequence[id] - lastSequenceReleased[id] - 1L) == between[id]) {
+                        //System.out.println("\n**" + maxSequence[id] + "**" );
+                        sequence[id]->setValue(maxSequence[id]);
+                        lastSequenceReleased[id] = maxSequence[id];
+                        between[id] = 0;
                     }
                 }
-                supplyMutex.unlock();
-
+                supplyMutex[id].unlock();
             }
-
         }
 
 
         /**
          * Used to tell that the consumer that the item is ready for consumption.
          * Not sure if this method is thread-safe.
-         * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
+         * To be used in conjunction with {@link #get()}.
          * @param item item available for consumer's use.
          */
         void publish(std::shared_ptr<T> & item) {
@@ -452,4 +496,4 @@ namespace ejfat {
 }
 
 
-#endif // UTIL_SUPPLIER_H
+#endif // UTIL_SUPPLIERN_H
