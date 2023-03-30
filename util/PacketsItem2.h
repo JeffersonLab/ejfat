@@ -52,6 +52,12 @@ namespace ejfat {
 
     /**
      * This class defines the UDP packet containing items which are supplied by the Supplier class.
+     * This differs from the PacketsItem class in the following way. This class is made to work
+     * with the SupplierN class. This class is able to store information about multiple
+     * (up to 8) ring buf consumers that may be using this item simultaneously. It does this by
+     * passing the consumerCount on to its base class, SupplyItem.
+     * In reality, consumers are programmed to look at different items even tho they have
+     * access to all.
      *
      * @date 03/27/2023
      * @author timmer
