@@ -779,6 +779,7 @@ if (buildEven) {
     std::cout << tick << " even =  " << even << std::endl;
     if (!even) {
         std::cout << " building even but got ODD!" << std::endl;
+        exit (-1);
     }
 }
 
