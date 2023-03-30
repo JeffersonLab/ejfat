@@ -91,7 +91,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
@@ -102,7 +102,8 @@ static void printHelp(char *programName) {
             "        [-dump (no thd to get & merge buffers)]",
             "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]",
-            "        [-pinRead <starting core #, 1 for each read thd>]",
+            "        [-pinRead <starting core # or read thd>]",
+            "        [-pinCnt <# of cores for read thd>]",
             "        [-pinBuf <starting core #, 1 for each buf assembly thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
@@ -118,7 +119,8 @@ static void printHelp(char *programName) {
  * @param bufSize       filled with buffer size.
  * @param recvBufSize   filled with UDP receive buffer size.
  * @param tickPrescale  expected increase in tick with each incoming buffer.
- * @param core          starting core id on which to run pkt reading threads.
+ * @param core          starting core id on which to run pkt reading thread.
+ * @param coreCnt       number of cores on which to run pkt reading thread.
  * @param coreBuf       starting core id on which to run buf assembly threads.
  * @param sourceIds     array of incoming source ids.
  * @param port          filled with UDP port to listen on.
@@ -131,7 +133,7 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *core, int *coreBuf, int *sourceIds, uint16_t* port,
+                      int *core, int *coreCnt, int *coreBuf, int *sourceIds, uint16_t* port,
                       bool *debug, bool *useIPv6, bool *keepStats, bool *dump,
                       char *listenAddr, char *filename) {
 
@@ -143,6 +145,7 @@ static void parseArgs(int argc, char **argv,
             {             {"tpre",  1, NULL, 1},
                           {"ip6",  0, NULL, 2},
                           {"pinRead",  1, NULL, 3},
+                          {"pinCnt",  1, NULL, 8},
                           {"pinBuf",  1, NULL, 4},
                           {"ids",  1, NULL, 5},
                           {"stats",  0, NULL, 6},
@@ -238,6 +241,19 @@ static void parseArgs(int argc, char **argv,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -pinRead, need starting core #\n");
+                    exit(-1);
+                }
+
+                break;
+
+            case 8:
+                // NUmber of cores to run on for packet reading thd
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1) {
+                    *coreCnt = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -pinCnt, need # of read cores (min 1)\n");
                     exit(-1);
                 }
 
@@ -1039,6 +1055,7 @@ int main(int argc, char **argv) {
     int tickPrescale = 1;
     uint16_t startingPort = 7777;
     int startingCore = -1;
+    int coreCount = 1;
     int startingBufCore = -1;
     int sourceIds[128];
     int sourceCount = 0;
@@ -1059,7 +1076,7 @@ int main(int argc, char **argv) {
         sourceIds[i] = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, &startingBufCore, sourceIds,
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, &coreCount, &startingBufCore, sourceIds,
               &startingPort, &debug, &useIPv6, &keepStats, &dumpBufs, listeningAddr, filename);
 
     pinCores = startingCore >= 0 ? true : false;
@@ -1072,7 +1089,7 @@ int main(int argc, char **argv) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        for (int i=0; i < 5; i++) {
+        for (int i=0; i < coreCount; i++) {
             std::cerr << "Run receiving thd for all sources on core " << (startingCore + i) << "\n";
             CPU_SET(startingCore + i, &cpuset);
         }
