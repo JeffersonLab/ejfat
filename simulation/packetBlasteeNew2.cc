@@ -1251,7 +1251,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // and parsed header info.
     //---------------------------------------------------
     int numConsumers = 2;
-    int pktRingSize = 64;
+    int pktRingSize = 32;
     size_t maxPktsPerRecv = 20;
     PacketsItem2::setEventFactorySettings(maxPktsPerRecv, numConsumers);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
