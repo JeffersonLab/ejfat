@@ -721,6 +721,8 @@ static void *threadAssemble(void *arg) {
 
         std::cerr << "Run assemble thd for all sources on core " << core << "\n";
         CPU_SET(core, &cpuset);
+        std::cerr << "Run assemble thd for all sources on core " << (core + 1) << "\n";
+        CPU_SET(core+1, &cpuset);
 
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
@@ -1320,7 +1322,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg2->consumerId = 1;
     tArg2->buildEvenTicks = false;
     if (pinBufCores) {
-        tArg2->core = startingBufCore + 1;
+        tArg2->core = startingBufCore + 5;
     }
     else {
         tArg2->core = -1;
