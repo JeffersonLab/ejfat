@@ -1211,7 +1211,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     //---------------------------------------------------
     int numConsumers = 2;
     int pktRingSize = 32;
-    PacketsItem2::setEventFactorySettings(60, numConsumers);
+    size_t pktsPerRecv = 60;
+    PacketsItem2::setEventFactorySettings(pktsPerRecv, numConsumers);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
             std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, numConsumers);
 
@@ -1383,7 +1384,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     int loopCount = cpuLoops;
 #endif
 
-
     again:
 
     while (true) {
@@ -1396,7 +1396,13 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         int packetCount = 0;
 #ifdef __linux__
         // Getting rid of the timeout greatly speeds things up !!
-        packetCount = recvmmsg(udpSocket, item->getPackets(), item->getMaxPacketCount(), MSG_WAITFORONE, nullptr);
+        packetCount = recvmmsg(udpSocket, item->getPackets(), pktsPerRecv, MSG_WAITFORONE, nullptr);
+        if (packetCount < pktsPerRecv) {
+            pktsPerRecv = packetCount;
+        }
+        else {
+            pktsPerRecv += 5;
+        }
 #endif
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
