@@ -1038,7 +1038,7 @@ int main(int argc, char **argv) {
     int recvBufSize = 0;
     int tickPrescale = 1;
     uint16_t startingPort = 7777;
-    int recvCore = -1;
+    int startingCore = -1;
     int startingBufCore = -1;
     int sourceIds[128];
     int sourceCount = 0;
@@ -1059,10 +1059,10 @@ int main(int argc, char **argv) {
         sourceIds[i] = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &recvCore, &startingBufCore, sourceIds,
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, &startingBufCore, sourceIds,
               &startingPort, &debug, &useIPv6, &keepStats, &dumpBufs, listeningAddr, filename);
 
-    pinCores = recvCore >= 0 ? true : false;
+    pinCores = startingCore >= 0 ? true : false;
     pinBufCores = startingBufCore >= 0 ? true : false;
 
 #ifdef __linux__
@@ -1072,8 +1072,10 @@ int main(int argc, char **argv) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        std::cerr << "Run receiving thd for all sources on core " << recvCore << "\n";
-        CPU_SET(recvCore, &cpuset);
+        for (int i=0; i < 4; i++) {
+            std::cerr << "Run receiving thd for all sources on core " << recvCore << "\n";
+            CPU_SET(startingCore + i, &cpuset);
+        }
 
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
