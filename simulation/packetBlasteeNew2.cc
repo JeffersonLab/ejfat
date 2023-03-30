@@ -1437,7 +1437,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         int packetCount = 0;
 #ifdef __linux__
         // Getting rid of the timeout greatly speeds things up !!
-        packetCount = recvmmsg(udpSocket, item->getPackets(), maxPktsPerRecv, MSG_WAITFORONE, nullptr);
+        packetCount = recvmmsg(udpSocket, item->getPackets(), maxPktsPerRecv, MSG_WAITALL, nullptr);
 #endif
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);
