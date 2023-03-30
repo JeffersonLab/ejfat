@@ -1211,7 +1211,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     //---------------------------------------------------
     int numConsumers = 2;
     int pktRingSize = 32;
-    PacketsItem2::setEventFactorySettings(100, numConsumers);
+    PacketsItem2::setEventFactorySettings(200, numConsumers);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
             std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, numConsumers);
 
