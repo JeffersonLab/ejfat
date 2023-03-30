@@ -774,7 +774,14 @@ static void *threadAssemble(void *arg) {
             if ((tickEven && !buildEven) || (!tickEven && buildEven)) {
                 continue;
             }
-if (buildEven) std::cout << tick << std::endl;
+if (buildEven) {
+    bool even = (tick / 2) * 2 == tick;
+    std::cout << tick << " even =  " << even << std::endl;
+    if (!even) {
+        std::cout << " building even but got ODD!" << std::endl;
+    }
+}
+
 
             srcId = hdr->dataId;
             if (srcId != prevSrcId) {
