@@ -1402,7 +1402,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         if (packetCount < pktsPerRecv) {
             pktsPerRecv = packetCount;
         }
-        else if (pksPerRecv < maxPktsPerRecv) {
+        else if (pktsPerRecv < maxPktsPerRecv) {
             pktsPerRecv++;
         }
 #endif
