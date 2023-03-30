@@ -1211,8 +1211,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     //---------------------------------------------------
     int numConsumers = 2;
     int pktRingSize = 32;
-    size_t pktsPerRecv = 60;
-    PacketsItem2::setEventFactorySettings(pktsPerRecv, numConsumers);
+    size_t maxPktsPerRecv = 60;
+    PacketsItem2::setEventFactorySettings(maxPktsPerRecv, numConsumers);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
             std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, numConsumers);
 
@@ -1384,6 +1384,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     int loopCount = cpuLoops;
 #endif
 
+    size_t pktsPerRecv = maxPktsPerRecv;
+
     again:
 
     while (true) {
@@ -1400,8 +1402,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         if (packetCount < pktsPerRecv) {
             pktsPerRecv = packetCount;
         }
-        else {
-            pktsPerRecv += 5;
+        else if (pksPerRecv < maxPktsPerRecv) {
+            pktsPerRecv++;
         }
 #endif
         // Keep tabs on how many valid packets we have
