@@ -774,7 +774,7 @@ static void *threadAssemble(void *arg) {
             if ((tickEven && !buildEven) || (!tickEven && buildEven)) {
                 continue;
             }
-std::cout << tick << std::endl;
+if (buildEven) std::cout << tick << std::endl;
 
             srcId = hdr->dataId;
             if (srcId != prevSrcId) {
