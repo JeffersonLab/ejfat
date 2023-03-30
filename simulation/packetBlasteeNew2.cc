@@ -1065,6 +1065,26 @@ int main(int argc, char **argv) {
     pinCores = startingCore >= 0 ? true : false;
     pinBufCores = startingBufCore >= 0 ? true : false;
 
+#ifdef __linux__
+
+    if (pinCores) {
+        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+
+        std::cerr << "Run receiving thd for all sources on core " << core << "\n";
+        CPU_SET(core, &cpuset);
+
+        pthread_t current_thread = pthread_self();
+        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+        if (rc != 0) {
+            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+        }
+    }
+
+#endif
+
+
     for (int i = 0; i < 128; i++) {
         if (sourceIds[i] > -1) {
             sourceCount++;
