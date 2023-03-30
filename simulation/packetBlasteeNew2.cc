@@ -774,6 +774,7 @@ static void *threadAssemble(void *arg) {
             if ((tickEven && !buildEven) || (!tickEven && buildEven)) {
                 continue;
             }
+std::cout << tick << std::endl;
 
             srcId = hdr->dataId;
             if (srcId != prevSrcId) {
@@ -1093,6 +1094,8 @@ int main(int argc, char **argv) {
 
         for (int i=0; i < coreCount; i++) {
             std::cerr << "Run receiving thd for all sources on core " << (startingCore + i) << "\n";
+            // First cpu is at 0 for CPU_SET
+            // (80 - 87) inclusive is best for receiving over network for ejfat nodes
             CPU_SET(startingCore + i, &cpuset);
         }
 
@@ -1261,7 +1264,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Supply in which each buf will hold reconstructed buffer.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
     //---------------------------------------------------
-    int ringSize = 64; // 64 works too
+    int ringSize = 64; // 128 works too
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
     std::shared_ptr<Supplier<BufferItem>> supply1 =
             std::make_shared<Supplier<BufferItem>>(ringSize, true);
