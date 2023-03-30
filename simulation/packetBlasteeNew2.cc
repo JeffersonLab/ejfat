@@ -774,13 +774,22 @@ static void *threadAssemble(void *arg) {
             if ((tickEven && !buildEven) || (!tickEven && buildEven)) {
                 continue;
             }
-if (buildEven) {
+//if (buildEven) {
+//    bool even = (tick / 2) * 2 == tick;
+//    std::cout << tick << " even =  " << even << std::endl;
+//    if (!even) {
+//        std::cout << " building even but got ODD!" << std::endl;
+//        exit (-1);
+//    }
+//}
+if (!buildEven) {
     bool even = (tick / 2) * 2 == tick;
     std::cout << tick << " even =  " << even << std::endl;
-    if (!even) {
-        std::cout << " building even but got ODD!" << std::endl;
+    if (even) {
+        std::cout << " building odd but got EVEN!" << std::endl;
         exit (-1);
     }
+
 }
 
 
