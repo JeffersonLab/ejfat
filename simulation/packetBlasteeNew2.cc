@@ -1072,7 +1072,7 @@ int main(int argc, char **argv) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        for (int i=0; i < 4; i++) {
+        for (int i=0; i < 5; i++) {
             std::cerr << "Run receiving thd for all sources on core " << (startingCore + i) << "\n";
             CPU_SET(startingCore + i, &cpuset);
         }
