@@ -1078,7 +1078,7 @@ static void *threadReadBuffers(void *arg) {
 //    auto & mapp = (*(stats.get()));
 
     std::shared_ptr<BufferItem> bufItem;
-    bool printedBad = false;
+ //   bool printedBad = false;
 
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
@@ -1086,18 +1086,18 @@ static void *threadReadBuffers(void *arg) {
         while (true) {
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupply->consumerGet();
-            uint8_t *buf = bufItem->getBuffer()->array();
-            size_t limit = bufItem->getBuffer()->limit();
-            uint32_t *p = reinterpret_cast<uint32_t *>(buf);
-
-            for (uint32_t i=0; i < limit/4; i++) {
-                if (p[i] != i) {
-                    if (!printedBad)
-                        bufItem->getBuffer()->printBytes(0, limit, "ERROR");
-                    printedBad = true;
-                    break;
-                }
-            }
+//            uint8_t *buf = bufItem->getBuffer()->array();
+//            size_t limit = bufItem->getBuffer()->limit();
+//            uint32_t *p = reinterpret_cast<uint32_t *>(buf);
+//
+//            for (uint32_t i=0; i < limit/4; i++) {
+//                if (p[i] != i) {
+//                    if (!printedBad)
+//                        bufItem->getBuffer()->printBytes(0, limit, "ERROR");
+//                    printedBad = true;
+//                    break;
+//                }
+//            }
 
 
             if (bufItem->validData()) {
