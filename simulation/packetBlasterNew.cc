@@ -705,9 +705,11 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    std::srand(1);
-    for (int i=0; i < bufSize; i++) {
-        buf[i] = std::rand();
+    //std::srand(1);
+    uint32_t *p = reinterpret_cast<uint32_t *>(buf);
+    for (uint32_t i=0; i < bufSize/4; i++) {
+        //buf[i] = std::rand();
+        p[i] = i;
     }
 
     int err;

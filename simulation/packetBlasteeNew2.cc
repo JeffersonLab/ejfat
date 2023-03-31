@@ -1050,6 +1050,16 @@ static void *threadReadBuffers(void *arg) {
         while (true) {
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupply->consumerGet();
+            uint8_t *buf = bufItem->getBuffer()->array();
+            size_t limit = bufItem->getBuffer()->limit();
+            uint32_t *p = reinterpret_cast<uint32_t *>(buf);
+
+            for (uint32_t i=0; i < limit/4; i++) {
+                if (p[i] != i) {
+                    std::cerr << "BAD DATA ...." << "\n";
+                }
+            }
+
 
             if (bufItem->validData()) {
                 // do something with buffer here
