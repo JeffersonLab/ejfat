@@ -1056,7 +1056,7 @@ static void *threadReadBuffers(void *arg) {
 
             for (uint32_t i=0; i < limit/4; i++) {
                 if (p[i] != i) {
-                    std::cerr << "BAD DATA ...." << "\n";
+                    std::cerr << "BAD DATA: p[" << i << "] != " << i << ", len = " << limit << std::endl;
                 }
             }
 
