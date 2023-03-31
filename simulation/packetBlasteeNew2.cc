@@ -627,7 +627,7 @@ void printPktData(char *buf, size_t bytes, std::string const & label) {
             std::cout << "  ";
         }
 
-        printf("%02x ", buf[i]);
+        printf("%02x ", (char)(buf[i]));
     }
     std::cout << std::endl << std::endl;
 }
