@@ -20,6 +20,7 @@
 
 
 
+#include <iostream>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -318,6 +319,32 @@ namespace ejfat {
         }
 
 
+   /**
+    * This method prints out the desired number of data bytes starting from the given index
+    * without regard to the limit.
+    *
+    * @param buf     data to pring
+    * @param bytes   number of bytes to print in hex
+    * @param label   a label to print as header
+    */
+    static void printPktData(char *buf, size_t bytes, std::string const & label) {
+
+        std::cout << label <<  ":" << std::endl;
+
+        for (size_t i = 0; i < bytes; i++) {
+            if (i%20 == 0) {
+                std::cout << "\n  array[" << (i + 1) << "-" << (i + 20) << "] =  ";
+            }
+            else if (i%4 == 0) {
+                std::cout << "  ";
+            }
+
+            printf("%02x ", (char)(buf[i]));
+        }
+        std::cout << std::endl << std::endl;
+    }
+
+
     /**
      * <p>
      * This routine uses the latest, 20-byte RE header with offset into buf and len of buf.
@@ -368,7 +395,7 @@ namespace ejfat {
                                         uint32_t delayPrescale, uint32_t *delayCounter,
                                         bool firstBuffer, bool lastBuffer, bool debug,
                                         int64_t *packetsSent) {
-
+static int count=0;
         int err;
         int64_t sentPackets=0;
         size_t bytesToWrite;
@@ -425,6 +452,10 @@ namespace ejfat {
             // This book claims that ::send vs ::sendto can be up to 3x faster because of this reduced overhead -
             // data can go straight to the NIC driver bypassing most IP stack processing.
             // In our case, the calling function connected the socket, so we call "send".
+
+            if (count++ < 2) {
+                printPktData(writeHeaderTo + HEADER_BYTES, bytesToWrite, "SENDING:");
+            }
 
             // Send message to receiver
             err = send(clientSocket, writeHeaderTo, bytesToWrite + HEADER_BYTES, 0);
