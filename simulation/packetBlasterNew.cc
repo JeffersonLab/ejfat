@@ -47,7 +47,7 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ip6] [-sendnocp]",
+            "        [-h] [-v] [-ip6]",
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
@@ -81,7 +81,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t *byteRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       int *cores,
-                      bool *debug, bool *sendnocp,
+                      bool *debug,
                       bool *useIPv6, bool *bufDelay,
                       char* host, char *interface) {
 
@@ -97,7 +97,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ver",   1, NULL, 3},
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
-             {"sendnocp",  0, NULL, 8},
              {"dpre",  1, NULL, 9},
              {"tpre",  1, NULL, 10},
              {"ipv6",  0, NULL, 11},
@@ -242,12 +241,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     exit(-1);
                 }
                 *protocol = i_tmp;
-                break;
-
-            case 8:
-                // use "send" to send UDP packets and copy data as little as possible
-                fprintf(stdout, "Use \"send\" with minimal copying data\n");
-                *sendnocp = true;
                 break;
 
             case 9:
@@ -506,7 +499,7 @@ int main(int argc, char **argv) {
     int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
-    bool debug = false, sendnocp = false;
+    bool debug = false;
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false, setByteRate = false;
 
@@ -521,7 +514,7 @@ int main(int argc, char **argv) {
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
-              &delayPrescale, &tickPrescale, cores, &debug, &sendnocp,
+              &delayPrescale, &tickPrescale, cores, &debug,
               &useIPv6, &bufDelay, host, interface);
 
 #ifdef __linux__
@@ -557,7 +550,7 @@ int main(int argc, char **argv) {
 
 #endif
 
-    fprintf(stderr, "send = %s, sendnocp = %s\n", btoa(send), btoa(sendnocp));
+    fprintf(stderr, "send = %s\n", btoa(send));
 
     if (bufDelay) {
         packetDelay = 0;
@@ -781,10 +774,7 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
-
-    char *goodData = (char *) malloc(bufSize);
-    memcpy(goodData, buf, bufSize);
-
+    
     while (true) {
 
         // If we're sending buffers at a constant rate AND we've sent the entire bunch
@@ -824,23 +814,11 @@ int main(int argc, char **argv) {
             countDown = buffersAtOnce - 1;
         }
 
-        if (sendnocp) {
-            // This call corrupts buf!!!
-            err = sendPacketizedBufferFastNew(buf, bufSize,
-                                              maxUdpPayload, clientSocket,
+        err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload, clientSocket,
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) bufSize, &offset,
                                               packetDelay, delayPrescale, &delayCounter,
                                               firstBuffer, lastBuffer, debug, &packetsSent);
-            memcpy(buf, goodData, bufSize);
-        }
-        else {
-            err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload, clientSocket,
-                                              tick, protocol, entropy, version, dataId,
-                                              (uint32_t) bufSize, &offset,
-                                              packetDelay, delayPrescale, &delayCounter,
-                                              firstBuffer, lastBuffer, debug, &packetsSent);
-        }
 
         if (err < 0) {
             // Should be more info in errno
