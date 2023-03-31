@@ -918,7 +918,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 //                       dataLen);
 
             // Keep track of how much we've written so far
-            bytesSoFar = bufItem->getBuffer()->position();
+            size_t bytesSoFar = bufItem->getBuffer()->position();
 //            bufItem->setUserLong(bytesSoFar);
 
             // Track # of packets written so far (will double count for duplicate packets)
@@ -928,7 +928,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             // If we've written all data to this buf ...
             if (bytesSoFar >= hdr->length) {
                 // Done with this buffer, so set its limit to proper value
-                bufItem->getBuffer()->limit(bytesSoFar);
+                bufItem->getBuffer()->flip();
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
