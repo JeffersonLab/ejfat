@@ -1504,6 +1504,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 #ifdef __linux__
         // Getting rid of the timeout greatly speeds things up !!
         packetCount = recvmmsg(udpSocket, item->getPackets(), maxPktsPerRecv, MSG_WAITFORONE, nullptr);
+        if (item->dataDiscarded()) {
+            fprintf(stderr, "******* data lost receiving UDP packets\n");
+            exit(-1);
+        }
 #endif
         // Keep tabs on how many valid packets we have
         item->setPacketsFilled(packetCount);

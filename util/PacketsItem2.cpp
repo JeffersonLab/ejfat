@@ -126,25 +126,28 @@ namespace ejfat {
             memset(packets, 0, sizeof(*packets));
 
             for (int i = 0; i < maxPktCount; i++) {
-                packets[i].msg_hdr.msg_name = nullptr;
-                packets[i].msg_hdr.msg_namelen = 0;
+                struct msghdr *msg_hdr = &packets[i].msg_hdr;
 
-                packets[i].msg_hdr.msg_iov = new struct iovec[1];
-                packets[i].msg_hdr.msg_iovlen = 1;
-                //memset(packets[i].msg_hdr.msg_iov, 0, sizeof(struct iovec[1]));
+                msg_hdr->msg_name = nullptr;
+                msg_hdr->msg_namelen = 0;
+
+                msg_hdr->msg_iov = new struct iovec[1];
+                msg_hdr->msg_iovlen = 1;
 
                 // Where RE header + data both go
-                packets[i].msg_hdr.msg_iov[0].iov_base = new uint8_t[9000];
-                packets[i].msg_hdr.msg_iov[0].iov_len = 9000;
+                msg_hdr->msg_iov[0].iov_base = new uint8_t[9100];
+                msg_hdr->msg_iov[0].iov_len = 9100;
             }
 
             // Copy over packet data
             for (int i = 0; i < pktsFilled; i++) {
+                packets[i].msg_hdr.msg_flags = item.packets[i].msg_hdr.msg_flags;
+
                 memcpy(packets[i].msg_hdr.msg_iov[0].iov_base,
                        item.packets[i].msg_hdr.msg_iov[0].iov_base, HEADER_BYTES);
 
                 memcpy(packets[i].msg_hdr.msg_iov[1].iov_base,
-                       item.packets[i].msg_hdr.msg_iov[1].iov_base, 9000);
+                       item.packets[i].msg_hdr.msg_iov[1].iov_base, 9100);
             }
         }
     }
@@ -220,6 +223,43 @@ namespace ejfat {
             return -1;
         }
         return headers[index].dataId;
+    }
+
+
+    /**
+     * <p>Get the flag of received message.</p>
+     *
+     * <ul>
+     * <li>MSG_EOR indicates end-of-record; the data returned completed a record.
+     * <li>MSG_TRUNC indicates that the trailing portion of a datagram was discarded because the datagram was
+     * larger than the buffer supplied.
+     * <li>MSG_CTRUNC indicates that some control data were discarded due to lack of space in the
+     * buffer for ancillary data.
+     * <li>MSG_OOB is returned to indicate that expedited or out-of-band data were received.
+     * </ul>
+     *
+     * @param index index into array of info.
+     * @return flag of received message, or -1 if index out of bounds.
+     */
+    int PacketsItem2::getRecvFlag(uint32_t index) {
+        if (index >= pktsFilled) {
+            return -1;
+        }
+        return packets[index].msg_hdr.msg_flags;
+    }
+
+
+    /**
+     * Gets whether there was any receive error which truncated data
+     * for any of the packets in this item.
+     * @return true if data discarded from any of the packets received, else false.
+     */
+    bool PacketsItem2::dataDiscarded() {
+        bool discarded = false;
+        for (int i = 0; i < pktsFilled; i++) {
+            discarded |= packets[i].msg_hdr.msg_flags == MSG_TRUNC;
+        }
+        return discarded;
     }
 
 

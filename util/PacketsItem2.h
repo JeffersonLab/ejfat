@@ -127,6 +127,8 @@ namespace ejfat {
         struct mmsghdr * getPacket(uint32_t index);
         reHeader * getHeader(uint32_t index);
         int getSource(uint32_t index);
+        int getRecvFlag(uint32_t index);
+        bool dataDiscarded();
 
         size_t getMaxPacketCount();
 
