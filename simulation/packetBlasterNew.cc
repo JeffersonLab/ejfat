@@ -781,6 +781,10 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
+
+    char *goodData = (char *) malloc(bufSize);
+    memcpy(goodData, buf, bufSize);
+
     while (true) {
 
         // If we're sending buffers at a constant rate AND we've sent the entire bunch
@@ -821,12 +825,14 @@ int main(int argc, char **argv) {
         }
 
         if (sendnocp) {
+            // This call corrupts buf!!!
             err = sendPacketizedBufferFastNew(buf, bufSize,
                                               maxUdpPayload, clientSocket,
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) bufSize, &offset,
                                               packetDelay, delayPrescale, &delayCounter,
                                               firstBuffer, lastBuffer, debug, &packetsSent);
+            memcpy(buf, goodData, bufSize);
         }
         else {
             err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload, clientSocket,
