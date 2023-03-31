@@ -1043,6 +1043,7 @@ static void *threadReadBuffers(void *arg) {
 //    auto & mapp = (*(stats.get()));
 
     std::shared_ptr<BufferItem> bufItem;
+    bool printedBad = false;
 
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
@@ -1056,7 +1057,10 @@ static void *threadReadBuffers(void *arg) {
 
             for (uint32_t i=0; i < limit/4; i++) {
                 if (p[i] != i) {
-                    std::cerr << "BAD DATA: p[" << i << "] (" << p[i] << ") != i (" << i << "), len = " << limit << std::endl;
+                    if (!printedBad)
+                        bufItem->getBuffer()->printBytes(0, limit, "ERROR");
+                    printedBad = true;
+                    break;
                 }
             }
 
