@@ -881,7 +881,7 @@ static void *threadAssemble(void *arg) {
             // Use it store how many bytes we've copied into it so far.
             // This will enable us to tell if we're done w/ reassembly.
             int32_t pktsSoFar  = bufItem->getUserInt();
-            int64_t bytesSoFar = bufItem->getUserLong();
+//            int64_t bytesSoFar = bufItem->getUserLong();
             int64_t dataLen    = pktItem->getPacket(i)->msg_len - HEADER_BYTES;
 //std::cout << "pkt len " << dataLen << std::endl;
 
@@ -895,6 +895,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 char *data = (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
                 if (pktItem->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
                     std::cout << "Messed up pkt, tick " << hdr->tick << std::endl;
+                    //printPktData(data, dataLen, "bytes");
                 }
 
             // The neat thing about doing it this way is we don't have to track out-of-order packets.
@@ -909,22 +910,16 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             // The alternative is to add a sequential number to RE header to be able to track this.
             // That requires more bookkeeping on this receiving end.
 
-//            if (useOneIovecBuf) {
-                // Copy things into buf from the 1 iovec buffer
-                memcpy(bufItem->getBuffer()->array() + hdr->offset,
-                       (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES,
-                       dataLen);
-//            }
-//            else {
-//                // Copy things into buf from 2nd iovec buffer
-//                memcpy(bufItem->getBuffer()->array() + hdr->offset,
-//                       pktItem->getPacket(i)->msg_hdr.msg_iov[1].iov_base,
+            // Copy things into buf from the iovec buffer
+            bufItem->getBuffer()->put((uint8_t *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES,
+                                          dataLen);
+//            memcpy(bufItem->getBuffer()->array() + hdr->offset,
+//                       (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES,
 //                       dataLen);
-//            }
 
             // Keep track of how much we've written so far
-            bytesSoFar += dataLen;
-            bufItem->setUserLong(bytesSoFar);
+            bytesSoFar = bufItem->getBuffer()->position();
+//            bufItem->setUserLong(bytesSoFar);
 
             // Track # of packets written so far (will double count for duplicate packets)
             pktsSoFar++;
