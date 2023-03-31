@@ -607,6 +607,31 @@ static void *rateThread(void *arg) {
 }
 
 
+/**
+ * This method prints out the desired number of data bytes starting from the given index
+ * without regard to the limit.
+ *
+ * @param buf     data to pring
+ * @param bytes   number of bytes to print in hex
+ * @param label   a label to print as header
+ */
+void printPktData(char *buf, size_t bytes, std::string const & label) {
+
+    std::cout << label <<  ":" << std::endl;
+
+    for (size_t i = 0; i < bytes; i++) {
+        if (i%20 == 0) {
+            std::cout << "\n  array[" << (i + 1) << "-" << (i + 20) << "] =  ";
+        }
+        else if (i%4 == 0) {
+            std::cout << "  ";
+        }
+
+        printf("%02x ", buf[i]);
+    }
+    std::cout << std::endl << std::endl;
+}
+
 
 // Arg to pass to buffer reassembly thread
 typedef struct threadArg_t {
@@ -750,6 +775,7 @@ static void *threadAssemble(void *arg) {
     // One tick for each source: key = source id, val = largest tick value received
     std::unordered_map<int, uint64_t> largestSavedTick;
 
+    int printed2 = 0;
 
     while (true) {
 
@@ -864,6 +890,12 @@ static void *threadAssemble(void *arg) {
 std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 // Preserves all existing data while increasing underlying array
                 bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
+            }
+
+            if (printed2 < 2) {
+                char *data = (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
+                printPktData(data, dataLen, "bytes");
+                printed2++;
             }
 
             // The neat thing about doing it this way is we don't have to track out-of-order packets.
