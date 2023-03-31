@@ -892,9 +892,12 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
             }
 
-            if (printed2 < 2) {
+            if (buildEven && (printed2 < 4)) {
                 char *data = (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
-                printPktData(data, dataLen, "bytes");
+                if (pktItem->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
+                    std::cout << "Got messed up packet!! "  << std::endl;
+                    //printPktData(data, dataLen, "bytes");
+                }
                 printed2++;
             }
 

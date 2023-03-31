@@ -257,7 +257,7 @@ namespace ejfat {
     bool PacketsItem2::dataDiscarded() {
         bool discarded = false;
         for (int i = 0; i < pktsFilled; i++) {
-            discarded |= packets[i].msg_hdr.msg_flags == MSG_TRUNC;
+            discarded = discarded || (packets[i].msg_hdr.msg_flags == MSG_TRUNC);
         }
         return discarded;
     }

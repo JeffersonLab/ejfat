@@ -395,7 +395,7 @@ namespace ejfat {
                                         uint32_t delayPrescale, uint32_t *delayCounter,
                                         bool firstBuffer, bool lastBuffer, bool debug,
                                         int64_t *packetsSent) {
-static int count=0;
+//static int count=0;
         int err;
         int64_t sentPackets=0;
         size_t bytesToWrite;
@@ -453,9 +453,9 @@ static int count=0;
             // data can go straight to the NIC driver bypassing most IP stack processing.
             // In our case, the calling function connected the socket, so we call "send".
 
-            if (count++ < 2) {
-                printPktData(writeHeaderTo + HEADER_BYTES, bytesToWrite, "SENDING:");
-            }
+//            if (count++ < 2) {
+//                printPktData(writeHeaderTo + HEADER_BYTES, bytesToWrite, "SENDING:");
+//            }
 
             // Send message to receiver
             err = send(clientSocket, writeHeaderTo, bytesToWrite + HEADER_BYTES, 0);
