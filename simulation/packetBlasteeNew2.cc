@@ -892,11 +892,11 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
             }
 
-                char *data = (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
-                if (pktItem->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
-                    std::cout << "Messed up pkt, tick " << hdr->tick << std::endl;
-                    //printPktData(data, dataLen, "bytes");
-                }
+             auto data = (uint8_t *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
+//                if (pktItem->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
+//                    std::cout << "Messed up pkt, tick " << hdr->tick << std::endl;
+//                    //printPktData(data, dataLen, "bytes");
+//                }
 
             // The neat thing about doing it this way is we don't have to track out-of-order packets.
             // We don't have to copy and store them!
@@ -911,13 +911,12 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             // That requires more bookkeeping on this receiving end.
 
             // Copy things into buf from the iovec buffer
-            bufItem->getBuffer()->put((uint8_t *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES,
-                                          dataLen);
+            bufItem->getBuffer()->put(data,dataLen);
 //            memcpy(bufItem->getBuffer()->array() + hdr->offset,
 //                       (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES,
 //                       dataLen);
 
-            // Keep track of how much we've written so far
+            // ByteBuffer keeps track of how much we've written so far
             size_t bytesSoFar = bufItem->getBuffer()->position();
 //            bufItem->setUserLong(bytesSoFar);
 
@@ -927,7 +926,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
             // If we've written all data to this buf ...
             if (bytesSoFar >= hdr->length) {
-                // Done with this buffer, so set its limit to proper value
+                // Done with this buffer, so get it reading for reading
                 bufItem->getBuffer()->flip();
 
                 // Clear buffer from local map
@@ -1527,6 +1526,16 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             }
             ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
                                  item->getHeader(i));
+
+            char *data = (char *)(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
+
+            if (item->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
+                std::cout << "1: Messed up pkt, tick " << item->getHeader(i)->tick << std::endl;
+                //printPktData(data, dataLen, "bytes");
+            }
+
+
+
 
         }
 
