@@ -1366,6 +1366,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     //---------------------------------------------------
     // Supply in which each buf will hold reconstructed buffer.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
+    // For really small buffers (1 or 2 pkts), they may be created out of order
+    // if pkts come out-of-order, so the orderedRelease flag should be false.
     //---------------------------------------------------
     int ringSize = 64; // 128 works too
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
