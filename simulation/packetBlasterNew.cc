@@ -14,6 +14,12 @@
  * to an ejfat router (FPGA-based or simulated) which then passes it
  * to the receiving program packetBlastee.cc.
  * </p>
+ * Look on my Mac at /Users/timmer/DataGraphs/NumaNodes.xlsx.
+ * To produce events at roughly 2.9GB/s, use arg "-cores 60" where 60 can just as
+ * easily be 0-63. To produce at roughly 3.4 GB/s, use cores 64-79, 88-127.
+ * To produce at 4.7 GB/s, use cores 80-87. (Notices cores # start at 0).
+ * The receiver, packetBlasteeNew2 will be able to receive all data sent at
+ * 2.9GB/s, any more than that and it starts dropping packets.
  */
 
 
