@@ -1055,7 +1055,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
 
 /**
- * Thread to read packets from 1 data ID.
+ * Thread to read all filled buffers.
  * @param arg
  * @return
  */
@@ -1093,7 +1093,7 @@ static void *threadReadBuffers(void *arg) {
 
 
 /**
- * Thread to read packets from 1 data ID.
+ * Thread to read filled buffers from either odd or event ticks.
  * @param arg
  * @return
  */
@@ -1137,9 +1137,9 @@ static void *threadReadBuffersOld(void *arg) {
             //            }
 
 
-            if (bufItem->validData()) {
-                // do something with buffer here
-            }
+//            if (bufItem->validData()) {
+//                // do something with buffer here
+//            }
 
             // Release item for reuse
             bufSupply->release(bufItem);
@@ -1370,10 +1370,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     int ringSize = 64; // 128 works too
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
     std::shared_ptr<Supplier<BufferItem>> supply1 =
-            std::make_shared<Supplier<BufferItem>>(ringSize, true);
+            std::make_shared<Supplier<BufferItem>>(ringSize, false);
 
     std::shared_ptr<Supplier<BufferItem>> supply2 =
-            std::make_shared<Supplier<BufferItem>>(ringSize, true);
+            std::make_shared<Supplier<BufferItem>>(ringSize, false);
 
     //---------------------------------------------------
     // Start 1st thread to reassemble buffers of packets from all sources
