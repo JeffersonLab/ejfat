@@ -1464,35 +1464,35 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         tArg->tickPrescale = 1;
 
         pthread_t thd;
-        status = pthread_create(&thd, NULL, threadReadBuffersOld, (void *) tArg);
+        status = pthread_create(&thd, NULL, threadReadBuffers, (void *) tArg);
         if (status != 0) {
             fprintf(stderr, "Error creating thread for reading pkts\n");
             return -1;
         }
 
-        threadArg *tArg22 = (threadArg *) calloc(1, sizeof(threadArg));
-        if (tArg2 == nullptr) {
-            fprintf(stderr, "out of mem\n");
-            return -1;
-        }
-
-        tArg22->bufSupply1 = supply1;
-        tArg22->bufSupply2 = supply2;
-        tArg22->stats = stats;
-        tArg22->dump = dumpBufs;
-        tArg22->debug = debug;
-        tArg22->sourceCount = sourceCount;
-        tArg22->consumerId = 1;
-
-        tArg22->expectedTick = 0;
-        tArg22->tickPrescale = 1;
-
-        pthread_t thd22;
-        status = pthread_create(&thd22, NULL, threadReadBuffersOld, (void *) tArg22);
-        if (status != 0) {
-            fprintf(stderr, "Error creating thread for reading pkts\n");
-            return -1;
-        }
+//        threadArg *tArg22 = (threadArg *) calloc(1, sizeof(threadArg));
+//        if (tArg2 == nullptr) {
+//            fprintf(stderr, "out of mem\n");
+//            return -1;
+//        }
+//
+//        tArg22->bufSupply1 = supply1;
+//        tArg22->bufSupply2 = supply2;
+//        tArg22->stats = stats;
+//        tArg22->dump = dumpBufs;
+//        tArg22->debug = debug;
+//        tArg22->sourceCount = sourceCount;
+//        tArg22->consumerId = 1;
+//
+//        tArg22->expectedTick = 0;
+//        tArg22->tickPrescale = 1;
+//
+//        pthread_t thd22;
+//        status = pthread_create(&thd22, NULL, threadReadBuffersOld, (void *) tArg22);
+//        if (status != 0) {
+//            fprintf(stderr, "Error creating thread for reading pkts\n");
+//            return -1;
+//        }
     }
 
     //---------------------------------------------------
