@@ -319,30 +319,84 @@ namespace ejfat {
         }
 
 
-   /**
-    * This method prints out the desired number of data bytes starting from the given index
-    * without regard to the limit.
-    *
-    * @param buf     data to pring
-    * @param bytes   number of bytes to print in hex
-    * @param label   a label to print as header
-    */
-    static void printPktData(char *buf, size_t bytes, std::string const & label) {
+        /**
+         * <p>
+         * Set the data for a synchronization message sent directly to the load balancer.
+         * The first 3 fields go as ordered. The srcId, evtNum, evtRate and time are all
+         * put into network byte order.</p>
+         * Implemented <b>without</b> using C++ bit fields.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
+         *
+         *    0                   1                   2                   3
+         *    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *    |       L       |       C       |    Version    |      Rsvd     |
+         *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *    |                           EventSrcId                          |
+         *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *    |                                                               |
+         *    +                          EventNumber                          +
+         *    |                                                               |
+         *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *    |                         AvgEventRateHz                        |
+         *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *    |                                                               |
+         *    +                          UnixTimeNano                         +
+         *    |                                                               |
+         *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
+         *
+         * @param buffer   buffer in which to write the data.
+         * @param version  version of this software.
+         * @param srcId    id number of this data source.
+         * @param evtNum   unsigned 64 bit event number used to tell the load balancer
+         *                 which backend host to direct the packet to. This message
+         *                 is telling the load balancer that this application has
+         *                 already sent this, latest, event.
+         * @param evtRate  in Hz, the rate this application is sending events
+         *                 to the load balancer (0 if unknown).
+         * @param nanos    at what unix time in nanoseconds was this message sent (0 if unknown).
+         */
+        static void setSyncData(char* buffer, int version, uint32_t srcId,
+                                uint64_t evtNum, uint32_t evtRate, uint64_t nanos) {
+            buffer[0] = 'L';
+            buffer[1] = 'C';
+            buffer[2] = version;
 
-        std::cout << label <<  ":" << std::endl;
+            // Put the data in network byte order (big endian)
+            *((uint32_t *)(buffer + 4))  = htonl(srcId);
+            *((uint64_t *)(buffer + 8))  = htonll(evtNum);
+            *((uint32_t *)(buffer + 16)) = htonl(evtRate);
+            *((uint64_t *)(buffer + 20)) = htonll(nanos);
+         }
 
-        for (size_t i = 0; i < bytes; i++) {
-            if (i%20 == 0) {
-                std::cout << "\n  array[" << (i + 1) << "-" << (i + 20) << "] =  ";
+
+         /**
+         * This method prints out the desired number of data bytes starting from the given index
+         * without regard to the limit.
+         *
+         * @param buf     data to pring
+         * @param bytes   number of bytes to print in hex
+         * @param label   a label to print as header
+         */
+        static void printPktData(char *buf, size_t bytes, std::string const & label) {
+
+            std::cout << label <<  ":" << std::endl;
+
+            for (size_t i = 0; i < bytes; i++) {
+                if (i%20 == 0) {
+                    std::cout << "\n  array[" << (i + 1) << "-" << (i + 20) << "] =  ";
+                }
+                else if (i%4 == 0) {
+                    std::cout << "  ";
+                }
+
+                printf("%02x ", (char)(buf[i]));
             }
-            else if (i%4 == 0) {
-                std::cout << "  ";
-            }
-
-            printf("%02x ", (char)(buf[i]));
+            std::cout << std::endl << std::endl;
         }
-        std::cout << std::endl << std::endl;
-    }
 
 
     /**

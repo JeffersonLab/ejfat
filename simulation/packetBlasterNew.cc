@@ -53,7 +53,7 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ip6]",
+            "        [-h] [-v] [-ip6] [-sync]",
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
@@ -88,7 +88,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       int *cores,
                       bool *debug,
-                      bool *useIPv6, bool *bufDelay,
+                      bool *useIPv6, bool *bufDelay, bool *sendSync,
                       char* host, char *interface) {
 
     *mtu = 0;
@@ -103,6 +103,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ver",   1, NULL, 3},
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
+             {"sync",   0, NULL, 6},
              {"dpre",  1, NULL, 9},
              {"tpre",  1, NULL, 10},
              {"ipv6",  0, NULL, 11},
@@ -247,6 +248,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     exit(-1);
                 }
                 *protocol = i_tmp;
+                break;
+
+            case 6:
+                // do we send sync messages to LB?
+                *sendSync = true;
                 break;
 
             case 9:
@@ -508,7 +514,9 @@ int main(int argc, char **argv) {
     bool debug = false;
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false, setByteRate = false;
+    bool sendSync = false;
 
+    char syncBuf[28];
     char host[INPUT_LENGTH_MAX], interface[16];
     memset(host, 0, INPUT_LENGTH_MAX);
     memset(interface, 0, 16);
@@ -521,7 +529,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale, cores, &debug,
-              &useIPv6, &bufDelay, host, interface);
+              &useIPv6, &bufDelay, &sendSync, host, interface);
 
 #ifdef __linux__
 
@@ -721,11 +729,11 @@ int main(int argc, char **argv) {
     // Statistics & rate setting
     int64_t packetsSent=0;
     int64_t elapsed, microSecItShouldTake;
-    struct timespec t1, t2;
+    uint64_t syncTime;
+    struct timespec t1, t2, tStart, tEnd;
     int64_t excessTime, lastExcessTime = 0, buffersAtOnce, countDown;
 
     if (setByteRate || setBufRate) {
-
         // Don't send more than about 500k consecutive bytes with no delays to avoid overwhelming UDP bufs
         int64_t bytesToWriteAtOnce = 500000;
 
@@ -775,11 +783,16 @@ int main(int argc, char **argv) {
         fprintf(stderr,
                 "packetBlaster: bytesToWriteAtOnce = %" PRId64 ", byteRate = %" PRId64 ", buffersAtOnce = %" PRId64 ", microSecItShouldTake = %" PRId64 "\n",
                 bytesToWriteAtOnce, byteRate, buffersAtOnce, microSecItShouldTake);
-
-        // Start the clock
-        clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
+    if (setByteRate || setBufRate || sendSync) {
+        // Start the clock
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        tStart = t1;
+    }
+
+    uint32_t evtRate;
+    uint64_t bufsSent = 0UL;
 
     while (true) {
 
@@ -825,14 +838,40 @@ int main(int argc, char **argv) {
                                               (uint32_t) bufSize, &offset,
                                               packetDelay, delayPrescale, &delayCounter,
                                               firstBuffer, lastBuffer, debug, &packetsSent);
-
         if (err < 0) {
             // Should be more info in errno
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
             exit(1);
         }
 
-        // spin delay
+        bufsSent++;
+        totalBytes   += bufSize;
+        totalPackets += packetsSent;
+        offset = 0;
+        tick += tickPrescale;
+
+        if (sendSync) {
+            clock_gettime(CLOCK_MONOTONIC, &tEnd);
+            syncTime = 1000000000UL * (tEnd.tv_sec - tStart.tv_sec) + (tEnd.tv_nsec - tStart.tv_nsec);
+
+            // if >= 1 sec ...
+            if (syncTime >= 1000000000UL) {
+                // Calculate buf or event rate in Hz
+                evtRate = bufsSent/(syncTime/1000000000);
+
+                // Send sync message to same destination
+                setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
+                err = send(clientSocket, syncBuf, 28, 0);
+                if (err == -1) {
+                    fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
+                    return (-1);
+                }
+
+                tStart = tEnd;
+                bufsSent = 0;
+            }
+        }
+
 
         // delay if any
         if (bufDelay) {
@@ -842,10 +881,6 @@ int main(int argc, char **argv) {
             }
         }
 
-        totalBytes   += bufSize;
-        totalPackets += packetsSent;
-        offset = 0;
-        tick += tickPrescale;
     }
 
     return 0;
