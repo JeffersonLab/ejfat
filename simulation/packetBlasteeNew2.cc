@@ -36,10 +36,19 @@
  * it and find it according to its tick value (in unordered_map).
  * </p>
  * </p>
- * There are 2 threads which pull off all reassembled buffers (one for each supply). Also another to do stats.
- * There is some sensitivity to the number of packets in each PacketsItem. Best value seems to be 60.
+ * There are 1 thread which pull off all reassembled buffers. Also another to do stats.
+ * There is some sensitivity to the number of packets in each PacketsItem. Best value seems to be 20.
  * </p>
- *
+ * * Look on my Mac at /Users/timmer/DataGraphs/NumaNodes.xlsx.
+ * Use packetBlasterNew to produce events.
+ * To produce events at roughly 2.9GB/s, use arg "-cores 60" where 60 can just as
+ * easily be 0-63. To produce at roughly 3.4 GB/s, use cores 64-79, 88-127.
+ * To produce at 4.7 GB/s, use cores 80-87. (Notices cores # start at 0).
+ * This receiver will be able to receive all data sent at
+ * 2.9GB/s, any more than that and it starts dropping packets.
+ * To receive at that rate, the args "-pinRead 80 -pinCnt 5" must be used to specify the fastest
+ * network cores for reading packets, and needs at least 5 of them to distribute the work.
+ * Even then packets are occasionally dropped.
  */
 
 #include <cstdlib>
@@ -1054,7 +1063,6 @@ static void *threadReadBuffers(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
 
-    int id = tArg->consumerId;
     std::shared_ptr<Supplier<BufferItem>>  bufSupply1 = tArg->bufSupply1;
     std::shared_ptr<Supplier<BufferItem>>  bufSupply2 = tArg->bufSupply2;
     bool dumpBufs = tArg->dump;
@@ -1456,35 +1464,35 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         tArg->tickPrescale = 1;
 
         pthread_t thd;
-        status = pthread_create(&thd, NULL, threadReadBuffers, (void *) tArg);
+        status = pthread_create(&thd, NULL, threadReadBuffersOld, (void *) tArg);
         if (status != 0) {
             fprintf(stderr, "Error creating thread for reading pkts\n");
             return -1;
         }
 
-//        threadArg *tArg22 = (threadArg *) calloc(1, sizeof(threadArg));
-//        if (tArg2 == nullptr) {
-//            fprintf(stderr, "out of mem\n");
-//            return -1;
-//        }
-//
-//        tArg22->bufSupply1 = supply1;
-//        tArg22->bufSupply2 = supply2;
-//        tArg22->stats = stats;
-//        tArg22->dump = dumpBufs;
-//        tArg22->debug = debug;
-//        tArg22->sourceCount = sourceCount;
-//        tArg22->consumerId = 1;
-//
-//        tArg22->expectedTick = 0;
-//        tArg22->tickPrescale = 1;
-//
-//        pthread_t thd22;
-//        status = pthread_create(&thd22, NULL, threadReadBuffers, (void *) tArg22);
-//        if (status != 0) {
-//            fprintf(stderr, "Error creating thread for reading pkts\n");
-//            return -1;
-//        }
+        threadArg *tArg22 = (threadArg *) calloc(1, sizeof(threadArg));
+        if (tArg2 == nullptr) {
+            fprintf(stderr, "out of mem\n");
+            return -1;
+        }
+
+        tArg22->bufSupply1 = supply1;
+        tArg22->bufSupply2 = supply2;
+        tArg22->stats = stats;
+        tArg22->dump = dumpBufs;
+        tArg22->debug = debug;
+        tArg22->sourceCount = sourceCount;
+        tArg22->consumerId = 1;
+
+        tArg22->expectedTick = 0;
+        tArg22->tickPrescale = 1;
+
+        pthread_t thd22;
+        status = pthread_create(&thd22, NULL, threadReadBuffersOld, (void *) tArg22);
+        if (status != 0) {
+            fprintf(stderr, "Error creating thread for reading pkts\n");
+            return -1;
+        }
     }
 
     //---------------------------------------------------
