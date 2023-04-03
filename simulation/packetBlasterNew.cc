@@ -860,6 +860,7 @@ int main(int argc, char **argv) {
                 evtRate = bufsSent/(syncTime/1000000000);
 
                 // Send sync message to same destination
+fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
                 setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
                 err = send(clientSocket, syncBuf, 28, 0);
                 if (err == -1) {
