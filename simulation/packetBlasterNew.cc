@@ -774,7 +774,7 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &t1);
     }
 
-    
+
     while (true) {
 
         // If we're sending buffers at a constant rate AND we've sent the entire bunch
