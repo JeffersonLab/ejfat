@@ -343,6 +343,10 @@ static inline uint64_t bswap_64(uint64_t x) {
         {
             *ll = buffer[0];
             *bb = buffer[1];
+            if ((*ll != 'L') || (*bb != 'B')) {
+                throw std::runtime_error("ersap pkt does not start with 'LB'");
+            }
+
             *version  = ((uint32_t)buffer[2] & 0xff);
             *protocol = ((uint32_t)buffer[3] & 0xff);
             *entropy  = ntohs(*((uint16_t *)(&buffer[6]))) & 0xffff;
