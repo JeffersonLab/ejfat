@@ -791,6 +791,9 @@ static void *threadAssemble(void *arg) {
 
     int printed2 = 0;
 
+    std::cout << "Reassemble, tick offset = " << tickOffset << ", everyNth = " << everyNth << std::endl;
+
+
     while (true) {
 
         //-------------------------------------------------------------
@@ -805,6 +808,9 @@ static void *threadAssemble(void *arg) {
 
         if (packetCount < 1) {
             fprintf(stderr, "WAIT, packet count < 1 ??\n");
+        }
+        else {
+            std::cout << "Reassemble, packetCount = " << packetCount << std::endl;
         }
 
         for (int i = 0; i < packetCount; i++) {
