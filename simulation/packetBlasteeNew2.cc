@@ -1558,7 +1558,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
-        else if () {
+        else if (packetCount == 0) {
             fprintf(stderr, "packet count is 0!!\n");
         }
 
