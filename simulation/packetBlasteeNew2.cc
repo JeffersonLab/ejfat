@@ -100,7 +100,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
@@ -111,6 +111,7 @@ static void printHelp(char *programName) {
             "        [-dump (no thd to get & merge buffers)]",
             "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]",
+            "        [-thds <# of reassembly threads, 6 max>]",
             "        [-pinRead <starting core # or read thd>]",
             "        [-pinCnt <# of cores for read thd>]",
             "        [-pinBuf <starting core #, 1 for each buf assembly thd>]",
@@ -132,6 +133,7 @@ static void printHelp(char *programName) {
  * @param coreCnt       number of cores on which to run pkt reading thread.
  * @param coreBuf       starting core id on which to run buf assembly threads.
  * @param sourceIds     array of incoming source ids.
+ * @param thdCnt        number of reassembly threads (6 max).
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
@@ -142,7 +144,8 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *core, int *coreCnt, int *coreBuf, int *sourceIds, uint16_t* port,
+                      int *core, int *coreCnt, int *coreBuf, int *sourceIds,
+                      int *thdCnt, uint16_t* port,
                       bool *debug, bool *useIPv6, bool *keepStats, bool *dump,
                       char *listenAddr, char *filename) {
 
@@ -159,6 +162,7 @@ static void parseArgs(int argc, char **argv,
                           {"ids",  1, NULL, 5},
                           {"stats",  0, NULL, 6},
                           {"dump",  0, NULL, 7},
+                          {"thds",  1, NULL, 9},
                           {0,       0, 0,    0}
             };
 
@@ -344,6 +348,19 @@ static void parseArgs(int argc, char **argv,
             case 7:
                 // dump buffers without gathering into 1 thread
                 *dump = true;
+                break;
+
+            case 9:
+                // Number of reassembly thds
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0 && i_tmp < 7) {
+                    *thdCnt = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -thds, 0 < # of thds < 7)\n");
+                    exit(-1);
+                }
+
                 break;
 
             case 'v':
@@ -646,8 +663,7 @@ void printPktData(char *buf, size_t bytes, std::string const & label) {
 typedef struct threadArg_t {
     /** Supply of buffers for holding reassembled data.
      *  One for each reassembly thread. */
-    std::shared_ptr<Supplier<BufferItem>> bufSupply1;
-    std::shared_ptr<Supplier<BufferItem>> bufSupply2;
+    std::shared_ptr<Supplier<BufferItem>> bufSupplies[6];
 
     /** Supply of structures holding UDP packets. */
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply;
@@ -663,8 +679,6 @@ typedef struct threadArg_t {
 
     bool debug;
     bool dump;
-    bool useOneIovecBuf;
-//    bool buildEvenTicks;
 
     // shared ptr of map of stats
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
@@ -708,22 +722,15 @@ static void *threadAssemble(void *arg) {
     int sourceCount = tArg->sourceCount;
     int id = tArg->consumerId;
 
-    std::shared_ptr<Supplier<BufferItem>> bufSupply;
-    if (id == 0) {
-        bufSupply = tArg->bufSupply1;
-    }
-    else {
-        bufSupply = tArg->bufSupply2;
-    };
-
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply = tArg->pktSupply;
 
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
-    bool useOneIovecBuf = tArg->useOneIovecBuf;
 
     int everyNth = tArg->everyNth;
     int tickOffset = tArg->tickOffset;
+
+    std::shared_ptr<Supplier<BufferItem>> bufSupply = tArg->bufSupplies[everyNth];
 
     auto stats    = tArg->stats;
     auto & mapp = *stats;
@@ -807,13 +814,6 @@ static void *threadAssemble(void *arg) {
         pmap = nullptr;
 
         assert(packetCount > 0);
-
-//        if (packetCount < 1) {
-//            fprintf(stderr, "WAIT, packet count < 1 ??\n");
-//        }
-//        else {
-//            std::cout << "Reassemble, packetCount = " << packetCount << std::endl;
-//        }
 
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
@@ -1059,66 +1059,21 @@ static void *threadReadBuffers(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
 
-    std::shared_ptr<Supplier<BufferItem>>  bufSupply1 = tArg->bufSupply1;
-    std::shared_ptr<Supplier<BufferItem>>  bufSupply2 = tArg->bufSupply2;
-    bool dumpBufs = tArg->dump;
+    int thdCount = tArg->everyNth;
 
-    std::shared_ptr<BufferItem> bufItem1, bufItem2;
-
-    // If bufs are not already dumped by the reassembly thread,
-    // we need to put them back into the supply now.
-    if (!dumpBufs) {
-        while (true) {
-            // Grab a fully reassembled buffer from Supplier
-            bufItem1 = bufSupply1->consumerGet();
-//            if (bufItem1->validData()) {
-//                // do something with buffer here
-//            }
-
-            // Release item for reuse
-            bufSupply1->release(bufItem1);
-
-            bufItem2 = bufSupply2->consumerGet();
-            bufSupply2->release(bufItem2);
-        }
+    std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
+    for (int i=0; i < thdCount; i++) {
+        bufSupplies[i] = tArg->bufSupplies[i];
     }
-
-    // Thread not needed and can exit.
-    return nullptr;
-}
-
-
-/**
- * Thread to read filled buffers from either odd or event ticks.
- * @param arg
- * @return
- */
-static void *threadReadBuffersOld(void *arg) {
-
-    threadArg *tArg = (threadArg *) arg;
-
-    int id = tArg->consumerId;
-    std::shared_ptr<Supplier<BufferItem>>  bufSupply;
-    if (id == 0) {
-        bufSupply = tArg->bufSupply1;
-    }
-    else {
-        bufSupply = tArg->bufSupply2;
-    };
-    bool dumpBufs = tArg->dump;
-    //    bool debug    = tArg->debug;
-    //    auto stats    = tArg->stats;
-    //    auto & mapp = (*(stats.get()));
 
     std::shared_ptr<BufferItem> bufItem;
-    //   bool printedBad = false;
 
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
-    if (!dumpBufs) {
-        while (true) {
+    while (true) {
+        for (int i=0; i < thdCount; i++) {
             // Grab a fully reassembled buffer from Supplier
-            bufItem = bufSupply->consumerGet();
+            bufItem = bufSupplies[i]->consumerGet();
             //            uint8_t *buf = bufItem->getBuffer()->array();
             //            size_t limit = bufItem->getBuffer()->limit();
             //            uint32_t *p = reinterpret_cast<uint32_t *>(buf);
@@ -1131,14 +1086,12 @@ static void *threadReadBuffersOld(void *arg) {
             //                    break;
             //                }
             //            }
-
-
-//            if (bufItem->validData()) {
-//                // do something with buffer here
-//            }
+            // if (bufItem->validData()) {
+            //     // do something with buffer here
+            // }
 
             // Release item for reuse
-            bufSupply->release(bufItem);
+            bufSupplies[i]->release(bufItem);
         }
     }
 
@@ -1161,6 +1114,7 @@ int main(int argc, char **argv) {
     int startingBufCore = -1;
     int sourceIds[128];
     int sourceCount = 0;
+    int thdCount = 1;
     bool debug = false;
     bool useIPv6 = false;
     bool keepStats = false;
@@ -1179,7 +1133,7 @@ int main(int argc, char **argv) {
     }
 
     parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, &coreCount, &startingBufCore, sourceIds,
-              &startingPort, &debug, &useIPv6, &keepStats, &dumpBufs, listeningAddr, filename);
+              &thdCount, &startingPort, &debug, &useIPv6, &keepStats, &dumpBufs, listeningAddr, filename);
 
     pinCores = startingCore >= 0 ? true : false;
     pinBufCores = startingBufCore >= 0 ? true : false;
@@ -1344,9 +1298,12 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
     }
 
-    // Use one read on one iovec buf to get packet and hdr together.
-    // If false, read into 2 bufs, one just for header.
-    bool useOneIovecBuf = true;
+
+    // Arrays for holding threads and buffer supplies
+    pthread_t thds[6];
+    std::shared_ptr<Supplier<BufferItem>> supplies[6];
+    threadArg *tArg[6];
+
 
     //---------------------------------------------------
     // Supply in which each item holds 60 UDP packets
@@ -1359,92 +1316,48 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
             std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, numConsumers);
 
+
     //---------------------------------------------------
-    // Supply in which each buf will hold reconstructed buffer.
+    // Supplies in which each buf will hold reconstructed buffer.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
     // For really small buffers (1 or 2 pkts), they may be created out of order
     // if pkts come out-of-order, so the orderedRelease flag should be false.
     //---------------------------------------------------
     int ringSize = 64; // 128 works too
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
-    std::shared_ptr<Supplier<BufferItem>> supply1 =
-            std::make_shared<Supplier<BufferItem>>(ringSize, false);
+    for (int i=0; i < thdCount; i++) {
+        supplies[i] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
 
-    std::shared_ptr<Supplier<BufferItem>> supply2 =
-            std::make_shared<Supplier<BufferItem>>(ringSize, false);
+        // Start thread to reassemble buffers of packets from all sources
+        auto arg = tArg[i] = (threadArg *) calloc(1, sizeof(threadArg));
+        if ( arg == nullptr) {
+            fprintf(stderr, "\n ******* ran out of memory\n\n");
+            exit(1);
+        }
 
-    //---------------------------------------------------
-    // Start 1st thread to reassemble buffers of packets from all sources
-    //---------------------------------------------------
-    threadArg *tArg1 = (threadArg *) calloc(1, sizeof(threadArg));
-    if (tArg1 == nullptr) {
-        fprintf(stderr, "\n ******* ran out of memory\n\n");
-        exit(1);
-    }
+        arg->bufSupplies[i] = supplies[i];
+        arg->stats = stats;
+        arg->dump  = dumpBufs;
+        arg->debug = debug;
+        arg->sourceCount = sourceCount;
+        arg->tickPrescale = thdCount;
+        arg->consumerId = 0;
 
-    tArg1->bufSupply1 = supply1;
-    tArg1->pktSupply = pktSupply;
-    tArg1->stats = stats;
-    tArg1->dump = dumpBufs;
-    tArg1->debug = debug;
-    tArg1->sourceCount = sourceCount;
-    tArg1->useOneIovecBuf = useOneIovecBuf;
-    tArg1->tickPrescale = 2;
-    tArg1->consumerId = 0;
+        arg->everyNth = thdCount;
+        arg->tickOffset = i;
 
-    tArg1->everyNth = 2;
-    tArg1->tickOffset = 0;
-//    tArg1->buildEvenTicks = true;
+        if (pinBufCores) {
+            arg->core = startingBufCore + 2*i;
+        }
+        else {
+            arg->core = -1;
+        }
 
-    if (pinBufCores) {
-        tArg1->core = startingBufCore;
-    }
-    else {
-        tArg1->core = -1;
-    }
-
-    pthread_t thd1;
-    status = pthread_create(&thd1, NULL, threadAssemble, (void *) tArg1);
-    if (status != 0) {
-        fprintf(stderr, "\n ******* error creating thread\n\n");
-        return -1;
-    }
-
-    //---------------------------------------------------
-    // Start 2nd thread to reassemble buffers of packets from all sources
-    //---------------------------------------------------
-    threadArg *tArg2 = (threadArg *) calloc(1, sizeof(threadArg));
-    if (tArg2 == nullptr) {
-        fprintf(stderr, "\n ******* ran out of memory\n\n");
-        exit(1);
-    }
-
-    tArg2->bufSupply2 = supply2;
-    tArg2->pktSupply = pktSupply;
-    tArg2->stats = stats;
-    tArg2->dump = dumpBufs;
-    tArg2->debug = debug;
-    tArg2->sourceCount = sourceCount;
-    tArg2->useOneIovecBuf = useOneIovecBuf;
-    tArg2->tickPrescale = 2;
-    tArg2->consumerId = 1;
-
-    tArg2->everyNth = 2;
-    tArg2->tickOffset = 1;
-//    tArg2->buildEvenTicks = false;
-
-    if (pinBufCores) {
-        tArg2->core = startingBufCore + 5;
-    }
-    else {
-        tArg2->core = -1;
-    }
-
-    pthread_t thd2;
-    status = pthread_create(&thd2, NULL, threadAssemble, (void *) tArg2);
-    if (status != 0) {
-        fprintf(stderr, "\n ******* error creating thread\n\n");
-        return -1;
+        status = pthread_create(&thds[i], NULL, threadAssemble, (void *) arg);
+        if (status != 0) {
+            fprintf(stderr, "\n ******* error creating thread\n\n");
+            return -1;
+        }
     }
 
 
@@ -1452,22 +1365,20 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Thread(s) to read and/or dump fully reassembled buffers
     //---------------------------------------------------
     if (!dumpBufs) {
-        threadArg *tArg = (threadArg *) calloc(1, sizeof(threadArg));
-        if (tArg == nullptr) {
+        threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
+        if (targ == nullptr) {
             fprintf(stderr, "out of mem\n");
             return -1;
         }
 
-        tArg->bufSupply1 = supply1;
-        tArg->bufSupply2 = supply2;
-        tArg->stats = stats;
-        tArg->dump = dumpBufs;
-        tArg->debug = debug;
-        tArg->sourceCount = sourceCount;
-        tArg->consumerId = 0;
-
-        tArg->expectedTick = 0;
-        tArg->tickPrescale = 1;
+        for (int i=0; i < thdCount; i++) {
+            targ->bufSupplies[i] = supplies[i];
+        }
+        targ->stats = stats;
+        targ->dump  = dumpBufs;
+        targ->debug = debug;
+        targ->sourceCount = sourceCount;
+        targ->everyNth = thdCount;
 
         pthread_t thd;
         status = pthread_create(&thd, NULL, threadReadBuffers, (void *) tArg);
@@ -1485,7 +1396,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 //        tArg22->bufSupply1 = supply1;
 //        tArg22->bufSupply2 = supply2;
 //        tArg22->stats = stats;
-//        tArg22->dump = dumpBufs;
 //        tArg22->debug = debug;
 //        tArg22->sourceCount = sourceCount;
 //        tArg22->consumerId = 1;
