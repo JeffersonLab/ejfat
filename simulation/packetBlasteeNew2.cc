@@ -664,7 +664,7 @@ typedef struct threadArg_t {
     bool debug;
     bool dump;
     bool useOneIovecBuf;
-    bool buildEvenTicks;
+//    bool buildEvenTicks;
 
     // shared ptr of map of stats
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
@@ -803,7 +803,9 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-        assert(packetCount < 1);
+        if (packetCount < 1) {
+            fprintf(stderr, "WAIT, packet count < 1 ??\n");
+        }
 
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
@@ -1556,6 +1558,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
+        else if () {
+            fprintf(stderr, "packet count is 0!!\n");
+        }
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
@@ -1570,16 +1575,12 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             ejfat::parseReHeader(reinterpret_cast<char *>(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base),
                                  item->getHeader(i));
 
-            char *data = (char *)(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
-
-            if (item->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
-                std::cout << "1: Messed up pkt, tick " << item->getHeader(i)->tick << std::endl;
-                //printPktData(data, dataLen, "bytes");
-            }
-
-
-
-
+//            char *data = (char *)(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
+//
+//            if (item->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
+//                std::cout << "1: Messed up pkt, tick " << item->getHeader(i)->tick << std::endl;
+//                //printPktData(data, dataLen, "bytes");
+//            }
         }
 
         // Send data to reassembly thread for consumption
