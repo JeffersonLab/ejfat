@@ -1298,6 +1298,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
     }
 
+    std::cout << "thdCount = " << thdCount << std::endl;
 
     // Arrays for holding threads and buffer supplies
     pthread_t thds[6];
@@ -1309,12 +1310,11 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Supply in which each item holds 60 UDP packets
     // and parsed header info.
     //---------------------------------------------------
-    int numConsumers = 2;
     int pktRingSize = 32;
     size_t maxPktsPerRecv = 20;
-    PacketsItem2::setEventFactorySettings(maxPktsPerRecv, numConsumers);
+    PacketsItem2::setEventFactorySettings(maxPktsPerRecv, thdCount);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
-            std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, numConsumers);
+            std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, thdCount);
 
 
     //---------------------------------------------------
