@@ -658,6 +658,9 @@ typedef struct threadArg_t {
     int sourceCount;
     int consumerId;
 
+    int everyNth;
+    int tickOffset;  // 0, 1, 2, ...
+
     bool debug;
     bool dump;
     bool useOneIovecBuf;
@@ -718,7 +721,9 @@ static void *threadAssemble(void *arg) {
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
     bool useOneIovecBuf = tArg->useOneIovecBuf;
-    bool buildEven = tArg->buildEvenTicks;
+
+    int everyNth = tArg->everyNth;
+    int tickOffset = tArg->tickOffset;
 
     auto stats    = tArg->stats;
     auto & mapp = *stats;
@@ -803,30 +808,11 @@ static void *threadAssemble(void *arg) {
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
             tick = hdr->tick;
-            bool tickEven = tick % 2 == 0;
 
             // Skip this tick and go to the next if looking for odd and have even or vice versa
-            if ((tickEven && !buildEven) || (!tickEven && buildEven)) {
+            if ((tick + tickOffset) % everyNth != 0) {
                 continue;
             }
-
-//if (buildEven) {
-//    bool even = (tick / 2) * 2 == tick;
-//    std::cout << tick << " even =  " << even << std::endl;
-//    if (!even) {
-//        std::cout << " building even but got ODD!" << std::endl;
-//        exit (-1);
-//    }
-//}
-
-//if (!buildEven) {
-//    bool even = (tick / 2) * 2 == tick;
-//    std::cout << tick << " even =  " << even << std::endl;
-//    if (even) {
-//        std::cout << " building odd but got EVEN!" << std::endl;
-//        exit (-1);
-//    }
-//}
 
             srcId = hdr->dataId;
             if (srcId != prevSrcId) {
@@ -1395,7 +1381,11 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg1->useOneIovecBuf = useOneIovecBuf;
     tArg1->tickPrescale = 2;
     tArg1->consumerId = 0;
-    tArg1->buildEvenTicks = true;
+
+    tArg1->everyNth = 2;
+    tArg1->tickOffset = 0;
+//    tArg1->buildEvenTicks = true;
+
     if (pinBufCores) {
         tArg1->core = startingBufCore;
     }
@@ -1428,7 +1418,11 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg2->useOneIovecBuf = useOneIovecBuf;
     tArg2->tickPrescale = 2;
     tArg2->consumerId = 1;
-    tArg2->buildEvenTicks = false;
+
+    tArg1->everyNth = 2;
+    tArg1->tickOffset = 1;
+//    tArg2->buildEvenTicks = false;
+
     if (pinBufCores) {
         tArg2->core = startingBufCore + 5;
     }
