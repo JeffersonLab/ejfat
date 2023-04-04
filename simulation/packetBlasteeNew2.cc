@@ -1336,6 +1336,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         }
 
         arg->bufSupplies[i] = supplies[i];
+        arg->pktSupply = pktSupply;
         arg->stats = stats;
         arg->dump  = dumpBufs;
         arg->debug = debug;
