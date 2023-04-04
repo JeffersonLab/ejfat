@@ -806,12 +806,14 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-        if (packetCount < 1) {
-            fprintf(stderr, "WAIT, packet count < 1 ??\n");
-        }
-        else {
-            std::cout << "Reassemble, packetCount = " << packetCount << std::endl;
-        }
+        assert(packetCount < 1);
+
+//        if (packetCount < 1) {
+//            fprintf(stderr, "WAIT, packet count < 1 ??\n");
+//        }
+//        else {
+//            std::cout << "Reassemble, packetCount = " << packetCount << std::endl;
+//        }
 
         for (int i = 0; i < packetCount; i++) {
             reHeader *hdr = pktItem->getHeader(i);
@@ -1427,8 +1429,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     tArg2->tickPrescale = 2;
     tArg2->consumerId = 1;
 
-    tArg1->everyNth = 2;
-    tArg1->tickOffset = 1;
+    tArg2->everyNth = 2;
+    tArg2->tickOffset = 1;
 //    tArg2->buildEvenTicks = false;
 
     if (pinBufCores) {
@@ -1564,9 +1566,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
-        else if (packetCount == 0) {
-            fprintf(stderr, "packet count is 0!!\n");
-        }
+//        else if (packetCount == 0) {
+//            fprintf(stderr, "packet count is 0!!\n");
+//        }
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
