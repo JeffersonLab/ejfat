@@ -722,7 +722,7 @@ static void *threadAssemble(void *arg) {
     int sourceCount = tArg->sourceCount;
     int id = tArg->consumerId;
 
-    std::shared_ptr<SupplierN<PacketsItem2>> pktSupply = tArg->pktSupply;
+    auto pktSupply = tArg->pktSupply;
 
     bool dumpBufs = tArg->dump;
     bool debug    = tArg->debug;
@@ -730,7 +730,7 @@ static void *threadAssemble(void *arg) {
     int everyNth = tArg->everyNth;
     int tickOffset = tArg->tickOffset;
 
-    std::shared_ptr<Supplier<BufferItem>> bufSupply = tArg->bufSupplies[everyNth];
+    auto bufSupply = tArg->bufSupplies[tickOffset];
 
     auto stats    = tArg->stats;
     auto & mapp = *stats;
