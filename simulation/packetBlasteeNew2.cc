@@ -806,7 +806,7 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-        assert(packetCount < 1);
+        assert(packetCount > 0);
 
 //        if (packetCount < 1) {
 //            fprintf(stderr, "WAIT, packet count < 1 ??\n");
