@@ -813,6 +813,7 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
+        std::cout << "Got pkt @id " << id << " = " << packetCount << std::endl;
         assert(packetCount > 0);
 
         for (int i = 0; i < packetCount; i++) {
@@ -844,6 +845,7 @@ static void *threadAssemble(void *arg) {
                 if (bufItem == nullptr) {
 //std::cout << "  create buf for tick " << hdr->tick << std::endl;
                     // This call gets a reset bufItem
+                    std::cout << "Get buf " << id << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
 
                     // Copy header so that whoever gets the reassembled buffer has info about tick, src id, etc
@@ -866,6 +868,7 @@ static void *threadAssemble(void *arg) {
                 bufItem = (*pmap)[hdr->tick];
                 if (bufItem == nullptr) {
 //std::cout << "same source, create buf for tick " << hdr->tick << std::endl;
+                    std::cout << "Get buf " << id << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                     bufItem->setHeader(hdr);
                     if (hdr->tick > largestSavedTick[srcId]) {
@@ -962,6 +965,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
         // If here, we've gone thru a bundle of UDP packets,
         // time to get the next bundle.
+std::cout << "Release pkt @id " << id << std::endl;
         pktSupply->release(pktItem, id);
 
         // May want to do some house cleaning at this point.
@@ -1015,6 +1019,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                     // Release resources here
                     if (dumpBufs) {
+std::cout << "DUMP buf " << id << std::endl;
                         bufSupply->release(bItem);
                     }
                     else {
@@ -1022,6 +1027,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                         // Perhaps we could reuse them. But if we do that,
                         // things will be out of order and access to filled buffers will be delayed!
                         bItem->setValidData(false);
+std::cout << "REL buf " << id << std::endl;
                         bufSupply->publish(bItem);
                     }
 
@@ -1073,6 +1079,7 @@ static void *threadReadBuffers(void *arg) {
     while (true) {
         for (int i=0; i < thdCount; i++) {
             // Grab a fully reassembled buffer from Supplier
+std::cout << "  >> Get buf " << i << std::endl;
             bufItem = bufSupplies[i]->consumerGet();
             //            uint8_t *buf = bufItem->getBuffer()->array();
             //            size_t limit = bufItem->getBuffer()->limit();
@@ -1091,6 +1098,7 @@ static void *threadReadBuffers(void *arg) {
             // }
 
             // Release item for reuse
+std::cout << "  >> Rel buf " << i << std::endl;
             bufSupplies[i]->release(bufItem);
         }
     }
@@ -1480,7 +1488,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 //        else if (packetCount == 0) {
 //            fprintf(stderr, "packet count is 0!!\n");
 //        }
-//std::cout << "packet count = " << packetCount << std::endl;
+//        std::cout << "packet count = " << packetCount << std::endl;
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
