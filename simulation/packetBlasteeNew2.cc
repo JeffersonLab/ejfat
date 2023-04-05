@@ -672,7 +672,7 @@ typedef struct threadArg_t {
     int bufferSize;
     int mtu;
     int sourceCount;
-    int consumerId;
+    int pktConsumerId;
 
     int everyNth;
     int tickOffset;  // 0, 1, 2, ...
@@ -720,7 +720,7 @@ static void *threadAssemble(void *arg) {
 
     int core = tArg->core;
     int sourceCount = tArg->sourceCount;
-    int id = tArg->consumerId;
+    int id = tArg->pktConsumerId;
 
     auto pktSupply = tArg->pktSupply;
 
@@ -1343,7 +1343,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         arg->debug = debug;
         arg->sourceCount = sourceCount;
         arg->tickPrescale = thdCount;
-        arg->consumerId = 0;
+        arg->pktConsumerId = i;
 
         arg->everyNth = thdCount;
         arg->tickOffset = i;
