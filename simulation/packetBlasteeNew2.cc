@@ -1064,6 +1064,7 @@ static void *threadReadBuffers(void *arg) {
     threadArg *tArg = (threadArg *) arg;
 
     int thdCount = tArg->everyNth;
+    std::cout << "STARTING READ BUFFER THREAD!  thdCount = " << thdCount << std::endl;
 
     std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
     for (int i=0; i < thdCount; i++) {
