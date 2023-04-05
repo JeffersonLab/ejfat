@@ -1412,6 +1412,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Each element of the array is for a given reassembly thread.
     std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMaps[thdCount];
 
+    std::shared_ptr<Supplier<BufferItem>> bufSupplies[MAX_RE_THREADS];
+    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
+
 
     //---------------------------------------------------
     // Supply in which each item holds 60 UDP packets
@@ -1448,10 +1451,12 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         }
 
         std::cout << "2.1" << std::endl;
-        for (int j=0; j < sourceCount; j++) {
-            arg->supplyMap[j] = supplyMaps[i][sourceIds[j]];
-            std::cout << "2.2" << std::endl;
-        }
+        arg->supplyMap = supplyMaps[i];
+
+//        for (int j=0; j < sourceCount; j++) {
+//            arg->supplyMap[j] = supplyMaps[i][sourceIds[j]];
+//            std::cout << "2.2" << std::endl;
+//        }
         std::cout << "2.3" << std::endl;
         arg->pktSupply = pktSupply;
         arg->stats = stats;
