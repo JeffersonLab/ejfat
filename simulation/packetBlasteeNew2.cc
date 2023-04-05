@@ -1423,6 +1423,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
             std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, thdCount);
 
+    std::cout << "1" << std::endl;
 
     //---------------------------------------------------
     // Supplies in which each buf will hold reconstructed buffers.
@@ -1437,6 +1438,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         for (int j=0; j < sourceCount; j++) {
             supplyMap[i][sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
         }
+        std::cout << "2" << std::endl;
 
         // Start thread to reassemble buffers of packets from all sources
         auto arg = tArg[i] = (threadArg *) calloc(1, sizeof(threadArg));
@@ -1473,6 +1475,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         }
     }
 
+    std::cout << "3" << std::endl;
 
     //---------------------------------------------------
     // Thread(s) to read and/or dump fully reassembled buffers
@@ -1491,6 +1494,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 for (int i=0; i < thdCount; i++) {
                     targ->bufSupplies[i] = supplyMap[i][source];
                 }
+             std::cout << "4" << std::endl;
 
                 targ->debug = debug;
                 targ->sourceId = source;
@@ -1503,6 +1507,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 }
             }
     }
+    std::cout << "5" << std::endl;
 
     //---------------------------------------------------
     // Start thread to do rate printout
