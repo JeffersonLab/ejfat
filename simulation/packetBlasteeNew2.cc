@@ -813,7 +813,7 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-        std::cout << "Got pkt @id " << id << " = " << packetCount << std::endl;
+//std::cout << "Got pkt @id " << id << " = " << packetCount << std::endl;
         assert(packetCount > 0);
 
         for (int i = 0; i < packetCount; i++) {
@@ -843,7 +843,7 @@ static void *threadAssemble(void *arg) {
                 bufItem = (*pmap)[hdr->tick];
                 // If there is no buffer existing for this tick, get one
                 if (bufItem == nullptr) {
-std::cout << "diff src,  create buf for tick " << hdr->tick << std::endl;
+std::cout << "\ndiff src,  create buf for tick " << hdr->tick << std::endl;
                     // This call gets a reset bufItem
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
 
@@ -866,7 +866,7 @@ std::cout << "diff src,  create buf for tick " << hdr->tick << std::endl;
                 // Same source as last pkt, but if NOT the same tick ...
                 bufItem = (*pmap)[hdr->tick];
                 if (bufItem == nullptr) {
-std::cout << "same src, create buf for tick " << hdr->tick << std::endl;
+std::cout << "\nsame src, create buf for tick " << hdr->tick << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                     bufItem->setHeader(hdr);
                     if (hdr->tick > largestSavedTick[srcId]) {
@@ -963,7 +963,7 @@ std::cout << "   " << id << ": pub tck " << hdr->tick << " src " << srcId << std
 
         // If here, we've gone thru a bundle of UDP packets,
         // time to get the next bundle.
-std::cout << "Release pkt @id " << id << std::endl;
+//std::cout << "Release pkt @id " << id << std::endl;
         pktSupply->release(pktItem, id);
 
         // May want to do some house cleaning at this point.
