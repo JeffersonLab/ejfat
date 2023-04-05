@@ -35,11 +35,24 @@
  * Note that while a buffer is being reassembled there is a place to store
  * it and find it according to its tick value (in unordered_map).
  * </p>
- * </p>
+ * <p>
  * There are 1 thread which pull off all reassembled buffers. Also another to do stats.
  * There is some sensitivity to the number of packets in each PacketsItem. Best value seems to be 20.
  * </p>
- * * Look on my Mac at /Users/timmer/DataGraphs/NumaNodes.xlsx.
+ *
+ * <p>
+ * So what happens when there are multiple sources? say 2 for sake of argument?
+ * 1) If src1 and src2 are completely independent, use a separate copy of this receiving program for each src.
+ * The treatment of data will be completely different for each anyway so this makes the most sense.
+ * 2) If the sources need to be combined and processed together, this program can help.
+ * Each receiving thread is looking for certain ticks. If there are 2 such threads, one looks for event ticks
+ * and the other, odd. So pick the thread looking at even ticks. It knows how many sources are expected and
+ * their values (given as cmd line args). One buffer is used to construct/contain data for one src and one tick.
+ *
+ * </p>
+ *
+ * <p>
+ * Look on my Mac at /Users/timmer/DataGraphs/NumaNodes.xlsx.
  * Use packetBlasterNew to produce events.
  * To produce events at roughly 2.9GB/s, use arg "-cores 60" where 60 can just as
  * easily be 0-63. To produce at roughly 3.4 GB/s, use cores 64-79, 88-127.
@@ -49,6 +62,7 @@
  * To receive at that rate, the args "-pinRead 80 -pinCnt 5" must be used to specify the fastest
  * network cores for reading packets, and needs at least 5 of them to distribute the work.
  * Even then packets are occasionally dropped.
+ * </p>
  */
 
 #include <cstdlib>
@@ -90,8 +104,14 @@ using namespace ejfat;
 // Be sure to print to stderr as this program pipes data to stdout!!!
 //-----------------------------------------------------------------------
 
-
+// Max number of chars in a name
 #define INPUT_LENGTH_MAX 256
+
+// Max # of data input sources
+#define MAX_SOURCES 16
+
+// Max number of reassembly threads
+#define MAX_RE_THREADS 3
 
 
 /**
@@ -335,6 +355,11 @@ static void parseArgs(int argc, char **argv,
                         index++;
                         //std::cout << s << std::endl;
                     }
+
+                    if (index > MAX_SOURCES) {
+                        fprintf(stderr, "Too many sources specified in -ids, max %d\n", MAX_SOURCES);
+                        exit(-1);
+                    }
                 }
 
                 break;
@@ -353,11 +378,11 @@ static void parseArgs(int argc, char **argv,
             case 9:
                 // Number of reassembly thds
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 0 && i_tmp < 7) {
+                if (i_tmp > 0 && i_tmp <= MAX_RE_THREADS) {
                     *thdCnt = i_tmp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -thds, 0 < # of thds < 7)\n");
+                    fprintf(stderr, "Invalid argument to -thds, 0 < # of thds <= %d)\n", MAX_RE_THREADS);
                     exit(-1);
                 }
 
@@ -661,9 +686,12 @@ void printPktData(char *buf, size_t bytes, std::string const & label) {
 
 // Arg to pass to buffer reassembly thread
 typedef struct threadArg_t {
-    /** Supply of buffers for holding reassembled data.
-     *  One for each reassembly thread. */
-    std::shared_ptr<Supplier<BufferItem>> bufSupplies[6];
+    /** Supply of buffers for holding reassembled data from a single source.
+     *  One from each reassembly thread. */
+    std::shared_ptr<Supplier<BufferItem>> bufSupplies[MAX_RE_THREADS];
+
+    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
+
 
     /** Supply of structures holding UDP packets. */
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply;
@@ -673,6 +701,7 @@ typedef struct threadArg_t {
     int mtu;
     int sourceCount;
     int pktConsumerId;
+    int sourceId;
 
     int everyNth;
     int tickOffset;  // 0, 1, 2, ...
@@ -730,7 +759,11 @@ static void *threadAssemble(void *arg) {
     int everyNth = tArg->everyNth;
     int tickOffset = tArg->tickOffset;
 
-    auto bufSupply = tArg->bufSupplies[tickOffset];
+    std::shared_ptr<Supplier<BufferItem>> bufSupply;
+    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
+    for (int i=0; i < sourceCount; i++) {
+        supplyMap[i] = tArg->supplyMap[i];
+    }
 
     auto stats    = tArg->stats;
     auto & mapp = *stats;
@@ -828,6 +861,7 @@ static void *threadAssemble(void *arg) {
             srcId = hdr->dataId;
             if (srcId != prevSrcId) {
                 // Switching to a different data source ...
+                bufSupply = supplyMap[srcId];
 
                 // Get the right map if there is one, else make one
                 pmap = maps[srcId];
@@ -886,8 +920,9 @@ static void *threadAssemble(void *arg) {
             // We are using the ability of the BufferItem to store a user's long.
             // Use it store how many bytes we've copied into it so far.
             // This will enable us to tell if we're done w/ reassembly.
+            // Likewise, store # packets copied in user int.
+            int64_t bytesSoFar = bufItem->getUserLong();
             int32_t pktsSoFar  = bufItem->getUserInt();
-//            int64_t bytesSoFar = bufItem->getUserLong();
             int64_t dataLen    = pktItem->getPacket(i)->msg_len - HEADER_BYTES;
 //std::cout << "pkt len " << dataLen << std::endl;
 
@@ -916,15 +951,12 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             // The alternative is to add a sequential number to RE header to be able to track this.
             // That requires more bookkeeping on this receiving end.
 
-            // Copy things into buf from the iovec buffer
-            bufItem->getBuffer()->put(data,dataLen);
-//            memcpy(bufItem->getBuffer()->array() + hdr->offset,
-//                       (char *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES,
-//                       dataLen);
+            // Copy things into the correct position in qbuf from the iovec buffer
+            memcpy(bufItem->getBuffer()->array() + hdr->offset,data,dataLen);
 
-            // ByteBuffer keeps track of how much we've written so far
-            size_t bytesSoFar = bufItem->getBuffer()->position();
-//            bufItem->setUserLong(bytesSoFar);
+            // Keep track of how much we've written so far
+            bytesSoFar += dataLen;
+            bufItem->setUserLong(bytesSoFar);
 
             // Track # of packets written so far (will double count for duplicate packets)
             pktsSoFar++;
@@ -975,6 +1007,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
         for (const auto &n: largestSavedTick) {
             int source = n.first;
             uint64_t bigTick = n.second;
+
             //std::cout << "clear biggest " << bigTick  << std::endl;
 
             // Compare this tick with the ticks in maps[source] and remove if too old
@@ -1015,10 +1048,11 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                         mapp[source]->droppedPackets += mapp[source]->discardedBytes / mtu;
                     }
 
-                    // Release resources here
+                    // Release resources here.
+                    // This source only has bufItems from supplyMap[srcId].
                     if (dumpBufs) {
 //std::cout << "   " << id << " clear: dump tck " << tck << " src " << srcId << std::endl;
-                        bufSupply->release(bItem);
+                        supplyMap[source]->release(bItem);
                     }
                     else {
                         // We need to label bad buffers.
@@ -1026,7 +1060,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                         // things will be out of order and access to filled buffers will be delayed!
                         bItem->setValidData(false);
 //std::cout << "   " << id << " clear: pub tck " << tck << " src " << srcId << std::endl;
-                        bufSupply->publish(bItem);
+                        supplyMap[source]->publish(bItem);
                     }
 
                 }
@@ -1055,7 +1089,9 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
 
 /**
- * Thread to read all filled buffers.
+ * Thread to read all filled buffers from a single, particular data source.
+ * In general, there will be one buffer supply from each reassembly thread
+ * with this particular source.
  * @param arg
  * @return
  */
@@ -1064,11 +1100,13 @@ static void *threadReadBuffers(void *arg) {
     threadArg *tArg = (threadArg *) arg;
 
     int thdCount = tArg->everyNth;
+    int id = tArg->sourceId;
 
     std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
     for (int i=0; i < thdCount; i++) {
         bufSupplies[i] = tArg->bufSupplies[i];
     }
+std::cout << "   Started cleanup thread for source " << id << std::endl;
 
     std::shared_ptr<BufferItem> bufItem;
 
@@ -1077,26 +1115,9 @@ static void *threadReadBuffers(void *arg) {
     while (true) {
         for (int i=0; i < thdCount; i++) {
             // Grab a fully reassembled buffer from Supplier
-//std::cout << "  >> Get buf " << i << std::endl;
             bufItem = bufSupplies[i]->consumerGet();
-            //            uint8_t *buf = bufItem->getBuffer()->array();
-            //            size_t limit = bufItem->getBuffer()->limit();
-            //            uint32_t *p = reinterpret_cast<uint32_t *>(buf);
-            //
-            //            for (uint32_t i=0; i < limit/4; i++) {
-            //                if (p[i] != i) {
-            //                    if (!printedBad)
-            //                        bufItem->getBuffer()->printBytes(0, limit, "ERROR");
-            //                    printedBad = true;
-            //                    break;
-            //                }
-            //            }
-            // if (bufItem->validData()) {
-            //     // do something with buffer here
-            // }
 
             // Release item for reuse
-//std::cout << "  >> Rel buf " << i << std::endl;
             bufSupplies[i]->release(bufItem);
         }
     }
@@ -1106,28 +1127,79 @@ static void *threadReadBuffers(void *arg) {
 }
 
 
-
-/**
- * Thread to read all filled buffers in order to return to ring.
- * @param arg
- * @return nullptr
- */
-static void *threadReadBuffersSingleRing(void *arg) {
-
-    threadArg *tArg = (threadArg *) arg;
-    int id = tArg->tickOffset;
-
-    std::shared_ptr<Supplier<BufferItem>> bufSupply = tArg->bufSupplies[id];
-    std::shared_ptr<BufferItem> bufItem;
-
-    // we need to put bufs back into the supply now.
-    while (true) {
-            bufItem = bufSupply->consumerGet();
-            bufSupply->release(bufItem);
-    }
-
-    return nullptr;
-}
+///**
+// * Thread to read all filled buffers.
+// * @param arg
+// * @return
+// */
+//static void *threadReadBuffers(void *arg) {
+//
+//    threadArg *tArg = (threadArg *) arg;
+//
+//    int thdCount = tArg->everyNth;
+//
+//    std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
+//    for (int i=0; i < thdCount; i++) {
+//        bufSupplies[i] = tArg->bufSupplies[i];
+//    }
+//
+//    std::shared_ptr<BufferItem> bufItem;
+//
+//    // If bufs are not already dumped by the reassembly thread,
+//    // we need to put them back into the supply now.
+//    while (true) {
+//        for (int i=0; i < thdCount; i++) {
+//            // Grab a fully reassembled buffer from Supplier
+//            //std::cout << "  >> Get buf " << i << std::endl;
+//            bufItem = bufSupplies[i]->consumerGet();
+//            //            uint8_t *buf = bufItem->getBuffer()->array();
+//            //            size_t limit = bufItem->getBuffer()->limit();
+//            //            uint32_t *p = reinterpret_cast<uint32_t *>(buf);
+//            //
+//            //            for (uint32_t i=0; i < limit/4; i++) {
+//            //                if (p[i] != i) {
+//            //                    if (!printedBad)
+//            //                        bufItem->getBuffer()->printBytes(0, limit, "ERROR");
+//            //                    printedBad = true;
+//            //                    break;
+//            //                }
+//            //            }
+//            // if (bufItem->validData()) {
+//            //     // do something with buffer here
+//            // }
+//
+//            // Release item for reuse
+//            //std::cout << "  >> Rel buf " << i << std::endl;
+//            bufSupplies[i]->release(bufItem);
+//        }
+//    }
+//
+//    // Thread not needed and can exit.
+//    return nullptr;
+//}
+//
+//
+///**
+// * Thread to read all filled buffers in order to return to ring.
+// * @param arg
+// * @return nullptr
+// */
+//static void *threadReadBuffersSingleRing(void *arg) {
+//
+//    threadArg *tArg = (threadArg *) arg;
+//    int id = tArg->tickOffset;
+//
+//    std::shared_ptr<Supplier<BufferItem>> bufSupply = tArg->bufSupplies[id];
+//    std::shared_ptr<BufferItem> bufItem;
+//
+//    // we need to put bufs back into the supply now.
+//    while (true) {
+//            bufItem = bufSupply->consumerGet();
+//            bufSupply->release(bufItem);
+//    }
+//
+//    return nullptr;
+//}
 
 
 
@@ -1143,7 +1215,7 @@ int main(int argc, char **argv) {
     int startingCore = -1;
     int coreCount = 1;
     int startingBufCore = -1;
-    int sourceIds[128];
+    int sourceIds[MAX_SOURCES];
     int sourceCount = 0;
     int thdCount = 1;
     bool debug = false;
@@ -1159,12 +1231,15 @@ int main(int argc, char **argv) {
     char filename[101];
     memset(filename, 0, 101);
 
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < MAX_SOURCES; i++) {
         sourceIds[i] = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, &startingCore, &coreCount, &startingBufCore, sourceIds,
-              &thdCount, &startingPort, &debug, &useIPv6, &keepStats, &dumpBufs, listeningAddr, filename);
+    parseArgs(argc, argv, &bufSize, &recvBufSize,
+              &tickPrescale, &startingCore, &coreCount,
+              &startingBufCore, sourceIds,
+              &thdCount, &startingPort, &debug, &useIPv6,
+              &keepStats, &dumpBufs, listeningAddr, filename);
 
     pinCores = startingCore >= 0 ? true : false;
     pinBufCores = startingBufCore >= 0 ? true : false;
@@ -1193,7 +1268,7 @@ int main(int argc, char **argv) {
 #endif
 
 
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < MAX_SOURCES; i++) {
         if (sourceIds[i] > -1) {
             sourceCount++;
             std::cerr << "Expecting source " << sourceIds[i] << " in position " << i << std::endl;
@@ -1208,7 +1283,6 @@ int main(int argc, char **argv) {
         sourceCount = 1;
         std::cerr << "Defaulting to (single) source id = 0" << std::endl;
     }
-
 
 #ifdef __APPLE__
     // By default set recv buf size to 7.4 MB which is the highest
@@ -1332,9 +1406,11 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     std::cout << "thdCount = " << thdCount << std::endl;
 
     // Arrays for holding threads and buffer supplies
-    pthread_t thds[6];
-    std::shared_ptr<Supplier<BufferItem>> supplies[6];
-    threadArg *tArg[6];
+    pthread_t thds[thdCount];
+    threadArg *tArg[thdCount];
+    // Array of Maps of supplies. Each map --> key = src id, value = supply.
+    // Each element of the array is for a given reassembly thread.
+    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap[thdCount];
 
 
     //---------------------------------------------------
@@ -1349,7 +1425,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
 
     //---------------------------------------------------
-    // Supplies in which each buf will hold reconstructed buffer.
+    // Supplies in which each buf will hold reconstructed buffers.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
     // For really small buffers (1 or 2 pkts), they may be created out of order
     // if pkts come out-of-order, so the orderedRelease flag should be false.
@@ -1357,7 +1433,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     int ringSize = 64; // 128 works too
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
     for (int i=0; i < thdCount; i++) {
-        supplies[i] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
+        // "source" number of buffer supplies for each reassembly thread
+        for (int j=0; j < sourceCount; j++) {
+            supplyMap[i][sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
+        }
 
         // Start thread to reassemble buffers of packets from all sources
         auto arg = tArg[i] = (threadArg *) calloc(1, sizeof(threadArg));
@@ -1366,13 +1445,15 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             exit(1);
         }
 
-        arg->bufSupplies[i] = supplies[i];
+        for (int j=0; j < sourceCount; j++) {
+            arg->supplyMap[j] = supplyMap[i][sourceIds[j]];
+        }
         arg->pktSupply = pktSupply;
         arg->stats = stats;
         arg->dump  = dumpBufs;
         arg->debug = debug;
         arg->sourceCount = sourceCount;
-        arg->tickPrescale = thdCount;
+        arg->tickPrescale = thdCount; // TODO: This needs more work!!
         arg->pktConsumerId = i;
 
         arg->everyNth = thdCount;
@@ -1397,52 +1478,30 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Thread(s) to read and/or dump fully reassembled buffers
     //---------------------------------------------------
     if (!dumpBufs) {
-
-        bool multipleThds = true;
-
-        if (multipleThds) {
-            for (int i=0; i < thdCount; i++) {
+         for (int j=0; j < sourceCount; j++) {
                 threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
                 if (targ == nullptr) {
                     fprintf(stderr, "out of mem\n");
                     return -1;
                 }
 
-                targ->bufSupplies[i] = supplies[i];
+                // Supply of buffers for holding reassembled data from a single source.
+                // One from each reassembly thread.
+                int source = sourceIds[j];
+                for (int i=0; i < thdCount; i++) {
+                    targ->bufSupplies[i] = supplyMap[i][source];
+                }
+
                 targ->debug = debug;
-                targ->tickOffset = i;
+                targ->sourceId = source;
 
                 pthread_t thd;
-                status = pthread_create(&thd, NULL, threadReadBuffersSingleRing, (void *) targ);
+                status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
                 if (status != 0) {
                     fprintf(stderr, "Error creating thread for reading pkts\n");
                     return -1;
                 }
             }
-        }
-        else {
-            threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
-            if (targ == nullptr) {
-                fprintf(stderr, "out of mem\n");
-                return -1;
-            }
-
-            for (int i = 0; i < thdCount; i++) {
-                targ->bufSupplies[i] = supplies[i];
-            }
-            targ->stats = stats;
-            targ->dump = dumpBufs;
-            targ->debug = debug;
-            targ->sourceCount = sourceCount;
-            targ->everyNth = thdCount;
-
-            pthread_t thd;
-            status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
-            if (status != 0) {
-                fprintf(stderr, "Error creating thread for reading pkts\n");
-                return -1;
-            }
-        }
     }
 
     //---------------------------------------------------
