@@ -813,7 +813,6 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-        std::cout << "packet count @ " << tickOffset << " = " << packetCount << std::endl;
         assert(packetCount > 0);
 
         for (int i = 0; i < packetCount; i++) {
@@ -1478,10 +1477,10 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
-        else if (packetCount == 0) {
-            fprintf(stderr, "packet count is 0!!\n");
-        }
-        std::cout << "packet count = " << packetCount << std::endl;
+//        else if (packetCount == 0) {
+//            fprintf(stderr, "packet count is 0!!\n");
+//        }
+//std::cout << "packet count = " << packetCount << std::endl;
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
