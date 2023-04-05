@@ -1410,7 +1410,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     threadArg *tArg[thdCount];
     // Array of Maps of supplies. Each map --> key = src id, value = supply.
     // Each element of the array is for a given reassembly thread.
-    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap[thdCount];
+    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMaps[thdCount];
 
 
     //---------------------------------------------------
@@ -1436,7 +1436,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     for (int i=0; i < thdCount; i++) {
         // "source" number of buffer supplies for each reassembly thread
         for (int j=0; j < sourceCount; j++) {
-            supplyMap[i][sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
+            supplyMaps[i][sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
         }
         std::cout << "2" << std::endl;
 
@@ -1447,9 +1447,12 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             exit(1);
         }
 
+        std::cout << "2.1" << std::endl;
         for (int j=0; j < sourceCount; j++) {
-            arg->supplyMap[j] = supplyMap[i][sourceIds[j]];
+            arg->supplyMap[j] = supplyMaps[i][sourceIds[j]];
+            std::cout << "2.2" << std::endl;
         }
+        std::cout << "2.3" << std::endl;
         arg->pktSupply = pktSupply;
         arg->stats = stats;
         arg->dump  = dumpBufs;
@@ -1460,6 +1463,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         arg->everyNth = thdCount;
         arg->tickOffset = i;
+        std::cout << "2.4" << std::endl;
 
         if (pinBufCores) {
             arg->core = startingBufCore + 2*i;
@@ -1492,7 +1496,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 // One from each reassembly thread.
                 int source = sourceIds[j];
                 for (int i=0; i < thdCount; i++) {
-                    targ->bufSupplies[i] = supplyMap[i][source];
+                    targ->bufSupplies[i] = supplyMaps[i][source];
                 }
              std::cout << "4" << std::endl;
 
