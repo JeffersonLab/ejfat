@@ -843,9 +843,8 @@ static void *threadAssemble(void *arg) {
                 bufItem = (*pmap)[hdr->tick];
                 // If there is no buffer existing for this tick, get one
                 if (bufItem == nullptr) {
-//std::cout << "  create buf for tick " << hdr->tick << std::endl;
+std::cout << "diff src,  create buf for tick " << hdr->tick << std::endl;
                     // This call gets a reset bufItem
-                    std::cout << "Get buf " << id << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
 
                     // Copy header so that whoever gets the reassembled buffer has info about tick, src id, etc
@@ -867,8 +866,7 @@ static void *threadAssemble(void *arg) {
                 // Same source as last pkt, but if NOT the same tick ...
                 bufItem = (*pmap)[hdr->tick];
                 if (bufItem == nullptr) {
-//std::cout << "same source, create buf for tick " << hdr->tick << std::endl;
-                    std::cout << "Get buf " << id << std::endl;
+std::cout << "same src, create buf for tick " << hdr->tick << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                     bufItem->setHeader(hdr);
                     if (hdr->tick > largestSavedTick[srcId]) {
@@ -939,7 +937,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
-//std::cout << "   remove " << hdr->tick << std::endl;
+std::cout << "   " << id << ": remove " << hdr->tick << std::endl;
 
                 //std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
 
@@ -952,12 +950,12 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
-//std::cout << "release tck " << hdr->tick << " src " << srcId << std::endl;
+std::cout << "   " << id << ": dump tck " << hdr->tick << " src " << srcId << std::endl;
                     bufSupply->release(bufItem);
                 }
                 else {
                     // TODO: Somehow this must be tagged with tick and source
-//std::cout << "publish tck " << hdr->tick << " src " << srcId << std::endl;
+std::cout << "   " << id << ": pub tck " << hdr->tick << " src " << srcId << std::endl;
                     bufSupply->publish(bufItem);
                 }
             }
@@ -1019,7 +1017,7 @@ std::cout << "Release pkt @id " << id << std::endl;
 
                     // Release resources here
                     if (dumpBufs) {
-std::cout << "DUMP buf " << id << std::endl;
+std::cout << "   " << id << " clear: dump tck " << tck << " src " << srcId << std::endl;
                         bufSupply->release(bItem);
                     }
                     else {
@@ -1027,7 +1025,7 @@ std::cout << "DUMP buf " << id << std::endl;
                         // Perhaps we could reuse them. But if we do that,
                         // things will be out of order and access to filled buffers will be delayed!
                         bItem->setValidData(false);
-std::cout << "REL buf " << id << std::endl;
+std::cout << "   " << id << " clear: pub tck " << tck << " src " << srcId << std::endl;
                         bufSupply->publish(bItem);
                     }
 
