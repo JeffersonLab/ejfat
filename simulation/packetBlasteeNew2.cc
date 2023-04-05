@@ -843,7 +843,7 @@ static void *threadAssemble(void *arg) {
                 bufItem = (*pmap)[hdr->tick];
                 // If there is no buffer existing for this tick, get one
                 if (bufItem == nullptr) {
-std::cout << "\ndiff src,  create buf for tick " << hdr->tick << std::endl;
+//std::cout << "\ndiff src,  create buf for tick " << hdr->tick << std::endl;
                     // This call gets a reset bufItem
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
 
@@ -866,7 +866,7 @@ std::cout << "\ndiff src,  create buf for tick " << hdr->tick << std::endl;
                 // Same source as last pkt, but if NOT the same tick ...
                 bufItem = (*pmap)[hdr->tick];
                 if (bufItem == nullptr) {
-std::cout << "\nsame src, create buf for tick " << hdr->tick << std::endl;
+//std::cout << "\nsame src, create buf for tick " << hdr->tick << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                     bufItem->setHeader(hdr);
                     if (hdr->tick > largestSavedTick[srcId]) {
@@ -937,7 +937,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
-std::cout << "   " << id << ": remove " << hdr->tick << std::endl;
+//std::cout << "   " << id << ": remove " << hdr->tick << std::endl;
 
                 //std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
 
@@ -950,12 +950,12 @@ std::cout << "   " << id << ": remove " << hdr->tick << std::endl;
 
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
-std::cout << "   " << id << ": dump tck " << hdr->tick << " src " << srcId << std::endl;
+//std::cout << "   " << id << ": dump tck " << hdr->tick << " src " << srcId << std::endl;
                     bufSupply->release(bufItem);
                 }
                 else {
                     // TODO: Somehow this must be tagged with tick and source
-std::cout << "   " << id << ": pub tck " << hdr->tick << " src " << srcId << std::endl;
+//std::cout << "   " << id << ": pub tck " << hdr->tick << " src " << srcId << std::endl;
                     bufSupply->publish(bufItem);
                 }
             }
@@ -1017,7 +1017,7 @@ std::cout << "   " << id << ": pub tck " << hdr->tick << " src " << srcId << std
 
                     // Release resources here
                     if (dumpBufs) {
-std::cout << "   " << id << " clear: dump tck " << tck << " src " << srcId << std::endl;
+//std::cout << "   " << id << " clear: dump tck " << tck << " src " << srcId << std::endl;
                         bufSupply->release(bItem);
                     }
                     else {
@@ -1025,7 +1025,7 @@ std::cout << "   " << id << " clear: dump tck " << tck << " src " << srcId << st
                         // Perhaps we could reuse them. But if we do that,
                         // things will be out of order and access to filled buffers will be delayed!
                         bItem->setValidData(false);
-std::cout << "   " << id << " clear: pub tck " << tck << " src " << srcId << std::endl;
+//std::cout << "   " << id << " clear: pub tck " << tck << " src " << srcId << std::endl;
                         bufSupply->publish(bItem);
                     }
 
@@ -1064,7 +1064,6 @@ static void *threadReadBuffers(void *arg) {
     threadArg *tArg = (threadArg *) arg;
 
     int thdCount = tArg->everyNth;
-    std::cout << "STARTING READ BUFFER THREAD!  thdCount = " << thdCount << std::endl;
 
     std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
     for (int i=0; i < thdCount; i++) {
@@ -1078,7 +1077,7 @@ static void *threadReadBuffers(void *arg) {
     while (true) {
         for (int i=0; i < thdCount; i++) {
             // Grab a fully reassembled buffer from Supplier
-std::cout << "  >> Get buf " << i << std::endl;
+//std::cout << "  >> Get buf " << i << std::endl;
             bufItem = bufSupplies[i]->consumerGet();
             //            uint8_t *buf = bufItem->getBuffer()->array();
             //            size_t limit = bufItem->getBuffer()->limit();
@@ -1097,7 +1096,7 @@ std::cout << "  >> Get buf " << i << std::endl;
             // }
 
             // Release item for reuse
-std::cout << "  >> Rel buf " << i << std::endl;
+//std::cout << "  >> Rel buf " << i << std::endl;
             bufSupplies[i]->release(bufItem);
         }
     }
@@ -1389,7 +1388,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         targ->everyNth = thdCount;
 
         pthread_t thd;
-        status = pthread_create(&thd, NULL, threadReadBuffers, (void *) tArg);
+        status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
         if (status != 0) {
             fprintf(stderr, "Error creating thread for reading pkts\n");
             return -1;
