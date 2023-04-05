@@ -1106,6 +1106,31 @@ static void *threadReadBuffers(void *arg) {
 }
 
 
+
+/**
+ * Thread to read all filled buffers in order to return to ring.
+ * @param arg
+ * @return nullptr
+ */
+static void *threadReadBuffersSingleRing(void *arg) {
+
+    threadArg *tArg = (threadArg *) arg;
+    int id = tArg->tickOffset;
+
+    std::shared_ptr<Supplier<BufferItem>> bufSupply = tArg->bufSupplies[id];
+    std::shared_ptr<BufferItem> bufItem;
+
+    // we need to put bufs back into the supply now.
+    while (true) {
+            bufItem = bufSupply->consumerGet();
+            bufSupply->release(bufItem);
+    }
+
+    return nullptr;
+}
+
+
+
 int main(int argc, char **argv) {
 
     int status;
@@ -1372,50 +1397,52 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     // Thread(s) to read and/or dump fully reassembled buffers
     //---------------------------------------------------
     if (!dumpBufs) {
-        threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
-        if (targ == nullptr) {
-            fprintf(stderr, "out of mem\n");
-            return -1;
-        }
 
-        for (int i=0; i < thdCount; i++) {
-            targ->bufSupplies[i] = supplies[i];
-        }
-        targ->stats = stats;
-        targ->dump  = dumpBufs;
-        targ->debug = debug;
-        targ->sourceCount = sourceCount;
-        targ->everyNth = thdCount;
+        bool multipleThds = true;
 
-        pthread_t thd;
-        status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
-        if (status != 0) {
-            fprintf(stderr, "Error creating thread for reading pkts\n");
-            return -1;
-        }
+        if (multipleThds) {
+            for (int i=0; i < thdCount; i++) {
+                threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
+                if (targ == nullptr) {
+                    fprintf(stderr, "out of mem\n");
+                    return -1;
+                }
 
-//        threadArg *tArg22 = (threadArg *) calloc(1, sizeof(threadArg));
-//        if (tArg2 == nullptr) {
-//            fprintf(stderr, "out of mem\n");
-//            return -1;
-//        }
-//
-//        tArg22->bufSupply1 = supply1;
-//        tArg22->bufSupply2 = supply2;
-//        tArg22->stats = stats;
-//        tArg22->debug = debug;
-//        tArg22->sourceCount = sourceCount;
-//        tArg22->consumerId = 1;
-//
-//        tArg22->expectedTick = 0;
-//        tArg22->tickPrescale = 1;
-//
-//        pthread_t thd22;
-//        status = pthread_create(&thd22, NULL, threadReadBuffersOld, (void *) tArg22);
-//        if (status != 0) {
-//            fprintf(stderr, "Error creating thread for reading pkts\n");
-//            return -1;
-//        }
+                targ->bufSupplies[i] = supplies[i];
+                targ->debug = debug;
+                targ->tickOffset = i;
+
+                pthread_t thd;
+                status = pthread_create(&thd, NULL, threadReadBuffersSingleRing, (void *) targ);
+                if (status != 0) {
+                    fprintf(stderr, "Error creating thread for reading pkts\n");
+                    return -1;
+                }
+            }
+        }
+        else {
+            threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
+            if (targ == nullptr) {
+                fprintf(stderr, "out of mem\n");
+                return -1;
+            }
+
+            for (int i = 0; i < thdCount; i++) {
+                targ->bufSupplies[i] = supplies[i];
+            }
+            targ->stats = stats;
+            targ->dump = dumpBufs;
+            targ->debug = debug;
+            targ->sourceCount = sourceCount;
+            targ->everyNth = thdCount;
+
+            pthread_t thd;
+            status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
+            if (status != 0) {
+                fprintf(stderr, "Error creating thread for reading pkts\n");
+                return -1;
+            }
+        }
     }
 
     //---------------------------------------------------
