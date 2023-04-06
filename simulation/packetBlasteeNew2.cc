@@ -1403,7 +1403,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
     }
 
-    std::cout << "thdCount = " << thdCount << std::endl;
+    std::cout << "thdCount = " << thdCount << ", source count = " << sourceCount << std::endl;
 
     // Arrays for holding threads and buffer supplies
     pthread_t thds[thdCount];
@@ -1454,6 +1454,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         for (int j=0; j < sourceCount; j++) {
             std::cout << "2.2.0" << std::endl;
+            fprintf(stderr, " maps ptr = %p, addr of map array element %p\n", supplyMaps, &supplyMaps[i]);
+            fprintf(stderr, " addr of map %p\n",  &supplyMaps[i][sourceIds[j]] );
+
             arg->supplyMap[j] = supplyMaps[i][sourceIds[j]];
             std::cout << "2.2.1" << std::endl;
         }
