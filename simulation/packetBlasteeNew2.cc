@@ -480,6 +480,11 @@ static void *rateThread(void *arg) {
         skippedFirst[i] = 0;
     }
 
+    // Total time is different for each source since they may all start
+    // sending their data at different times.
+    int64_t totalMicroSecs[sourceCount];
+    struct timespec tStart[sourceCount];
+
 
 
     // File writing stuff
@@ -502,16 +507,39 @@ static void *rateThread(void *arg) {
 
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate;
-    int64_t totalMicroSec, microSec;
-    struct timespec t1, t2, firstT;
+    int64_t microSec;
+    struct timespec tEnd, t1;
     bool rollOver = false;
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    firstT = t1;
 
     // We've got to handle "sourceCount" number of data sources - each with their own stats
     while (true) {
+
+        // Loop to zero stats when first starting - for accurate rate calc
+        for (int i=0; i < sourceCount; i++) {
+            if (dataArrived[i] && skippedFirst[i] == 1) {
+                // Data is now coming in. To get an accurate rate, start w/ all stats = 0
+                int src = sourceIds[i];
+                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
+                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
+                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
+
+                currDiscardPkts[i]  = mapp[src]->discardedPackets = 0;
+                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
+                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
+
+                currDropBytes[i]    = mapp[src]->droppedBytes     = 0;
+
+                // Start the clock for this source
+                clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
+fprintf(stderr, "started clock for src %d\n", src);
+
+                // From now on we skip this zeroing step
+                skippedFirst[i]++;
+            }
+        }
 
         for (int i=0; i < sourceCount; i++) {
             prevTotalPkts[i]   = currTotalPkts[i];
@@ -531,11 +559,15 @@ static void *rateThread(void *arg) {
         std::this_thread::sleep_for(std::chrono::seconds(4));
 
         // Read time
-        clock_gettime(CLOCK_MONOTONIC, &t2);
-        microSec = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
-        totalMicroSec = (1000000L * (t2.tv_sec - firstT.tv_sec)) + ((t2.tv_nsec - firstT.tv_nsec)/1000L);
+        clock_gettime(CLOCK_MONOTONIC, &tEnd);
+
+        // Time taken by last loop
+        microSec = (1000000L * (tEnd.tv_sec - t1.tv_sec)) + ((tEnd.tv_nsec - t1.tv_nsec)/1000L);
 
         for (int i=0; i < sourceCount; i++) {
+            // Total time - can be different for each source
+            totalMicroSecs[i] = (1000000L * (tEnd.tv_sec - tStart[i].tv_sec)) + ((tEnd.tv_nsec - tStart[i].tv_nsec)/1000L);
+
             int src = sourceIds[i];
             currTotalPkts[i]    = mapp[src]->acceptedPackets;
             currTotalBytes[i]   = mapp[src]->acceptedBytes;
@@ -581,7 +613,7 @@ static void *rateThread(void *arg) {
 //            }
 //
 //            if (allSources) skipFirst = false;
-//            firstT = t1 = t2;
+//            t1 = t2;
 //            rollOver = false;
 //            continue;
 //        }
@@ -601,15 +633,17 @@ static void *rateThread(void *arg) {
 
                 currDropBytes[i]    = mapp[src]->droppedBytes     = 0;
             }
-            firstT = t1 = t2;
+            t1 = tEnd;
             rollOver = false;
             continue;
         }
 
         for (int i=0; i < sourceCount; i++) {
+            // Dota not coming in yet from this source so do NO calcs
             if (!dataArrived[i]) continue;
-            if (skippedFirst[i] < 2) {
-                // skip first 2 stat cycles as the rate calculations will be too small
+
+            // Skip first stat cycle as the rate calculations will be off
+            if (skippedFirst[i] < 1) {
                 printf("%d skip %d\n", sourceIds[i], skippedFirst[i]);
                 skippedFirst[i]++;
                 continue;
@@ -632,7 +666,7 @@ static void *rateThread(void *arg) {
 //            discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
 
             pktRate    = 1000000.0 * ((double) pktCount) / microSec;
-            pktAvgRate = 1000000.0 * ((double) currTotalPkts[i]) / totalMicroSec;
+            pktAvgRate = 1000000.0 * ((double) currTotalPkts[i]) / totalMicroSecs[i];
             if (pktCount == 0 && missingByteCount == 0) {
                 printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
             }
@@ -643,7 +677,7 @@ static void *rateThread(void *arg) {
 
             // Actual Data rates (no header info)
             dataRate    = ((double) byteCount) / microSec;
-            dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSec;
+            dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
 
             // TODO: currently cpuPkt holds nothing, set in main thread - one value
 
@@ -652,7 +686,7 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
 
            if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 ",%d,%d\n\n", totalMicroSec/1000000, src,
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 ",%d,%d\n\n", totalMicroSecs[i]/1000000, src,
                         (int)(pktRate/1000), (int)(dataRate),
                         missingByteCount, (currDiscardBytes[i] + currDropBytes[i]),
                         mapp[src]->cpuPkt, mapp[src]->cpuBuf);
@@ -663,7 +697,7 @@ static void *rateThread(void *arg) {
                    dataRate, dataAvgRate, mapp[src]->builtBuffers);
 
             if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n\n", totalMicroSec/1000000, src,
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n\n", totalMicroSecs[i]/1000000, src,
                         (int)(pktRate/1000), (int)(dataRate),
                         missingByteCount, (currDiscardBytes[i] + currDropBytes[i]));
                 fflush(fp);
@@ -674,7 +708,7 @@ static void *rateThread(void *arg) {
 
 //        printf("     Combined Bufs:    %u\n\n", stats[0]->combinedBuffers);
 
-        t1 = t2;
+        t1 = tEnd;
     }
 
     fclose(fp);
