@@ -470,6 +470,16 @@ static void *rateThread(void *arg) {
     int64_t currDropBytes[sourceCount];
     int64_t currDropBufs[sourceCount];
 
+    bool dataArrived[sourceCount];
+    for (int i=0; i < sourceCount; i++) {
+        dataArrived[i] = false;
+    }
+
+    bool skippedFirst[sourceCount];
+    for (int i=0; i < sourceCount; i++) {
+        skippedFirst[i] = false;
+    }
+
 
 
     // File writing stuff
@@ -542,7 +552,15 @@ static void *rateThread(void *arg) {
             }
         }
 
-//        // Don't calculate rates until data is coming in
+        // Don't start calculating stats until data has come in for a full cycle
+        for (int i=0; i < sourceCount; i++) {
+            if (currTotalPkts[i] > 0) {
+                dataArrived[i] = true;
+            }
+        }
+
+
+//        // Don't calculate rates until data is coming in on all sources
 //        if (skipFirst) {
 //            bool allSources = true;
 //            for (int i=0; i < sourceCount; i++) {
@@ -589,6 +607,13 @@ static void *rateThread(void *arg) {
         }
 
         for (int i=0; i < sourceCount; i++) {
+            if (!dataArrived[i]) continue;
+            if (!skippedFirst[i]) {
+                // skip first stat cycle as the rate calculations will be too small
+                skippedFirst[i] = true;
+                continue;
+            }
+
             int src = sourceIds[i];
 
             // Use for instantaneous rates/values
