@@ -596,13 +596,11 @@ static void *rateThread(void *arg) {
             pktCount  = currTotalPkts[i]  - prevTotalPkts[i];
             bufCount  = currBuiltBufs[i]  - prevBuiltBufs[i];
 
-            // TODO: Sign on this is WRONG!!!
             missingByteCount = (currDiscardBytes[i] + currDropBytes[i]) - (prevDiscardBytes[i] + prevDropBytes[i]);
-            printf("  Packets:  currDiscardBytes = %" PRId64 ", currDropBytes = %" PRId64 ", prevDiscardBytes = %" PRId64 ", prevDropBytes = %" PRId64 "\n",
-                   currDiscardBytes[i], currDropBytes[i], prevDiscardBytes[i], prevDropBytes[i]);
+//            printf("  Packets:  currDiscardBytes = %" PRId64 ", currDropBytes = %" PRId64 ", prevDiscardBytes = %" PRId64 ", prevDropBytes = %" PRId64 "\n",
+//                   currDiscardBytes[i], currDropBytes[i], prevDiscardBytes[i], prevDropBytes[i]);
 
-
-                    //            // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
+//            // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
 //            discardByteCount = currDiscardBytes[i] - prevDiscardBytes[i];
 //            discardPktCount  = currDiscardPkts[i]  - prevDiscardPkts[i];
 //            discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
@@ -624,22 +622,22 @@ static void *rateThread(void *arg) {
             // TODO: currently cpuPkt holds nothing, set in main thread - one value
 
 #ifdef __linux__
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n",
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n\n",
                    dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
 
            if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 ",%d,%d\n", totalMicroSec/1000000, src,
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 ",%d,%d\n\n", totalMicroSec/1000000, src,
                         (int)(pktRate/1000), (int)(dataRate),
                         missingByteCount, (currDiscardBytes[i] + currDropBytes[i]),
                         mapp[src]->cpuPkt, mapp[src]->cpuBuf);
                 fflush(fp);
             }
 #else
-            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n",
+            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n\n",
                    dataRate, dataAvgRate, mapp[src]->builtBuffers);
 
             if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n", totalMicroSec/1000000, src,
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n\n", totalMicroSec/1000000, src,
                         (int)(pktRate/1000), (int)(dataRate),
                         missingByteCount, (currDiscardBytes[i] + currDropBytes[i]));
                 fflush(fp);
