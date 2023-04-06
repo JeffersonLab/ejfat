@@ -951,7 +951,6 @@ static void *threadAssemble(void *arg) {
                             // tick values and then will try to add new packets with the old.
                             // Clear everything except what we just created. The old bufItems need to be labeled
                             // as invalid and moved on.
-std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
 
                             // Using the iterator and the "erase" method, as shown,
                             // will avoid problems invalidating the iterator
@@ -962,7 +961,7 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
                                 // Remove all ticks larger than the first of the new sequence (hdr->tick)
                                 if (tck > hdr->tick) {
                                     it = pmap->erase(it);
-std::cout << "  release stored buf for tick " << tck << std::endl;
+//std::cout << "  release stored buf for tick " << tck << std::endl;
 
                                     // Release resources here.
                                     if (dumpBufs) {
@@ -978,8 +977,7 @@ std::cout << "  release stored buf for tick " << tck << std::endl;
                                     ++it;
                                 }
                             }
-
-//std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
+std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
                         }
                     }
                 }
@@ -1000,23 +998,17 @@ std::cout << "  release stored buf for tick " << tck << std::endl;
                         if (++smallerTicks[srcId] > 1000) {
                             largestSavedTick[srcId] = hdr->tick;
                             smallerTicks[srcId] = 0;
-std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
 
                             for (auto it = pmap->cbegin(); it != pmap->cend();) {
                                 uint64_t tck = it->first;
                                 std::shared_ptr<BufferItem> bItem = it->second;
-
-
                                 if (tck > hdr->tick) {
                                     it = pmap->erase(it);
-                                    std::cout << "  release stored buf for tick " << tck << std::endl;
-
-
+//std::cout << "  release stored buf for tick " << tck << std::endl;
                                     if (dumpBufs) {
                                         bufSupply->release(bItem);
                                     }
                                     else {
-
                                         bItem->setValidData(false);
                                         bufSupply->publish(bItem);
                                     }
@@ -1025,8 +1017,7 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
                                     ++it;
                                 }
                             }
-
-//std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
+std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
                         }
                     }
                 }
@@ -1177,17 +1168,17 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             }
         }
 
-        // Finish up some stats
-        if (takeStats) {
-#ifdef __linux__
-            // If core hasn't been pinned, track it
-            if ((core < 0) && (loopCount-- < 1)) {
-                mapp[srcId]->cpuBuf = sched_getcpu();
-                loopCount = cpuLoops;
-//printf("Read pkt thd: get CPU\n");
-            }
-#endif
-        }
+//        // Finish up some stats
+//        if (takeStats) {
+//#ifdef __linux__
+//            // If core hasn't been pinned, track it
+//            if ((core < 0) && (loopCount-- < 1)) {
+//                mapp[srcId]->cpuBuf = sched_getcpu();
+//                loopCount = cpuLoops;
+////printf("Read pkt thd: get CPU\n");
+//            }
+//#endif
+//        }
     }
 
     return nullptr;
