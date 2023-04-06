@@ -1102,7 +1102,7 @@ static void *threadReadBuffers(void *arg) {
     int thdCount = tArg->everyNth;
     int id = tArg->sourceId;
 
-    std::cout << "   Started cleanup thread for source " << id << std::endl;
+    std::cout << "   Started cleanup thread for source " << id << ", thd count = " << thdCount << std::endl;
 
     std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
     for (int i=0; i < thdCount; i++) {
@@ -1508,6 +1508,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
                 targ->debug = debug;
                 targ->sourceId = source;
+                targ->everyNth = thdCount;
 
                 pthread_t thd;
                 status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
