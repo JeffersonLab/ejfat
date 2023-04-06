@@ -862,6 +862,7 @@ static void *threadAssemble(void *arg) {
             if (srcId != prevSrcId) {
                 // Switching to a different data source ...
                 bufSupply = supplyMap[srcId];
+std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
 
                 // Get the right map if there is one, else make one
                 pmap = maps[srcId];
