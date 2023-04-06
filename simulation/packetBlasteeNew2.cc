@@ -815,6 +815,8 @@ static void *threadAssemble(void *arg) {
     bool debug    = tArg->debug;
 
     int everyNth = tArg->everyNth;
+    // If ticks are tickBandwidth below the max tick, then source sequence has been restarted
+    int tickBandwidth = 100*everyNth;
     int tickOffset = tArg->tickOffset;
 
     std::shared_ptr<Supplier<BufferItem>> bufSupply;
@@ -955,7 +957,7 @@ static void *threadAssemble(void *arg) {
 //std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
                         largestSavedTick[srcId] = hdr->tick;
                     }
-                    else if (hdr->tick < largestTick) {
+                    else if (hdr->tick < largestTick - tickBandwidth) {
                         if (++smallerTicks[srcId] > 1000) {
                             // Tick sequence has been restarted, reset stats
                             largestSavedTick[srcId] = hdr->tick;
@@ -980,7 +982,7 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
 //std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
                         largestSavedTick[srcId] = hdr->tick;
                     }
-                    else if (hdr->tick < largestTick) {
+                    else if (hdr->tick < largestTick - tickBandwidth) {
                         if (++smallerTicks[srcId] > 1000) {
                             largestSavedTick[srcId] = hdr->tick;
                             smallerTicks[srcId] = 0;
