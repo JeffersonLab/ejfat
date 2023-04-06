@@ -1439,6 +1439,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     for (int i=0; i < thdCount; i++) {
         // "source" number of buffer supplies for each reassembly thread
         for (int j=0; j < sourceCount; j++) {
+            std::cout << "add entry for thd " << i << ", source " << j << " into array of maps" << std::endl;
             supplyMaps[i][sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
         }
         std::cout << "2" << std::endl;
@@ -1454,10 +1455,8 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         for (int j=0; j < sourceCount; j++) {
             std::cout << "2.2.0" << std::endl;
-            fprintf(stderr, " maps ptr = %p, addr of map array element %p\n", supplyMaps, &supplyMaps[i]);
-            fprintf(stderr, " addr of map %p\n",  &supplyMaps[i][sourceIds[j]] );
-
-            arg->supplyMap[j] = supplyMaps[i][sourceIds[j]];
+            supplyMap = supplyMaps[i];
+            arg->supplyMap[j] = supplyMap[sourceIds[j]];
             std::cout << "2.2.1" << std::endl;
         }
 
