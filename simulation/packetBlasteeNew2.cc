@@ -428,8 +428,8 @@ typedef struct threadStruct_t {
 static void *rateThread(void *arg) {
 
     int64_t byteCount, bufCount, pktCount;
-    int64_t discardByteCount, discardBufCount, discardPktCount;
-    int64_t dropByteCount, dropBufCount, dropPktCount;
+//    int64_t discardByteCount, discardBufCount, discardPktCount;
+//    int64_t dropByteCount, dropBufCount, dropPktCount;
     int64_t missingByteCount; // discarded + dropped
 
     // Ignore the first rate calculation as it's most likely a bad value
@@ -542,31 +542,31 @@ static void *rateThread(void *arg) {
             }
         }
 
-        // Don't calculate rates until data is coming in
-        if (skipFirst) {
-            bool allSources = true;
-            for (int i=0; i < sourceCount; i++) {
-                if (currTotalPkts[i] < 1) {
-                    allSources = false;
-                }
-
-                int src = sourceIds[i];
-                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
-                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
-                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
-
-                currDiscardPkts[i]  = mapp[src]->discardedPackets = 0;
-                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
-                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
-
-                currDropBytes[i]    = mapp[src]->droppedBytes     = 0;
-            }
-
-            if (allSources) skipFirst = false;
-            firstT = t1 = t2;
-            rollOver = false;
-            continue;
-        }
+//        // Don't calculate rates until data is coming in
+//        if (skipFirst) {
+//            bool allSources = true;
+//            for (int i=0; i < sourceCount; i++) {
+//                if (currTotalPkts[i] < 1) {
+//                    allSources = false;
+//                }
+//
+//                int src = sourceIds[i];
+//                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
+//                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
+//                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
+//
+//                currDiscardPkts[i]  = mapp[src]->discardedPackets = 0;
+//                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
+//                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
+//
+//                currDropBytes[i]    = mapp[src]->droppedBytes     = 0;
+//            }
+//
+//            if (allSources) skipFirst = false;
+//            firstT = t1 = t2;
+//            rollOver = false;
+//            continue;
+//        }
 
         // Start over tracking bytes and packets if #s roll over
         if (rollOver) {
@@ -1452,7 +1452,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         // maps copied thru assignment
         arg->supplyMap = supplyMaps[i];
-        
+
         arg->pktSupply = pktSupply;
         arg->stats = stats;
         arg->dump  = dumpBufs;
