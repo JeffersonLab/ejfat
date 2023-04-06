@@ -427,13 +427,8 @@ typedef struct threadStruct_t {
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
 
-    int64_t byteCount, bufCount, pktCount;
-//    int64_t discardByteCount, discardBufCount, discardPktCount;
-//    int64_t dropByteCount, dropBufCount, dropPktCount;
+    int64_t byteCount, pktCount, bufCount;
     int64_t missingByteCount; // discarded + dropped
-
-    // Ignore the first rate calculation as it's most likely a bad value
-    bool skipFirst = true;
 
     // Parse arg
     threadStruct *targ = static_cast<threadStruct *>(arg);
@@ -486,7 +481,6 @@ static void *rateThread(void *arg) {
     struct timespec tStart[sourceCount];
 
 
-
     // File writing stuff
     bool writeToFile = false;
     char *filename = targ->filename;
@@ -517,7 +511,7 @@ static void *rateThread(void *arg) {
     // We've got to handle "sourceCount" number of data sources - each with their own stats
     while (true) {
 
-        // Loop to zero stats when first starting - for accurate rate calc
+        // Loop for zeroing stats when first starting - for accurate rate calc
         for (int i=0; i < sourceCount; i++) {
             if (dataArrived[i] && skippedFirst[i] == 1) {
                 // Data is now coming in. To get an accurate rate, start w/ all stats = 0
@@ -534,7 +528,7 @@ static void *rateThread(void *arg) {
 
                 // Start the clock for this source
                 clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
-fprintf(stderr, "started clock for src %d\n", src);
+//fprintf(stderr, "started clock for src %d\n", src);
 
                 // From now on we skip this zeroing step
                 skippedFirst[i]++;
@@ -584,39 +578,13 @@ fprintf(stderr, "started clock for src %d\n", src);
             }
         }
 
-        // Don't start calculating stats until data has come in for a full cycle
+        // Don't start calculating stats until data has come in for a full cycle.
+        // Keep track of when that starts.
         for (int i=0; i < sourceCount; i++) {
             if (currTotalPkts[i] > 0) {
                 dataArrived[i] = true;
             }
         }
-
-
-//        // Don't calculate rates until data is coming in on all sources
-//        if (skipFirst) {
-//            bool allSources = true;
-//            for (int i=0; i < sourceCount; i++) {
-//                if (currTotalPkts[i] < 1) {
-//                    allSources = false;
-//                }
-//
-//                int src = sourceIds[i];
-//                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
-//                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
-//                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
-//
-//                currDiscardPkts[i]  = mapp[src]->discardedPackets = 0;
-//                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
-//                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
-//
-//                currDropBytes[i]    = mapp[src]->droppedBytes     = 0;
-//            }
-//
-//            if (allSources) skipFirst = false;
-//            t1 = t2;
-//            rollOver = false;
-//            continue;
-//        }
 
         // Start over tracking bytes and packets if #s roll over
         if (rollOver) {
@@ -644,7 +612,7 @@ fprintf(stderr, "started clock for src %d\n", src);
 
             // Skip first stat cycle as the rate calculations will be off
             if (skippedFirst[i] < 1) {
-                printf("%d skip %d\n", sourceIds[i], skippedFirst[i]);
+//printf("%d skip %d\n", sourceIds[i], skippedFirst[i]);
                 skippedFirst[i]++;
                 continue;
             }
@@ -745,11 +713,11 @@ void printPktData(char *buf, size_t bytes, std::string const & label) {
 // Arg to pass to buffer reassembly thread
 typedef struct threadArg_t {
     /** Supply of buffers for holding reassembled data from a single source.
-     *  One from each reassembly thread. */
+     *  One from each reassembly thread. Used in threadReadBuffers thread. */
     std::shared_ptr<Supplier<BufferItem>> bufSupplies[MAX_RE_THREADS];
 
+    /** Used to hold map, key = src id, val = buffer supply, for reassembly thds. */
     std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
-
 
     /** Supply of structures holding UDP packets. */
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply;
@@ -779,23 +747,42 @@ typedef struct threadArg_t {
 
 /**
  * <p>
- * Thread to assemble incoming packets from one data ID into a single buffer.
- * It gets packets that have already been read in and placed into a disruptor's
- * circular buffe by another thread.
- * It places the assembled buffer into another circular buffer for gathering
- * by yet another thread.
+ * Thread to assemble incoming packets into their original buffers.
+ * Data may come from multiple data sources. Each buffer supply,
+ * which supplies buffers in which to contruct the original data,
+ * will be associated with only one (1) data source.
+ * Thus each one of these "threadAssemble" threads will have 1 buffer supply
+ * for each data source.
  * </p>
- *
+ * >p>
+ * This thread gets packets that have already been read in and placed into a "packet" ring
+ * buffer by another thread. It gets an empty buffer from the appropriate supply,
+ * reassembles data in it as packets arrive, then places
+ * a fully assembled buffer back into its supply (ring buffer).
+ * Downstream, there is 1 thread per data source. These threads have access to the
+ * fully assembled buffers.
+ * </p>
  * <p>
- * If the given tick value is <b>NOT</b> 0xffffffffffffffff, then it is the next expected tick.
- * And in this case, this method makes a number of assumptions:
- * <ul>
- * <li>Each incoming buffer/tick is split up into the same # of packets.</li>
- * <li>Each successive tick differs by tickPrescale.</li>
- * <li>If the sequence changes by 2, then a dropped packet is assumed.
- *     This results from the observation that for a simple network,
- *     there are never out-of-order packets.</li>
- * </ul>
+ * How does is the decision made to discard packets?
+ * If packets come out-of-order, more than one buffer may be being constructed at ony one time.
+ * This thread tracks the biggest tick # received from each source.
+ * If the buffer for a particular tick has not been completed (due to missing packets),
+ * it is discarded when its tick is &lt; biggestTick - 2 * tickPrescale.
+ * Essentially, it dumps everything before latest 3 ticks.
+ * Holding onto more ticks causes performance to degrade.
+ * After all packets from 1 packet array are consumed, a scan is made to
+ * see if anything needs to be discarded.
+ * </p>
+ * <p>
+ * All out-of-order packets are handled; however, duplicate packets are not.
+ * The generation of duplicate packets can be eliminated (or at least greatly reduced)
+ * by setting up the UDP sockets properly.
+ * </p>
+ * <p>
+ * What happens if a data source dies and restarts?
+ * This causes the tick sequence to restart. In order to avoid causing problems
+ * calculating various stats, like rates, the "biggest tick" from a source is
+ * reset if 1000 packets with smaller ticks show up after.
  * </p>
  *
  *
@@ -893,8 +880,6 @@ static void *threadAssemble(void *arg) {
     // One count for each source: key = source id, val = # of smaller ticks received
     std::unordered_map<int, int> smallerTicks;
 
-    int printed2 = 0;
-
     std::cout << "Reassemble, tick offset = " << tickOffset << ", everyNth = " << everyNth << std::endl;
 
 
@@ -910,7 +895,6 @@ static void *threadAssemble(void *arg) {
         uint64_t tick, prevTick = UINT64_MAX;
         pmap = nullptr;
 
-//std::cout << "Got pkt @id " << id << " = " << packetCount << std::endl;
         assert(packetCount > 0);
 
         for (int i = 0; i < packetCount; i++) {
@@ -934,9 +918,6 @@ static void *threadAssemble(void *arg) {
 //std::cout << "Create map for src " << srcId << std::endl;
                     maps[srcId] = pmap = new std::unordered_map<uint64_t, std::shared_ptr<BufferItem>>();
                 }
-//                else {
-//                    std::cout << "Found map for src " << srcId << std::endl;
-//                }
 
                 // Get buffer in which to reassemble
                 bufItem = (*pmap)[hdr->tick];
@@ -966,9 +947,6 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
                         }
                     }
                 }
-//                else {
-//                    std::cout << "  got buf for tick " << hdr->tick << std::endl;
-//                }
             }
             else if (hdr->tick != prevTick) {
                 // Same source as last pkt, but if NOT the same tick ...
@@ -990,9 +968,6 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
                         }
                     }
                 }
-//                else {
-//                    std::cout << "same source, have buf for tick " << hdr->tick << std::endl;
-//                }
             }
 
             // Keep track so if next packet is same source/tick, we don't have to look it up
@@ -1015,25 +990,20 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 bufItem->expandBuffer(hdr->length + 27000); // also fit in 3 extra jumbo packets
             }
 
-             auto data = (uint8_t *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
-//                if (pktItem->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
-//                    std::cout << "Messed up pkt, tick " << hdr->tick << std::endl;
-//                    //printPktData(data, dataLen, "bytes");
-//                }
-
-            // The neat thing about doing it this way is we don't have to track out-of-order packets.
+            // The neat thing about doing things this way is we don't have to track out-of-order packets.
             // We don't have to copy and store them!
             //
             // Duplicate packets just write over themselves. However,
             // duplicate packets will mess up our calculation on whether we've received all packets
-            // that make up a buffer. The easiest way to deal with that is sending UDP over a single
+            // that make up a buffer (dataLen). The easiest way to deal with that is sending UDP over a single
             // network interface and having the receiver listen on a specific interface (not INADDR_ANY).
             // So, send in a manner in which duplication will not happen. I think we can control this
             // without too much effort.
             // The alternative is to add a sequential number to RE header to be able to track this.
             // That requires more bookkeeping on this receiving end.
 
-            // Copy things into the correct position in qbuf from the iovec buffer
+            // Copy things into the correct position in a buf from the iovec buffer
+            auto data = (uint8_t *)(pktItem->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
             memcpy(bufItem->getBuffer()->array() + hdr->offset,data,dataLen);
 
             // Keep track of how much we've written so far
@@ -1047,17 +1017,14 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
             // If we've written all data to this buf ...
             if (bytesSoFar >= hdr->length) {
                 // Done with this buffer, so get it reading for reading
-                bufItem->getBuffer()->flip();
+                bufItem->getBuffer()->limit(bytesSoFar).position(0);
 
                 // Clear buffer from local map
                 pmap->erase(hdr->tick);
-//std::cout << "   " << id << ": remove " << hdr->tick << std::endl;
-
-                //std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
+//std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
 
                 if (takeStats) {
-                    //fprintf(stderr, "Look up stat for source %d\n", srcId);
-                    mapp[srcId]->acceptedBytes += hdr->length;
+                    mapp[srcId]->acceptedBytes += bytesSoFar;
                     mapp[srcId]->builtBuffers++;
                     mapp[srcId]->acceptedPackets += bufItem->getUserInt();
                 }
@@ -1068,7 +1035,6 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                     bufSupply->release(bufItem);
                 }
                 else {
-                    // TODO: Somehow this must be tagged with tick and source
 //std::cout << "   " << id << ": pub tck " << hdr->tick << " src " << srcId << std::endl;
                     bufSupply->publish(bufItem);
                 }
@@ -1114,8 +1080,6 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
                 if (tck + 2 * tickPrescale < bigTick) {
                     //std::cout << "Remove " << tck << std::endl;
-                    //std::cout << "   purge " << tck << std::endl;
-                    //pm->erase(it++);
                     it = pm->erase(it);
 
                     if (takeStats) {
@@ -1131,7 +1095,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                     }
 
                     // Release resources here.
-                    // This source only has bufItems from supplyMap[srcId].
+                    // This source only has bufItems from supplyMap[source].
                     if (dumpBufs) {
 //std::cout << "   " << id << " clear: dump tck " << tck << " src " << srcId << std::endl;
                         supplyMap[source]->release(bItem);
@@ -1144,7 +1108,6 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 //std::cout << "   " << id << " clear: pub tck " << tck << " src " << srcId << std::endl;
                         supplyMap[source]->publish(bItem);
                     }
-
                 }
                 else {
                     ++it;
@@ -1201,6 +1164,18 @@ static void *threadReadBuffers(void *arg) {
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupplies[i]->consumerGet();
 
+//            if (bufItem->validData()) {
+//                // Do something with buffer here.
+//                // Data can be accessed thru the (shared pointer to) ByteBuffer object:
+//                // std::shared_ptr<ByteBuffer> buffer = bufItem->getBuffer();
+//                // or more directly thru its byte array:
+//                uint8_t *buf = bufItem->getBuffer()->array();
+//                size_t dataBytes = bufItem->getBuffer()->limit();
+//                // Get access to meta data from its packet RE header
+//                // if data source id or tick value is needed.
+//                reHeader hdr = bufItem->getHeader();
+//            }
+
             // Release item for reuse
             bufSupplies[i]->release(bufItem);
         }
@@ -1209,81 +1184,6 @@ static void *threadReadBuffers(void *arg) {
     // Thread not needed and can exit.
     return nullptr;
 }
-
-
-///**
-// * Thread to read all filled buffers.
-// * @param arg
-// * @return
-// */
-//static void *threadReadBuffers(void *arg) {
-//
-//    threadArg *tArg = (threadArg *) arg;
-//
-//    int thdCount = tArg->everyNth;
-//
-//    std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
-//    for (int i=0; i < thdCount; i++) {
-//        bufSupplies[i] = tArg->bufSupplies[i];
-//    }
-//
-//    std::shared_ptr<BufferItem> bufItem;
-//
-//    // If bufs are not already dumped by the reassembly thread,
-//    // we need to put them back into the supply now.
-//    while (true) {
-//        for (int i=0; i < thdCount; i++) {
-//            // Grab a fully reassembled buffer from Supplier
-//            //std::cout << "  >> Get buf " << i << std::endl;
-//            bufItem = bufSupplies[i]->consumerGet();
-//            //            uint8_t *buf = bufItem->getBuffer()->array();
-//            //            size_t limit = bufItem->getBuffer()->limit();
-//            //            uint32_t *p = reinterpret_cast<uint32_t *>(buf);
-//            //
-//            //            for (uint32_t i=0; i < limit/4; i++) {
-//            //                if (p[i] != i) {
-//            //                    if (!printedBad)
-//            //                        bufItem->getBuffer()->printBytes(0, limit, "ERROR");
-//            //                    printedBad = true;
-//            //                    break;
-//            //                }
-//            //            }
-//            // if (bufItem->validData()) {
-//            //     // do something with buffer here
-//            // }
-//
-//            // Release item for reuse
-//            //std::cout << "  >> Rel buf " << i << std::endl;
-//            bufSupplies[i]->release(bufItem);
-//        }
-//    }
-//
-//    // Thread not needed and can exit.
-//    return nullptr;
-//}
-//
-//
-///**
-// * Thread to read all filled buffers in order to return to ring.
-// * @param arg
-// * @return nullptr
-// */
-//static void *threadReadBuffersSingleRing(void *arg) {
-//
-//    threadArg *tArg = (threadArg *) arg;
-//    int id = tArg->tickOffset;
-//
-//    std::shared_ptr<Supplier<BufferItem>> bufSupply = tArg->bufSupplies[id];
-//    std::shared_ptr<BufferItem> bufItem;
-//
-//    // we need to put bufs back into the supply now.
-//    while (true) {
-//            bufItem = bufSupply->consumerGet();
-//            bufSupply->release(bufItem);
-//    }
-//
-//    return nullptr;
-//}
 
 
 
@@ -1391,7 +1291,6 @@ int main(int argc, char **argv) {
     auto &mapp = *stats;
     for (int i = 0; i < sourceCount; i++) {
         if (keepStats) {
-      //      stats->insert(std::make_pair(sourceIds[i], std::make_shared<packetRecvStats>()));
 fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
             clearStats(mapp[sourceIds[i]]);
@@ -1400,12 +1299,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             mapp[sourceIds[i]] = nullptr;
         }
     }
-
-    //    std::shared_ptr<packetRecvStats> stats = nullptr;
-    //    if (keepStats) {
-    //        stats = std::make_shared<packetRecvStats>();
-    //        clearStats(stats);
-    //    }
 
 
     //---------------------------------------------------
@@ -1501,8 +1394,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
 
     //---------------------------------------------------
-    // Supply in which each item holds 60 UDP packets
-    // and parsed header info.
+    // Supply in which each item holds 20 UDP packets and parsed header info.
     //---------------------------------------------------
     int pktRingSize = 32;
     size_t maxPktsPerRecv = 20;
@@ -1531,8 +1423,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             fprintf(stderr, "\n ******* ran out of memory\n\n");
             exit(1);
         }
-
-        std::cout << "map[" << i << "] size = " << (supplyMaps[i]).size() << std::endl;
 
         // maps copied thru assignment
         arg->supplyMap = supplyMaps[i];
@@ -1658,10 +1548,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             fprintf(stderr, "\n ******* error receiving UDP packets\n\n");
             exit(-1);
         }
-//        else if (packetCount == 0) {
-//            fprintf(stderr, "packet count is 0!!\n");
-//        }
-//        std::cout << "packet count = " << packetCount << std::endl;
 
         // Since all the packets have been read in, parse the headers
         // We could shift this code to the reassembly thread
@@ -1677,11 +1563,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                                  item->getHeader(i));
 
 //            char *data = (char *)(item->getPacket(i)->msg_hdr.msg_iov[0].iov_base) + HEADER_BYTES;
-//
-//            if (item->getPacket(i)->msg_len > 8900 && (data[8900] == 0x4c)) {
-//                std::cout << "1: Messed up pkt, tick " << item->getHeader(i)->tick << std::endl;
-//                //printPktData(data, dataLen, "bytes");
-//            }
         }
 
         // Send data to reassembly thread for consumption
