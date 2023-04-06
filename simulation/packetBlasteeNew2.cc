@@ -1102,11 +1102,13 @@ static void *threadReadBuffers(void *arg) {
     int thdCount = tArg->everyNth;
     int id = tArg->sourceId;
 
+    std::cout << "   Started cleanup thread for source " << id << std::endl;
+
     std::shared_ptr<Supplier<BufferItem>> bufSupplies[thdCount];
     for (int i=0; i < thdCount; i++) {
+        std::cout << "   id " << id << " create buf supply for thd " << i << std::endl;
         bufSupplies[i] = tArg->bufSupplies[i];
     }
-std::cout << "   Started cleanup thread for source " << id << std::endl;
 
     std::shared_ptr<BufferItem> bufItem;
 
@@ -1426,8 +1428,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
             std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, thdCount);
 
-    std::cout << "1" << std::endl;
-
     //---------------------------------------------------
     // Supplies in which each buf will hold reconstructed buffers.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
@@ -1439,10 +1439,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     for (int i=0; i < thdCount; i++) {
         // "source" number of buffer supplies for each reassembly thread
         for (int j=0; j < sourceCount; j++) {
-            std::cout << "add entry for thd " << i << ", source " << j << " into array of maps" << std::endl;
+            std::cout << "add entry for thd " << i << ", source " << sourceIds[j] << " into array of maps" << std::endl;
             supplyMaps[i][sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
         }
-        std::cout << "2" << std::endl;
 
         // Start thread to reassemble buffers of packets from all sources
         auto arg = tArg[i] = (threadArg *) calloc(1, sizeof(threadArg));
@@ -1451,16 +1450,18 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             exit(1);
         }
 
-        std::cout << "2.1 map[0] size = " << (supplyMaps[0]).size() << std::endl;
+        std::cout << "map[" << i << "] size = " << (supplyMaps[i]).size() << std::endl;
 
-        for (int j=0; j < sourceCount; j++) {
-            std::cout << "2.2.0" << std::endl;
-            supplyMap = supplyMaps[i];
-            arg->supplyMap[j] = supplyMap[sourceIds[j]];
-            std::cout << "2.2.1" << std::endl;
-        }
+        // maps copied thru assignment
+        arg->supplyMap = supplyMaps[i];
 
-        std::cout << "2.3" << std::endl;
+//        for (int j=0; j < sourceCount; j++) {
+//            std::cout << "2.2.0" << std::endl;
+//            supplyMap = supplyMaps[i];
+//            arg->supplyMap[j] = supplyMap[sourceIds[j]];
+//            std::cout << "2.2.1" << std::endl;
+//        }
+
         arg->pktSupply = pktSupply;
         arg->stats = stats;
         arg->dump  = dumpBufs;
@@ -1471,7 +1472,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         arg->everyNth = thdCount;
         arg->tickOffset = i;
-        std::cout << "2.4" << std::endl;
 
         if (pinBufCores) {
             arg->core = startingBufCore + 2*i;
@@ -1486,8 +1486,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
             return -1;
         }
     }
-
-    std::cout << "3" << std::endl;
 
     //---------------------------------------------------
     // Thread(s) to read and/or dump fully reassembled buffers
@@ -1519,7 +1517,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 }
             }
     }
-    std::cout << "5" << std::endl;
 
     //---------------------------------------------------
     // Start thread to do rate printout
