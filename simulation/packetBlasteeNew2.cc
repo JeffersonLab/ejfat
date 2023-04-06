@@ -760,10 +760,7 @@ static void *threadAssemble(void *arg) {
     int tickOffset = tArg->tickOffset;
 
     std::shared_ptr<Supplier<BufferItem>> bufSupply;
-    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
-    for (int i=0; i < sourceCount; i++) {
-        supplyMap[i] = tArg->supplyMap[i];
-    }
+    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap = tArg->supplyMap;
 
     auto stats    = tArg->stats;
     auto & mapp = *stats;
