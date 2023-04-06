@@ -475,9 +475,9 @@ static void *rateThread(void *arg) {
         dataArrived[i] = false;
     }
 
-    bool skippedFirst[sourceCount];
+    int skippedFirst[sourceCount];
     for (int i=0; i < sourceCount; i++) {
-        skippedFirst[i] = false;
+        skippedFirst[i] = 0;
     }
 
 
@@ -608,9 +608,10 @@ static void *rateThread(void *arg) {
 
         for (int i=0; i < sourceCount; i++) {
             if (!dataArrived[i]) continue;
-            if (!skippedFirst[i]) {
-                // skip first stat cycle as the rate calculations will be too small
-                skippedFirst[i] = true;
+            if (skippedFirst[i] < 2) {
+                // skip first 2 stat cycles as the rate calculations will be too small
+                printf("%d skip %d\n", sourceIds[i], skippedFirst[i]);
+                skippedFirst[i]++;
                 continue;
             }
 
