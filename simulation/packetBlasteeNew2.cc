@@ -884,6 +884,13 @@ static void *threadAssemble(void *arg) {
     // One tick for each source: key = source id, val = largest tick value received
     std::unordered_map<int, uint64_t> largestSavedTick;
 
+    // Need to figure out if source was killed and restarted, i.e. the tick number
+    // sequence has restarted. Account for this if we want stats to be accurate.
+    // Do this by counting # of ticks below the max tick received. If we get
+    // 1000 smaller ticks, time to reset the max tic.
+    // One count for each source: key = source id, val = # of smaller ticks received
+    std::unordered_map<int, int> smallerTicks;
+
     int printed2 = 0;
 
     std::cout << "Reassemble, tick offset = " << tickOffset << ", everyNth = " << everyNth << std::endl;
@@ -943,9 +950,18 @@ static void *threadAssemble(void *arg) {
                     // Track the biggest tick to be RECEIVED from this source.
                     // Anything too much smaller will be tossed since a late packet cannot be
                     // really, really late.
-                    if (hdr->tick > largestSavedTick[srcId]) {
+                    uint64_t largestTick = largestSavedTick[srcId];
+                    if (hdr->tick > largestTick) {
 //std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
                         largestSavedTick[srcId] = hdr->tick;
+                    }
+                    else if (hdr->tick < largestTick) {
+                        if (++smallerTicks[srcId] > 1000) {
+                            // Tick sequence has been restarted, reset stats
+                            largestSavedTick[srcId] = hdr->tick;
+                            smallerTicks[srcId] = 0;
+std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
+                        }
                     }
                 }
 //                else {
@@ -959,9 +975,17 @@ static void *threadAssemble(void *arg) {
 //std::cout << "\nsame src, create buf for tick " << hdr->tick << std::endl;
                     (*pmap)[hdr->tick] = bufItem = bufSupply->get();
                     bufItem->setHeader(hdr);
-                    if (hdr->tick > largestSavedTick[srcId]) {
+                    uint64_t largestTick = largestSavedTick[srcId];
+                    if (hdr->tick > largestTick) {
 //std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
                         largestSavedTick[srcId] = hdr->tick;
+                    }
+                    else if (hdr->tick < largestTick) {
+                        if (++smallerTicks[srcId] > 1000) {
+                            largestSavedTick[srcId] = hdr->tick;
+                            smallerTicks[srcId] = 0;
+std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
+                        }
                     }
                 }
 //                else {
