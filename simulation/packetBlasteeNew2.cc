@@ -866,8 +866,7 @@ static void *threadAssemble(void *arg) {
     // One map for each source: key = source id, val = pointer to map
     std::unordered_map<int, std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *> maps;
 
-    // For a single source, a map keeps buffers being worked on: key = tick, val = buffer
-    std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> buffers;
+    // Pointer to map keeps buffers being worked on: key = tick, val = buffer
     std::unordered_map<uint64_t, std::shared_ptr<BufferItem>> *pmap;
 
     // One tick for each source: key = source id, val = largest tick value received
@@ -912,7 +911,7 @@ static void *threadAssemble(void *arg) {
                 bufSupply = supplyMap[srcId];
 //std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
 
-                // Get the right map if there is one, else make one
+                // Get the right map (key = tick, val = buffer) if there is one, else make one
                 pmap = maps[srcId];
                 if (pmap == nullptr) {
 //std::cout << "Create map for src " << srcId << std::endl;
@@ -939,11 +938,48 @@ static void *threadAssemble(void *arg) {
                         largestSavedTick[srcId] = hdr->tick;
                     }
                     else if (hdr->tick < largestTick - tickBandwidth) {
+                        // If here, we got a tick very much smaller than we should
+
                         if (++smallerTicks[srcId] > 1000) {
-                            // Tick sequence has been restarted, reset stats
+                            // Got a much smaller tick 1000x so sequence has been restarted, reset stats
                             largestSavedTick[srcId] = hdr->tick;
                             smallerTicks[srcId] = 0;
+
+                            // AND throw out all stored, unfinished bufs since they'll never
+                            // be finished at this point. These will act like time bombs.
+                            // They have higher tick values and just sit there until we reach those
+                            // tick values and then will try to add new packets with the old.
+                            // Clear everything except what we just created. The old bufItems need to be labeled
+                            // as invalid and moved on.
 std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
+
+                            // Using the iterator and the "erase" method, as shown,
+                            // will avoid problems invalidating the iterator
+                            for (auto it = pmap->cbegin(); it != pmap->cend();) {
+                                uint64_t tck = it->first;
+                                std::shared_ptr<BufferItem> bItem = it->second;
+
+                                // Remove all ticks larger than the first of the new sequence (hdr->tick)
+                                if (tck > hdr->tick) {
+                                    it = pmap->erase(it);
+std::cout << "  release stored buf for tick " << tck << std::endl;
+
+                                    // Release resources here.
+                                    if (dumpBufs) {
+                                        bufSupply->release(bItem);
+                                    }
+                                    else {
+                                        // We need to label bad buffers.
+                                        bItem->setValidData(false);
+                                        bufSupply->publish(bItem);
+                                    }
+                                }
+                                else {
+                                    ++it;
+                                }
+                            }
+
+//std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
                         }
                     }
                 }
@@ -965,6 +1001,32 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
                             largestSavedTick[srcId] = hdr->tick;
                             smallerTicks[srcId] = 0;
 std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
+
+                            for (auto it = pmap->cbegin(); it != pmap->cend();) {
+                                uint64_t tck = it->first;
+                                std::shared_ptr<BufferItem> bItem = it->second;
+
+
+                                if (tck > hdr->tick) {
+                                    it = pmap->erase(it);
+                                    std::cout << "  release stored buf for tick " << tck << std::endl;
+
+
+                                    if (dumpBufs) {
+                                        bufSupply->release(bItem);
+                                    }
+                                    else {
+
+                                        bItem->setValidData(false);
+                                        bufSupply->publish(bItem);
+                                    }
+                                }
+                                else {
+                                    ++it;
+                                }
+                            }
+
+//std::cout << "tick sequence has restarted for source " << srcId << ", reset stats" << std::endl;
                         }
                     }
                 }
