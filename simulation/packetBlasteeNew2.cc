@@ -859,7 +859,7 @@ static void *threadAssemble(void *arg) {
             if (srcId != prevSrcId) {
                 // Switching to a different data source ...
                 bufSupply = supplyMap[srcId];
-std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
+//std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
 
                 // Get the right map if there is one, else make one
                 pmap = maps[srcId];
@@ -1452,14 +1452,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         // maps copied thru assignment
         arg->supplyMap = supplyMaps[i];
-
-//        for (int j=0; j < sourceCount; j++) {
-//            std::cout << "2.2.0" << std::endl;
-//            supplyMap = supplyMaps[i];
-//            arg->supplyMap[j] = supplyMap[sourceIds[j]];
-//            std::cout << "2.2.1" << std::endl;
-//        }
-
+        
         arg->pktSupply = pktSupply;
         arg->stats = stats;
         arg->dump  = dumpBufs;
@@ -1502,7 +1495,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 for (int i=0; i < thdCount; i++) {
                     targ->bufSupplies[i] = supplyMaps[i][source];
                 }
-             std::cout << "4" << std::endl;
 
                 targ->debug = debug;
                 targ->sourceId = source;
