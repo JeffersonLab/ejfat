@@ -1199,6 +1199,7 @@ static void *threadReadBuffers(void *arg) {
 
     int thdCount = tArg->everyNth;
     int id = tArg->sourceId;
+    int prescale = tArg->tickPrescale;
 
     std::cout << "   Started cleanup thread for source " << id << ", thd count = " << thdCount << std::endl;
 
@@ -1210,12 +1211,28 @@ static void *threadReadBuffers(void *arg) {
 
     std::shared_ptr<BufferItem> bufItem;
 
+    bool firstTime = true;
+    uint64_t prevTick = 0;
+
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
     while (true) {
         for (int i=0; i < thdCount; i++) {
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupplies[i]->consumerGet();
+
+            reHeader hdr = bufItem->getHeader();
+            uint64_t tick = hdr.tick;
+            if (firstTime) {
+                firstTime = false;
+            }
+            else {
+                if ((tick - prevTick) != prescale) {
+                    std::cout << "   tick hopped by " << (tick - prevTick) << std::endl;
+                }
+            }
+            prevTick = tick;
+
 
 //            if (bufItem->validData()) {
 //                // Do something with buffer here.
@@ -1531,6 +1548,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
                 targ->debug = debug;
                 targ->sourceId = source;
                 targ->everyNth = thdCount;
+                targ->tickPrescale = tickPrescale;
 
                 pthread_t thd;
                 status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
