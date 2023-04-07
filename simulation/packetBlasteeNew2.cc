@@ -806,7 +806,7 @@ static void *threadAssemble(void *arg) {
     int tickBandwidth = 100*everyNth;
     int tickOffset = tArg->tickOffset;
 
-    std::shared_ptr<Supplier<BufferItem>> bufSupply;
+    std::shared_ptr<Supplier<BufferItem>> bufSupply, prevBufSupply;
     std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap = tArg->supplyMap;
 
     auto stats    = tArg->stats;
@@ -910,9 +910,10 @@ static void *threadAssemble(void *arg) {
             srcId = hdr->dataId;
             if (srcId != prevSrcId) {
                 // Switching to a different data source ...
-                bufSupply = supplyMap[srcId];
-                if (bufSupply == nullptr) {
-                    // Received data from unknown source, ignore packet
+
+                // First check to see if source is legit, else ignore.
+                // If no map entry for this source, its unknown.
+                if (supplyMap.count(srcId) == 0) {
                     if (!wrongSrc) {
                         // Print ONCE if there is an unapproved data source
 std::cout << "Unexpected data source, id = " << srcId <<std::endl;
@@ -920,7 +921,10 @@ std::cout << "Unexpected data source, id = " << srcId <<std::endl;
                     }
                     continue;
                 }
-//std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
+
+                bufSupply = supplyMap[srcId];
+
+                //std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
 
                 // Get the right map (key = tick, val = buffer) if there is one, else make one
                 pmap = maps[srcId];
