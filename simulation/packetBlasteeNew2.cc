@@ -74,7 +74,6 @@
 #include <atomic>
 #include <cstring>
 #include <unordered_map>
-#include <algorithm>
 #include <errno.h>
 
 #include "BufferItem.h"
@@ -723,9 +722,6 @@ typedef struct threadArg_t {
     /** Supply of structures holding UDP packets. */
     std::shared_ptr<SupplierN<PacketsItem2>> pktSupply;
 
-    /** Valid source ids. */
-    int sourceIds[MAX_SOURCES];
-
     /** Byte size of buffers contained in supply. */
     int bufferSize;
     int mtu;
@@ -799,7 +795,6 @@ static void *threadAssemble(void *arg) {
     int core = tArg->core;
     int sourceCount = tArg->sourceCount;
     int id = tArg->pktConsumerId;
-    int sourceIds[MAX_SOURCES];
 
     auto pktSupply = tArg->pktSupply;
 
@@ -886,9 +881,7 @@ static void *threadAssemble(void *arg) {
 
     std::cout << "Reassemble, tick offset = " << tickOffset << ", everyNth = " << everyNth << std::endl;
 
-    bool notFound, wrongSrc = false;
-    // Copy over all legit src ids
-    std::copy(std::begin(tArg->sourceIds), std::end(tArg->sourceIds), std::begin(sourceIds));
+    bool wrongSrc = false;
 
 
     while (true) {
@@ -918,19 +911,12 @@ static void *threadAssemble(void *arg) {
             if (srcId != prevSrcId) {
                 // Switching to a different data source ...
 
-                // First check to see if source is legit.
-                // If source not in array of know sources, ignore.
-                notFound = true;
-                for (int k = 0; k < sourceCount; k++) {
-                    if (sourceIds[k] == srcId) {
-                        notFound = false;
-                        break;
-                    }
-                }
-                if (notFound) {
+                // First check to see if source is legit, else ignore.
+                // If no map entry for this source, its unknown.
+                if (supplyMap.count(srcId) == 0) {
                     if (!wrongSrc) {
                         // Print ONCE if there is an unapproved data source
-                        std::cout << "Unexpected data source, id = " << srcId << std::endl;
+std::cout << "Unexpected data source, id = " << srcId <<std::endl;
                         wrongSrc = true;
                     }
                     continue;
@@ -1528,9 +1514,6 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
         // maps copied thru assignment
         arg->supplyMap = supplyMaps[i];
-
-        // Copy over all legit src ids
-        std::copy(std::begin(sourceIds), std::end(sourceIds), std::begin(arg->sourceIds));
 
         arg->pktSupply = pktSupply;
         arg->stats = stats;
