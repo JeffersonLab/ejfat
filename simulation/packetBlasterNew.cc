@@ -475,9 +475,9 @@ static void *thread(void *arg) {
         // Must print out t to keep it from being optimized away
         printf(" Data:    %3.4g MB/s,  %3.4g Avg\n", rate, avgRate);
 
-        // Data rates (with header info)
-        totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
-        totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
+        // Data rates (with RE header info)
+        totalRate = ((double) (byteCount + RE_HEADER_BYTES*packetCount)) / time;
+        totalAvgRate = ((double) (currTotalBytes + RE_HEADER_BYTES*currTotalPackets)) / totalT;
         printf(" Total:    %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
 
 

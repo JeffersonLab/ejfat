@@ -56,12 +56,14 @@
 
     #define LB_HEADER_BYTES  16
     #define HEADER_BYTES     36
+    #define RE_HEADER_BYTES  20
 #else
     #define LB_HEADER_BYTES_OLD  0
     #define HEADER_BYTES_OLD    18
 
-    #define LB_HEADER_BYTES  0
-    #define HEADER_BYTES    20
+    #define LB_HEADER_BYTES   0
+    #define HEADER_BYTES     20
+    #define RE_HEADER_BYTES  20
 #endif
 
 
