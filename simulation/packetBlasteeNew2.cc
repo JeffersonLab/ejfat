@@ -1485,7 +1485,11 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         arg->dump  = dumpBufs;
         arg->debug = debug;
         arg->sourceCount = sourceCount;
-        arg->tickPrescale = thdCount; // TODO: This needs more work!!
+        // tickPrescale tells us what is coming in from a source, there is also a
+        // prescale factor from the # of thds used to reassemble.
+        // Note that the command line only allows one tick prescale to be set
+        // for all sources. That could be improved in a future version.
+        arg->tickPrescale = thdCount + tickPrescale;
         arg->pktConsumerId = i;
 
         arg->everyNth = thdCount;
