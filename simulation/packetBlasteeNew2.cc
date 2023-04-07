@@ -1212,7 +1212,7 @@ static void *threadReadBuffers(void *arg) {
     std::shared_ptr<BufferItem> bufItem;
 
     bool firstTime = true;
-    uint64_t prevTick = 0;
+    int64_t prevTick = 0;
 
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
@@ -1222,7 +1222,7 @@ static void *threadReadBuffers(void *arg) {
             bufItem = bufSupplies[i]->consumerGet();
 
             reHeader hdr = bufItem->getHeader();
-            uint64_t tick = hdr.tick;
+            int64_t tick = hdr.tick;
             if (firstTime) {
                 firstTime = false;
             }
