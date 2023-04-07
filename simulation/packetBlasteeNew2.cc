@@ -1489,6 +1489,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
         // prescale factor from the # of thds used to reassemble.
         // Note that the command line only allows one tick prescale to be set
         // for all sources. That could be improved in a future version.
+        std::cout << "set prescale for reass thd " << thdCount << " to " << arg->tickPrescale << std::endl;
         arg->tickPrescale = thdCount + tickPrescale;
         arg->pktConsumerId = i;
 
