@@ -881,6 +881,8 @@ static void *threadAssemble(void *arg) {
 
     std::cout << "Reassemble, tick offset = " << tickOffset << ", everyNth = " << everyNth << std::endl;
 
+    bool wrongSrc = false;
+
 
     while (true) {
 
@@ -910,8 +912,12 @@ static void *threadAssemble(void *arg) {
                 // Switching to a different data source ...
                 bufSupply = supplyMap[srcId];
                 if (bufSupply == nullptr) {
-std::cout << "X";
-                    // Received data from unknown source
+                    // Received data from unknown source, ignore packet
+                    if (!wrongSrc) {
+                        // Print ONCE if there is an unapproved data source
+std::cout << "Unexpected data source, id = " << srcId <<std::endl;
+                        wrongSrc = true;
+                    }
                     continue;
                 }
 //std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
