@@ -909,6 +909,11 @@ static void *threadAssemble(void *arg) {
             if (srcId != prevSrcId) {
                 // Switching to a different data source ...
                 bufSupply = supplyMap[srcId];
+                if (bufSupply == nullptr) {
+std::cout << "X";
+                    // Received data from unknown source
+                    continue;
+                }
 //std::cout << "get bufSupply for src " << srcId << ", = " << bufSupply << std::endl;
 
                 // Get the right map (key = tick, val = buffer) if there is one, else make one
