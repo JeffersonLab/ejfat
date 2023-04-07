@@ -1199,7 +1199,7 @@ static void *threadReadBuffers(void *arg) {
 
     int thdCount = tArg->everyNth;
     int id = tArg->sourceId;
-    int prescale = tArg->tickPrescale;
+//    int prescale = tArg->tickPrescale;
 
     std::cout << "   Started cleanup thread for source " << id << ", thd count = " << thdCount << std::endl;
 
@@ -1211,8 +1211,8 @@ static void *threadReadBuffers(void *arg) {
 
     std::shared_ptr<BufferItem> bufItem;
 
-    bool firstTime = true;
-    int64_t prevTick = 0;
+//    bool firstTime = true;
+//    int64_t prevTick = 0;
 
     // If bufs are not already dumped by the reassembly thread,
     // we need to put them back into the supply now.
@@ -1221,17 +1221,20 @@ static void *threadReadBuffers(void *arg) {
             // Grab a fully reassembled buffer from Supplier
             bufItem = bufSupplies[i]->consumerGet();
 
-            reHeader hdr = bufItem->getHeader();
-            int64_t tick = hdr.tick;
-            if (firstTime) {
-                firstTime = false;
-            }
-            else {
-                if ((tick - prevTick) != prescale) {
-                    std::cout << "   tick hopped by " << (tick - prevTick) << std::endl;
-                }
-            }
-            prevTick = tick;
+//            // Check that ticks are in order, works only with 1 reassembly thread
+//            reHeader hdr = bufItem->getHeader();
+//            int64_t tick = hdr.tick;
+//            if (firstTime) {
+//                firstTime = false;
+//            }
+//            else {
+//                // This only works with 1 reassembly thread.
+//                // Using 2 can get ticks out of order here.
+//                if ((tick - prevTick) != prescale) {
+//                    std::cout << "   tick hopped by " << (tick - prevTick) << std::endl;
+//                }
+//            }
+//            prevTick = tick;
 
 
 //            if (bufItem->validData()) {
