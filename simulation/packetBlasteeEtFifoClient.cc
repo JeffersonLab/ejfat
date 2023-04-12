@@ -91,6 +91,7 @@ static void printHelp(char *programName) {
             "        [-h] [-v] [-ip6]",
             "        [-p <data receiving port>]",
             "        [-a <data receiving address>]",
+            "        [-range <data receiving port range, entropy of sender>]",
             "        [-gaddr <grpc server IP address>]",
             "        [-gport <grpc server port>]",
             "        [-gname <grpc name>]",
@@ -118,6 +119,7 @@ static void printHelp(char *programName) {
  * @param setPt         filled with the set point of PID loop used with fifo fill level.
  * @param port          filled with UDP receiving data port to listen on.
  * @param grpcPort      filled with grpc server port to send control plane info to.
+ * @param range         filled with range of ports in powers of 2 (entropy).
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param listenAddr    filled with IP address to listen on for LB data.
@@ -128,7 +130,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
                       int *cores, int *grpcId, float *setPt,
-                      uint16_t* port, uint16_t* grpcPort,
+                      uint16_t* port, uint16_t* grpcPort, int *range,
                       bool *debug, bool *useIPv6,
                       char *listenAddr, char *grpcAddr, char *etFilename, char *grpcName) {
 
@@ -145,6 +147,7 @@ static void parseArgs(int argc, char **argv,
                           {"gport",  1, NULL, 5},
                           {"gname",  1, NULL, 6},
                           {"gid",  1, NULL, 7},
+                          {"range",  1, NULL, 8},
                           {0,       0, 0,    0}
             };
 
@@ -177,6 +180,19 @@ static void parseArgs(int argc, char **argv,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
+            case 8:
+                // LB port range
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0 && i_tmp <= 14) {
+                    *range = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -range, 0 <= port <= 14\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
@@ -384,8 +400,14 @@ static void parseArgs(int argc, char **argv,
 // structure for passing args to thread
 typedef struct threadStruct_t {
     et_sys_id etId;
+
     uint16_t grpcServerPort;
     std::string grpcServerIpAddr;
+
+    uint16_t dataPort;
+    std::string dataIpAddr;
+    int dataPortRange;
+
     std::string myName;
     int32_t myId;
     float setPoint;
@@ -400,7 +422,8 @@ static void *pidThread(void *arg) {
 
     et_sys_id etId = targ->etId;
     bool reportToCp = targ->report;
-    int status, numEvents, inputListCount = 0, fillPercent = 0;
+    int status, numEvents, inputListCount = 0;
+    float fillPercent = 0.;
     size_t eventSize;
     status = et_system_getnumevents(etId, &numEvents);
     status = et_system_geteventsize(etId, &eventSize);
@@ -415,18 +438,57 @@ static void *pidThread(void *arg) {
     int loopMax   = 1000;
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
 
-    LbControlPlaneClient client(targ->grpcServerIpAddr, targ->grpcServerPort, targ->myName,
-                                (int32_t)eventSize, numEvents, targ->setPoint);
+//    /**
+//     * Constructor.
+//     * @param cIp          grpc IP address of control plane (dotted decimal format).
+//     * @param cPort        grpc port of control plane.
+//     * @param bIp          data-receiving IP address of this backend client.
+//     * @param bPort        data-receiving port of this backend client.
+//     * @param bPortRange   range of data-receiving ports for this backend client.
+//     * @param cliName      name of this backend.
+//     * @param bufferSize   byte size of each buffer (fifo entry) in this backend.
+//     * @param bufferCount  number of buffers in fifo.
+//     * @param setPoint     PID loop set point (% of fifo).
+//     *
+//     */
+//    LbControlPlaneClient::LbControlPlaneClient(
+//            const std::string& cIP, uint16_t cPort,
+//            const std::string& bIP, uint16_t bPort,
+//            PortRange bPortRange, const std::string& cliName,
+//            uint32_t bufferSize, uint32_t bufferCount, float setPoint)  {
+//    }
 
-    // Register this client with the grpc server
+    // convert integer range in PortRange enu
+    auto range = PortRange(targ->dataPortRange);
+
+    LbControlPlaneClient client(targ->grpcServerIpAddr, targ->grpcServerPort,
+                                targ->dataIpAddr, targ->dataPort, range,
+                                targ->myName, (int32_t)eventSize, numEvents, targ->setPoint);
+
+    // Register this client with the grpc server &
+    // wait for server to send session token in return.
+    // Token stored internally in client.
     int32_t err = client.Register();
-    if (err == -1) {
-        printf("GRPC client %s is already registered!\n", targ->myName.c_str());
-    }
-    else if (err == 1) {
-        printf("GRPC client %s communication error with server when registering, exit!\n", targ->myName.c_str());
+    if (err == 1) {
+        printf("GRPC client %s communication error with server when registering, exit\n", targ->myName.c_str());
         exit(1);
     }
+
+    // Prevent anti-aliasing. If sampling every millisec, an individual reading sent every 1 sec
+    // will NOT be an accurate representation. It could include a lot of noise. To prevent this,
+    // keep a running average of the fill %, so its reported value is an accuration portrayal of
+    // what's really going on. In this case a running avg is taken over the reporting time.
+    float runningFillTotal = 0, fillAvg;
+    float fillValues[loopMax];
+    memset(fillValues, 0, loopMax*sizeof(float));
+    // Keep circulating thru array. Earliest index is 0 to start with,
+    // while the highest index is loopMax - 1,which is where we write the first
+    // real value since that's convenient.
+    int earliestIndex = 0, fillIndex = loopMax - 1;
+
+    // The first time thru, we don't want to over-weight with (loopMax - 1) zero entries
+    bool startingUp = true;
+    int firstLoopCounter = 1;
 
     while (true) {
 
@@ -435,27 +497,40 @@ static void *pidThread(void *arg) {
 
         // Get the number of available events (# sitting in Grandcentral's input list)
         status = et_station_getinputcount_rt(etId, ET_GRANDCENTRAL, &inputListCount);
+        fillPercent = (numEvents-inputListCount)/numEvents;
 
-        fillPercent = (numEvents-inputListCount)*100/numEvents;
-        pidError = pid(pidSetPoint, (float)fillPercent, deltaT, Kp, Ki, Kd);
+        fillValues[fillIndex++] = fillPercent;
+        runningFillTotal += fillPercent - fillValues[earliestIndex++];
+        if (startingUp) {
+            fillAvg = runningFillTotal / firstLoopCounter++;
+            if (firstLoopCounter >= loopMax) {
+                startingUp = false;
+            }
+        }
+        else {
+            fillAvg = runningFillTotal / loopMax;
+        }
+
+        // Find indices for the next round
+        earliestIndex = earliestIndex == (loopMax - 1) ? 0 : earliestIndex;
+        fillIndex = fillIndex == (loopMax - 1) ? 0 : fillIndex;
+
+        pidError = pid(pidSetPoint, fillPercent, deltaT, Kp, Ki, Kd);
 
         // Every "loopMax" loops
         if (reportToCp && --loopCount <= 0) {
             // Update the changing variables
-            client.update(fillPercent, pidError);
+            client.update(fillAvg, pidError);
+
             // Send to server
             err = client.SendState();
-            if (err == -2) {
-                printf("GRPC client %s cannot send data since it is not registered with server!\n", targ->myName.c_str());
-                break;
-            }
-            else if (err == 1) {
-                printf("GRPC client %s communication error with server during sending of data!\n", targ->myName.c_str());
-                break;
+            if (err == 1) {
+                printf("GRPC client %s communication error with server during sending of data, exit\n", targ->myName.c_str());
+                exit(1);
             }
 
-            printf("Total cnt %d, GC in list cnt %d, %d%% filled, error %f\n",
-                   numEvents, inputListCount, fillPercent, pidError);
+            printf("Total cnt %d, GC inlist cnt %d, %f%% filled, fill avg %f, error %f\n",
+                   numEvents, inputListCount, fillPercent, fillAvg, pidError);
 
             loopCount = loopMax;
         }
@@ -464,7 +539,7 @@ static void *pidThread(void *arg) {
     // Unregister this client with the grpc server
     err = client.Deregister();
     if (err == 1) {
-        printf("GRPC client %s communication error with server when unregistering, exit!\n", targ->myName.c_str());
+        printf("GRPC client %s communication error with server when unregistering, exit\n", targ->myName.c_str());
     }
     exit(1);
 
@@ -581,6 +656,7 @@ int main(int argc, char **argv) {
     int recvBufSize = 0;
     int tickPrescale = 1;
     int grpcId = 0;
+    int range;
     float grpcSetPoint = 0;
     uint16_t grpcPort = 50051;
     uint16_t port = 7777;
@@ -606,7 +682,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv,
               &bufSize, &recvBufSize, &tickPrescale,
               cores, &grpcId, &grpcSetPoint,
-              &port, &grpcPort,
+              &port, &grpcPort, &range,
               &debug, &useIPv6,
               listeningAddr, grpcAddr, filename, grpcName);
 
@@ -847,6 +923,11 @@ int main(int argc, char **argv) {
         targ->etId = id;
         targ->grpcServerPort = grpcPort;
         targ->grpcServerIpAddr = grpcAddr;
+
+        targ->dataPort = port;
+        targ->dataIpAddr = listeningAddr;
+        targ->dataPortRange = range;
+
         targ->myName = grpcName;
         targ->myId = grpcId;
         targ->setPoint = grpcSetPoint;
@@ -905,7 +986,7 @@ int main(int argc, char **argv) {
         totalPackets += stats->acceptedPackets;
 
         // atomic
-        droppedTicks   += stats->droppedTicks;
+        droppedTicks   += stats->droppedBuffers;
         droppedPackets += stats->droppedPackets;
 
         // The tick returned is what was just built.
