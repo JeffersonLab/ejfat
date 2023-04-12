@@ -292,6 +292,23 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    // Add stuff to prevent anti-aliasing.
+    // If sampling every millisec, an individual reading sent every 1 sec
+    // will NOT be an accurate representation. It could include a lot of noise. To prevent this,
+    // keep a running average of the fill %, so its reported value is an accuration portrayal of
+    // what's really going on. In this case a running avg is taken over the reporting time.
+    float runningFillTotal = 0., fillAvg;
+    float fillValues[loopMax];
+    memset(fillValues, 0, loopMax*sizeof(float));
+    // Keep circulating thru array. Earliest index is 0 to start with,
+    // while the highest index is loopMax - 1,which is where we write the first
+    // real value since that's convenient.
+    int earliestIndex = 0, fillIndex = loopMax - 1;
+
+    // The first time thru, we don't want to over-weight with (loopMax - 1) zero entries
+    bool useAntiAlias = true, startingUp = true;
+    int firstLoopCounter = 1;
+
     while (true) {
 
         // Delay 1 milliseconds between data points
@@ -300,13 +317,37 @@ int main(int argc, char **argv) {
         // Random # in Gaussian dist, mean .5
         fillPercent = g(gen);
 
+        if (useAntiAlias) {
+            fillValues[fillIndex++] = fillPercent;
+            runningFillTotal += fillPercent - fillValues[earliestIndex++];
+            if (startingUp) {
+                fillAvg = runningFillTotal / firstLoopCounter++;
+                if (firstLoopCounter >= loopMax) {
+                    startingUp = false;
+                }
+            }
+            else {
+                fillAvg = runningFillTotal / loopMax;
+            }
+
+            // Find indices for the next round
+            earliestIndex = earliestIndex == (loopMax - 1) ? 0 : earliestIndex;
+            fillIndex = fillIndex == (loopMax - 1) ? 0 : fillIndex;
+        }
+
         // PID error
         pidError = pid(setPoint, fillPercent, deltaT, Kp, Ki, Kd);
 
         // Every "loopMax" loops
         if (--loopCount <= 0) {
             // Update the changing variables
-            client.update(fillPercent, pidError);
+            if (useAntiAlias) {
+                client.update(fillAvg, pidError);
+            }
+            else {
+                client.update(fillPercent, pidError);
+            }
+
             // Send to server
             err = client.SendState();
             if (err == -2) {
@@ -318,7 +359,12 @@ int main(int argc, char **argv) {
                 break;
             }
 
-            printf("Total cnt %d, %f%% filled, error %f\n", numEvents, fillPercent, pidError);
+            if (useAntiAlias) {
+                printf("Total cnt %d, %f%% filled, %f avg, error %f\n", numEvents, fillPercent, fillAvg, pidError);
+            }
+            else {
+                printf("Total cnt %d, %f%% filled, error %f\n", numEvents, fillPercent, pidError);
+            }
 
             loopCount = loopMax;
         }
