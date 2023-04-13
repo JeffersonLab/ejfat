@@ -8,8 +8,8 @@
 // (757)-269-7100
 
 
-#ifndef UTIL_PACKETSITEM2_H
-#define UTIL_PACKETSITEM2_H
+#ifndef UTIL_PACKETSITEMN_H
+#define UTIL_PACKETSITEMN_H
 
 
 #include <memory>
@@ -49,7 +49,7 @@ namespace ejfat {
      * @date 03/27/2023
      * @author timmer
      */
-    class PacketsItem2 : public SupplyItem {
+    class PacketsItemN : public SupplyItem {
 
     public:
 
@@ -74,15 +74,15 @@ namespace ejfat {
     public:
 
         static void setEventFactorySettings(size_t pktCount, uint32_t consumerCount = 1);
-        static const std::function< std::shared_ptr<PacketsItem2> () >& eventFactory();
-        static void printPacketItem(std::shared_ptr<PacketsItem2> item, int index);
+        static const std::function< std::shared_ptr<PacketsItemN> () >& eventFactory();
+        static void printPacketItem(std::shared_ptr<PacketsItemN> item, int index);
 
 
-        PacketsItem2();
-        PacketsItem2(const PacketsItem2 & item);
-        ~PacketsItem2();
+        PacketsItemN();
+        PacketsItemN(const PacketsItemN & item);
+        ~PacketsItemN();
 
-        PacketsItem2 & operator=(const PacketsItem2 & other) = delete;
+        PacketsItemN & operator=(const PacketsItemN & other) = delete;
 
         struct mmsghdr * getPackets();
         reHeader * getHeaders();
@@ -103,4 +103,4 @@ namespace ejfat {
 }
 
 
-#endif // UTIL_PACKETSITEM2_H
+#endif // UTIL_PACKETSITEMN_H

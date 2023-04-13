@@ -8,7 +8,7 @@
 // (757)-269-7100
 
 
-#include "PacketsItem2.h"
+#include "PacketsItemN.h"
 
 
 namespace ejfat {
@@ -17,31 +17,31 @@ namespace ejfat {
     // STATIC INITIALIZATION
     //--------------------------------
 
-    size_t PacketsItem2::factoryPacketCount {200};
-    uint32_t  PacketsItem2::consumerCount {1};
+    size_t PacketsItemN::factoryPacketCount {200};
+    uint32_t  PacketsItemN::consumerCount {1};
 
 
     /**
-     * Method to set PacketsItem2 parameters for objects created by eventFactory.
+     * Method to set PacketsItemN parameters for objects created by eventFactory.
      * Doing things in this roundabout manor is necessary because the disruptor's
      * createSingleProducer method takes a function for created items which has no args! Thus these args,
-     * needed for construction of each PacketsItem2, must be passed in as global parameters.
+     * needed for construction of each PacketsItemN, must be passed in as global parameters.
      *
      * @param pktCount number of UDP packets that can be stored in this item.
      * @param consumers number consumers whose related info will be stored in this item (8 max, 1 min).
      */
-    void PacketsItem2::setEventFactorySettings(size_t pktCount, uint32_t consumers) {
-        PacketsItem2::factoryPacketCount = pktCount;
+    void PacketsItemN::setEventFactorySettings(size_t pktCount, uint32_t consumers) {
+        PacketsItemN::factoryPacketCount = pktCount;
         consumers = consumers > 8 ? 8 : consumers;
         consumers = consumers < 1 ? 1 : consumers;
-        PacketsItem2::consumerCount = consumers;
+        PacketsItemN::consumerCount = consumers;
     }
 
 
     /** Function to create PacketsItems2 by RingBuffer. */
-    const std::function< std::shared_ptr<PacketsItem2> () >& PacketsItem2::eventFactory() {
-        static std::function< std::shared_ptr<PacketsItem2> () > result([]  {
-            return std::move(std::make_shared<PacketsItem2>());
+    const std::function< std::shared_ptr<PacketsItemN> () >& PacketsItemN::eventFactory() {
+        static std::function< std::shared_ptr<PacketsItemN> () > result([]  {
+            return std::move(std::make_shared<PacketsItemN>());
         });
         return result;
     }
@@ -51,7 +51,7 @@ namespace ejfat {
      * Print a couple things from the given packet in a PacketItem.
      * @param index index of specific packet in PacketItem.
      */
-    void PacketsItem2::printPacketItem(std::shared_ptr<PacketsItem2> item, int index) {
+    void PacketsItemN::printPacketItem(std::shared_ptr<PacketsItemN> item, int index) {
         if (item == nullptr) {
             fprintf(stderr, "printPacketItem: item arg is null\n");
             return;
@@ -77,7 +77,7 @@ namespace ejfat {
     /**
      * Default constructor which uses values set by {@link #setEventFactorySetting()}.
      */
-    PacketsItem2::PacketsItem2() : SupplyItem(PacketsItem2::consumerCount) {
+    PacketsItemN::PacketsItemN() : SupplyItem(PacketsItemN::consumerCount) {
         maxPktCount = factoryPacketCount;
         pktsFilled  = 0;
         myId        = idValue++;
@@ -109,7 +109,7 @@ namespace ejfat {
      * Copy constructor.
      * @param item ring item to copy.
      */
-    PacketsItem2::PacketsItem2(const PacketsItem2 & item) : SupplyItem(item) {
+    PacketsItemN::PacketsItemN(const PacketsItemN & item) : SupplyItem(item) {
 
         // Avoid self copy ...
         if (this != &item) {
@@ -154,7 +154,7 @@ namespace ejfat {
 
 
     /** Destructor. */
-    PacketsItem2::~PacketsItem2() {
+    PacketsItemN::~PacketsItemN() {
         delete headers;
 
         for (int i = 0; i < maxPktCount; i++) {
@@ -167,7 +167,7 @@ namespace ejfat {
 
 
     /** Method to reset this item each time it is retrieved from the supply. */
-    void PacketsItem2::reset() {
+    void PacketsItemN::reset() {
         SupplyItem::reset();
         pktsFilled = 0;
     }
@@ -177,14 +177,14 @@ namespace ejfat {
      * Get pointer to array of structs with all packet data.
      * @return pointer to array of structs with all packet data.
      */
-    struct mmsghdr * PacketsItem2::getPackets() {return packets;}
+    struct mmsghdr * PacketsItemN::getPackets() {return packets;}
 
 
     /**
      * Get pointer to array of header data.
      * @return pointer to array of header data.
      */
-    reHeader * PacketsItem2::getHeaders() {return headers;}
+    reHeader * PacketsItemN::getHeaders() {return headers;}
 
 
     /**
@@ -192,7 +192,7 @@ namespace ejfat {
      * @param index index into array of data.
      * @return pointer to struct with packet data in it, or nullptr if none.
      */
-    struct mmsghdr * PacketsItem2::getPacket(uint32_t index) {
+    struct mmsghdr * PacketsItemN::getPacket(uint32_t index) {
         if (index >= pktsFilled) {
             return nullptr;
         }
@@ -205,7 +205,7 @@ namespace ejfat {
      * @param index index into array of info.
      * @return pointer to struct with reassembly info in it, or nullptr if none.
      */
-    reHeader * PacketsItem2::getHeader(uint32_t index) {
+    reHeader * PacketsItemN::getHeader(uint32_t index) {
         if (index >= pktsFilled) {
             return nullptr;
         }
@@ -218,7 +218,7 @@ namespace ejfat {
      * @param index index into array of info.
      * @return data id of RE packet header at index, or -1 if index out of bounds.
      */
-    int PacketsItem2::getSource(uint32_t index) {
+    int PacketsItemN::getSource(uint32_t index) {
         if (index >= pktsFilled) {
             return -1;
         }
@@ -241,7 +241,7 @@ namespace ejfat {
      * @param index index into array of info.
      * @return flag of received message, or -1 if index out of bounds.
      */
-    int PacketsItem2::getRecvFlag(uint32_t index) {
+    int PacketsItemN::getRecvFlag(uint32_t index) {
         if (index >= pktsFilled) {
             return -1;
         }
@@ -254,7 +254,7 @@ namespace ejfat {
      * for any of the packets in this item.
      * @return true if data discarded from any of the packets received, else false.
      */
-    bool PacketsItem2::dataDiscarded() {
+    bool PacketsItemN::dataDiscarded() {
         bool discarded = false;
         for (int i = 0; i < pktsFilled; i++) {
             discarded = discarded || (packets[i].msg_hdr.msg_flags == MSG_TRUNC);
@@ -267,20 +267,20 @@ namespace ejfat {
      * Get the max number of packets that can be stored in this item.
      * @return max number of packets that can be stored in this item.
      */
-    size_t PacketsItem2::getMaxPacketCount() {return maxPktCount;}
+    size_t PacketsItemN::getMaxPacketCount() {return maxPktCount;}
 
 
     /**
      * Get the current number of valid packets that are stored in this item.
      * @return current number of valid packets that are stored in this item.
      */
-    size_t PacketsItem2::getPacketsFilled() {return pktsFilled;}
+    size_t PacketsItemN::getPacketsFilled() {return pktsFilled;}
 
 
     /**
      * set the current number of valid packets that are stored in this item.
      * @param count current number of valid packets that are stored in this item.
      */
-    void PacketsItem2::setPacketsFilled(size_t count) {pktsFilled = count;}
+    void PacketsItemN::setPacketsFilled(size_t count) {pktsFilled = count;}
 
 }

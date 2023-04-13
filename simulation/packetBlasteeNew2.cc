@@ -77,7 +77,7 @@
 #include <errno.h>
 
 #include "BufferItem.h"
-#include "PacketsItem2.h"
+#include "PacketsItemN.h"
 #include "SupplyItem.h"
 #include "Supplier.h"
 #include "SupplierN.h"
@@ -720,7 +720,7 @@ typedef struct threadArg_t {
     std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
 
     /** Supply of structures holding UDP packets. */
-    std::shared_ptr<SupplierN<PacketsItem2>> pktSupply;
+    std::shared_ptr<SupplierN<PacketsItemN>> pktSupply;
 
     /** Byte size of buffers contained in supply. */
     int bufferSize;
@@ -832,7 +832,7 @@ static void *threadAssemble(void *arg) {
     bool takeStats = stats != nullptr;
 
     std::shared_ptr<BufferItem>  bufItem;
-    std::shared_ptr<PacketsItem2> pktItem;
+    std::shared_ptr<PacketsItemN> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
 
 #ifdef __linux__
@@ -1486,9 +1486,9 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
     //---------------------------------------------------
     int pktRingSize = 32;
     size_t maxPktsPerRecv = 20;
-    PacketsItem2::setEventFactorySettings(maxPktsPerRecv, thdCount);
-    std::shared_ptr<SupplierN<PacketsItem2>> pktSupply =
-            std::make_shared<SupplierN<PacketsItem2>>(pktRingSize, true, thdCount);
+    PacketsItemN::setEventFactorySettings(maxPktsPerRecv, thdCount);
+    std::shared_ptr<SupplierN<PacketsItemN>> pktSupply =
+            std::make_shared<SupplierN<PacketsItemN>>(pktRingSize, true, thdCount);
 
     //---------------------------------------------------
     // Supplies in which each buf will hold reconstructed buffers.
@@ -1601,7 +1601,7 @@ fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
 
     // Time Delay Here???
 
-    std::shared_ptr<PacketsItem2> item;
+    std::shared_ptr<PacketsItemN> item;
 
     struct timespec timeout;
     timeout.tv_sec = TIMEOUT;
