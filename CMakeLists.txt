@@ -136,7 +136,7 @@ set(UTIL_FILES
         util/BufferSupply.cpp
         util/BufferItem.cpp
         util/PacketsItem.cpp
-        util/PacketsItem2.cpp
+        util/PacketsItemN.cpp
         util/SupplyItem.cpp
         )
 
@@ -178,7 +178,7 @@ set(CPP_HEADER_FILES
         util/SupplyItem.h
         util/BufferItem.h
         util/PacketsItem.h
-        util/PacketsItem2.h
+        util/PacketsItemN.h
         )
 
 
