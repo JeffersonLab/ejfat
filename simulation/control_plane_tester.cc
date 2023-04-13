@@ -78,9 +78,12 @@ X pid(          // Proportional, Integrative, Derivative Controller
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v]",
+            "        [-p <data receiving port>]",
+            "        [-a <data receiving address>]",
+            "        [-range <data receiving port range, entropy of sender>]",
             "        [-cp_addr <control plane IP address>]",
             "        [-cp_port <control plane port>]",
             "        [-name <backend name>]",
@@ -88,6 +91,7 @@ static void printHelp(char *programName) {
             "        [-s <PID fifo set point>]");
 
     fprintf(stderr, "        This is a gRPC program that simulates an ERSAP backend by sending messages to a simulated control plane.\n");
+    fprintf(stderr, "        The -p, -a, and -range args are only to tell CP where to send our data, but are unused in this program.\n");
 }
 
 
@@ -99,12 +103,16 @@ static void printHelp(char *programName) {
  * @param clientId      filled with id# of this grpc client (backend) to send to control plane.
  * @param setPt         filled with the set point of PID loop used with fifo fill level.
  * @param cpPort        filled with grpc server (control plane) port to info to.
+ * @param port          filled with UDP receiving data port to listen on.
+ * @param range         filled with range of ports in powers of 2 (entropy).
+ * @param listenAddr    filled with IP address to listen on for LB data.
  * @param debug         filled with debug flag.
  * @param cpAddr        filled with grpc server (control plane) IP address to info to.
  * @param clientName    filled with name of this grpc client (backend) to send to control plane.
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t *clientId, float *setPt, uint16_t* cpPort,
+                      uint16_t* port, int *range, char *listenAddr,
                       bool *debug, char *cpAddr, char *clientName) {
 
     int c, i_tmp;
@@ -117,6 +125,7 @@ static void parseArgs(int argc, char **argv,
                           {"cp_port",  1, NULL, 5},
                           {"name",  1, NULL, 6},
                           {"id",  1, NULL, 7},
+                          {"range",  1, NULL, 8},
                           {0,       0, 0,    0}
             };
 
@@ -127,6 +136,42 @@ static void parseArgs(int argc, char **argv,
             break;
 
         switch (c) {
+
+            case 'a':
+                // LISTENING IP ADDRESS
+                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
+                    fprintf(stderr, "listening IP address is bad\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                strcpy(listenAddr, optarg);
+                break;
+
+            case 'p':
+                // Data PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 1023 && i_tmp < 65535) {
+                    *port = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
+            case 8:
+                // LB port range
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0 && i_tmp <= 14) {
+                    *range = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -range, 0 <= port <= 14\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
 
             case 5:
                 // grpc server/control-plane PORT
@@ -233,6 +278,9 @@ int main(int argc, char **argv) {
     uint16_t cpPort = 56789;
     bool debug = false;
 
+    int range;
+    uint16_t port = 7777;
+
     char cpAddr[16];
     memset(cpAddr, 0, 16);
     strcpy(cpAddr, "172.19.22.15"); // ejfat-4 by default
@@ -240,13 +288,20 @@ int main(int argc, char **argv) {
     char clientName[31];
     memset(clientName, 0, 31);
 
-    parseArgs(argc, argv, &clientId, &setPoint, &cpPort, &debug, cpAddr,  clientName);
+    char listeningAddr[16];
+    memset(listeningAddr, 0, 16);
+
+    parseArgs(argc, argv, &clientId, &setPoint, &cpPort, &port, &range, listeningAddr, &debug, cpAddr,  clientName);
 
     // give it a default name
     if (strlen(clientName) < 1) {
         std::string name = "backend" + std::to_string(clientId);
         std::strcpy(clientName, name.c_str());
     }
+
+    // convert integer range in PortRange enum-
+    auto pRange = PortRange(range);
+
 
     ////////////////////////////
     /// Control Plane  Stuff ///
@@ -280,7 +335,9 @@ int main(int argc, char **argv) {
     int loopMax   = 1000;
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
 
-    LbControlPlaneClient client(cpAddr, cpPort, clientName, eventSize, numEvents, setPoint);
+    LbControlPlaneClient client(cpAddr, cpPort,
+                                listeningAddr, port, pRange,
+                                clientName, eventSize, numEvents, setPoint);
 
     // Register this client with the grpc server
     int32_t err = client.Register();
