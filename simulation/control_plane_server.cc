@@ -220,6 +220,7 @@ static void parseArgs(int argc, char **argv,
 // structure for passing args to thread
 typedef struct threadStruct_t {
     LoadBalancerServiceImpl *pGrpcService;
+    bool debug;
 } threadStruct;
 
 
@@ -229,7 +230,7 @@ static void *controlThread(void *arg) {
     threadStruct *targ = static_cast<threadStruct *>(arg);
     LoadBalancerServiceImpl *service = targ->pGrpcService;
     int status, fillPercent;
-    bool debug = true;
+    bool debug = targ->debug;
 
     int64_t totalT = 0, time;
     struct timespec t1, t2, firstT;
@@ -400,6 +401,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    targ->debug = debug;
     targ->pGrpcService = pGrpcService;
 
     pthread_t thd1;
