@@ -500,6 +500,10 @@ static void *pidThread(void *arg) {
         fillPercent = (numEvents-inputListCount)/numEvents;
 
         fillValues[fillIndex++] = fillPercent;
+        if (earliestIndex >= loopMax || earliestIndex < 0) {
+            printf("Trouble, exceeding array bounds, earliestIndex = %d\n", earliestIndex);
+        }
+
         runningFillTotal += fillPercent - fillValues[earliestIndex++];
         if (startingUp) {
             fillAvg = runningFillTotal / firstLoopCounter++;
@@ -512,8 +516,8 @@ static void *pidThread(void *arg) {
         }
 
         // Find indices for the next round
-        earliestIndex = earliestIndex == (loopMax - 1) ? 0 : earliestIndex;
-        fillIndex = fillIndex == (loopMax - 1) ? 0 : fillIndex;
+        earliestIndex = (earliestIndex == loopMax) ? 0 : earliestIndex;
+        fillIndex = (fillIndex == loopMax) ? 0 : fillIndex;
 
         pidError = pid(pidSetPoint, fillPercent, deltaT, Kp, Ki, Kd);
 
