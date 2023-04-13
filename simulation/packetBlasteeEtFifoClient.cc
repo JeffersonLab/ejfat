@@ -458,7 +458,7 @@ static void *pidThread(void *arg) {
 //            uint32_t bufferSize, uint32_t bufferCount, float setPoint)  {
 //    }
 
-    // convert integer range in PortRange enu
+    // convert integer range in PortRange enum
     auto range = PortRange(targ->dataPortRange);
 
     LbControlPlaneClient client(targ->grpcServerIpAddr, targ->grpcServerPort,
