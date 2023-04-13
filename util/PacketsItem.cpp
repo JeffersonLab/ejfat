@@ -103,73 +103,10 @@ namespace ejfat {
             packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
             packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
         }
-
-//        // Allocate array of reHeader structs each containing a single parsed RE header.
-//        // One of these for each UDP packet read in.
-//        memset(hdrs, 0, sizeof(hdrs));
-//        memset(iovecs, 0, sizeof(iovecs));
-//
-//        // Allocate array of mmsghdr structs each containing a single UDP packet
-//        // (spread over 2 buffers, 1 for hdr, 1 for data).
-//        packets = msgs;
-//        memset(msgs, 0, sizeof(msgs));
-//
-//        for (int i = 0; i < 200; i++) {
-//            msgs[i].msg_hdr.msg_name = nullptr;
-//            msgs[i].msg_hdr.msg_namelen = 0;
-//
-//            packets[i].msg_hdr.msg_iov = &iovecs[i*2];
-//            packets[i].msg_hdr.msg_iovlen = 2;
-//
-//            // Where RE header goes
-//            packets[i].msg_hdr.msg_iov[0].iov_base = rcvHdr[i];
-//            packets[i].msg_hdr.msg_iov[0].iov_len = 20;
-//
-//            // Where data goes (can hold jumbo frame)
-//            packets[i].msg_hdr.msg_iov[1].iov_base = rcvBuf[i];
-//            packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
-//        }
-
     }
 
-//    const int PACKETS_TO_READ = 1024;
-//    static char receiveBuffer[PACKETS_TO_READ][USHRT_MAX];
-//    static struct iovec iovecs[PACKETS_TO_READ];
-//    static struct mmsghdr msgs[PACKETS_TO_READ];
 
-//    for (int i = 0; i < PACKETS_TO_READ; i++) {
-//    iovecs[i].iov_base         = receiveBuffer[i];
-//    iovecs[i].iov_len          = USHRT_MAX;
-//    msgs[i].msg_hdr.msg_iov    = &iovecs[i];
-//    msgs[i].msg_hdr.msg_iovlen = 1;
-//    msgs[i].msg_hdr.msg_name = &sockFrom[i];
-//    msgs[i].msg_hdr.msg_namelen = sizeof(struct sockaddr_in );
-//    }
-
-
-//            #define VLEN 10
-//            #define BUFSIZE 200
-//            #define TIMEOUT 1
-//                int i;
-//                struct mmsghdr msgs[VLEN];
-//                struct iovec iovecs[VLEN];
-//                char bufs[VLEN][BUFSIZE+1];
-//
-//
-//            memset(msgs, 0, sizeof(msgs));
-//            for (i = 0; i < VLEN; i++) {
-//            iovecs[i].iov_base         = bufs[i];
-//            iovecs[i].iov_len          = BUFSIZE;
-//            msgs[i].msg_hdr.msg_iov    = &iovecs[i];
-//            msgs[i].msg_hdr.msg_iovlen = 1;
-//            }
-//
-
-//
-//            retval = recvmmsg(sockfd, msgs, VLEN, 0, &timeout);
-
-
-/**
+    /**
      * Copy constructor.
      * @param item ring item to copy.
      */
@@ -205,33 +142,6 @@ namespace ejfat {
                 packets[i].msg_hdr.msg_iov[1].iov_base = new uint8_t[9000];
                 packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
             }
-
-//            // Allocate array of reHeader structs each containing a single parsed RE header.
-//            // One of these for each UDP packet read in.
-//            memset(hdrs, 0, sizeof(hdrs));
-//            memset(iovecs, 0, sizeof(iovecs));
-//
-//            // Allocate array of mmsghdr structs each containing a single UDP packet
-//            // (spread over 2 buffers, 1 for hdr, 1 for data).
-//            packets = msgs;
-//            memset(msgs, 0, sizeof(msgs));
-//
-//            for (int i = 0; i < 200; i++) {
-//                msgs[i].msg_hdr.msg_name = nullptr;
-//                msgs[i].msg_hdr.msg_namelen = 0;
-//
-//                packets[i].msg_hdr.msg_iov = &iovecs[i*2];
-//                packets[i].msg_hdr.msg_iovlen = 2;
-//
-//                // Where RE header goes
-//                packets[i].msg_hdr.msg_iov[0].iov_base = rcvHdr[i];
-//                packets[i].msg_hdr.msg_iov[0].iov_len = 20;
-//
-//                // Where data goes (can hold jumbo frame)
-//                packets[i].msg_hdr.msg_iov[1].iov_base = rcvBuf[i];
-//                packets[i].msg_hdr.msg_iov[1].iov_len = 9000;
-//            }
-
 
             // Copy over packet data
             for (int i = 0; i < pktsFilled; i++) {

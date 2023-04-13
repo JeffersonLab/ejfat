@@ -34,26 +34,13 @@
 #endif
 
 
-//#ifdef __APPLE__
-//
-//// Put this here so we can compile on MAC
-//struct mmsghdr {
-//    struct msghdr msg_hdr;  /* Message header */
-//    unsigned int  msg_len;  /* Number of received bytes for header */
-//};
-//
-//extern int recvmmsg(int sockfd, struct mmsghdr *msgvec, unsigned int vlen,
-//                    int flags, struct timespec *timeout);
-//
-//#endif
-
-
 namespace ejfat {
 
     /**
-     * This class defines the UDP packet containing items which are supplied by the Supplier class.
+     * This class defines the UDP packet containing items which are supplied by the SupplierN class.
      * This differs from the PacketsItem class in the following way. This class is made to work
-     * with the SupplierN class. This class is able to store information about multiple
+     * with the SupplierN class instead of the Supplier class.
+     * This class is able to store information about multiple
      * (up to 8) ring buf consumers that may be using this item simultaneously. It does this by
      * passing the consumerCount on to its base class, SupplyItem.
      * In reality, consumers are programmed to look at different items even tho they have
@@ -71,30 +58,6 @@ namespace ejfat {
         static uint32_t consumerCount;
 
     private:
-
-
-    //            struct iovec {
-    //                ptr_t iov_base; /* Starting address */
-    //                size_t iov_len; /* Length in bytes */
-    //            }
-
-
-    //     struct msghdr {
-    //             void            *msg_name;      /* optional address */
-    //             socklen_t       msg_namelen;    /* size of address */
-    //             struct          iovec *msg_iov; /* scatter/gather array */
-    //             size_t          msg_iovlen;     // # elements in msg_iov, for mac type = int
-    //             void            *msg_control;   /* ancillary data, see below */
-    //             size_t          msg_controllen; /* ancillary data buffer len */
-    //             int             msg_flags;      /* flags on received message */
-    //     };
-
-
-    //        struct mmsghdr {
-    //            struct msghdr msg_hdr;  /* Message header */
-    //            unsigned int  msg_len;  /* Number of received bytes for header */
-    //        };
-
 
         /** Place to store UDP packet data. */
         struct mmsghdr *packets = nullptr;

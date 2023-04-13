@@ -13,6 +13,7 @@
  * @file Send a single data buffer (full of random data) repeatedly
  * to an ejfat router (FPGA-based or simulated) which then passes it
  * to the receiving program packetBlastee.cc.
+ * Try /daqfs/java/clas_005038.1231.hipo on the DAQ group disk.
  * </p>
  */
 
