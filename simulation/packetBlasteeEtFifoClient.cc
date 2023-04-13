@@ -500,9 +500,9 @@ static void *pidThread(void *arg) {
         fillPercent = (numEvents-inputListCount)/numEvents;
 
         fillValues[fillIndex++] = fillPercent;
-        if (earliestIndex >= loopMax || earliestIndex < 0) {
-            printf("Trouble, exceeding array bounds, earliestIndex = %d\n", earliestIndex);
-        }
+//        if (earliestIndex >= loopMax || earliestIndex < 0) {
+//            printf("Trouble, exceeding array bounds, earliestIndex = %d\n", earliestIndex);
+//        }
 
         runningFillTotal += fillPercent - fillValues[earliestIndex++];
         if (startingUp) {
