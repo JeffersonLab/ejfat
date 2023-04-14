@@ -405,7 +405,7 @@ int main(int argc, char **argv) {
     int bufSize = 1020000;
     int recvBufSize = 0;
     int tickPrescale = 1;
-    uint16_t port = 7777;
+    uint16_t port = 17750;
     int cores[10];
     bool debug = false;
     bool useIPv6 = false;
@@ -613,9 +613,11 @@ int main(int argc, char **argv) {
             firstLoop = false;
         }
 
-        diff = tick - prevTick;
-        if (diff != 0) {
-            fprintf(stderr, "Expect %" PRIu64 ", got %" PRIu64 ", diff %" PRIu64 "\n", prevTick, tick, diff);
+        if (debug) {
+            diff = tick - prevTick;
+            if (diff != 0) {
+                fprintf(stderr, "Expect %" PRIu64 ", got %" PRIu64 ", diff %" PRIu64 "\n", prevTick, tick, diff);
+            }
         }
 
         totalBytes   += nBytes;
