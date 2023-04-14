@@ -1,4 +1,4 @@
-//
+¬//
 // Copyright 2022, Jefferson Science Associates, LLC.
 // Subject to the terms in the LICENSE file found in the top-level directory.
 //
@@ -926,7 +926,7 @@ int main(int argc, char **argv) {
             // Time yet needed in order for everything we've sent to be at the correct rate
             excessTime = microSecItShouldTake - elapsed + lastExcessTime;
 
-fprintf(stderr, "packetBlaster: elapsed = %lld, this excessT = %lld, last excessT = %lld, buffers/sec = %llu\n",
+fprintf(stderr, "packetBlaster: elapsed = %" PRId64 ", this excessT = %" PRId64 ", last excessT = %" PRId64 ", buffers/sec = %" PRId64 "\n",
         elapsed, (microSecItShouldTake - elapsed), lastExcessTime, buffersAtOnce*1000000/elapsed);
 
             // Do we need to wait before sending the next bunch of buffers?
