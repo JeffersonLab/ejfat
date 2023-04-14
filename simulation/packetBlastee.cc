@@ -15,14 +15,14 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <time.h>
+#include <ctime>
 #include <thread>
 #include <cmath>
 #include <chrono>
 #include <atomic>
 #include <algorithm>
 #include <cstring>
-#include <errno.h>
+#include <cerrno>
 #include <cinttypes>
 
 #include "ejfat_assemble_ersap.hpp"
@@ -54,16 +54,13 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-b <internal buffer byte sizez>]",
             "        [-r <UDP receive buffer byte size>]",
-            "        [-fifo (Use SCHED_FIFO realtime scheduler for process - linux)]",
-            "        [-rr (Use SCHED_RR realtime scheduler for process - linux)]",
-            "        [-pri <realtime process priority, default = max>]",
             "        [-f <file for stats>]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
@@ -89,8 +86,8 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *cores, uint16_t* port, int *rtPriority,
-                      bool *debug, bool *useIPv6, bool *useFIFO, bool *useRR,
+                      int *cores, uint16_t* port,
+                      bool *debug, bool *useIPv6,
                       char *listenAddr, char *filename) {
 
     int c, i_tmp;
@@ -98,17 +95,14 @@ static void parseArgs(int argc, char **argv,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {             {"tpre",  1, NULL, 1},
-                          {"ip6",  0, NULL, 2},
-                          {"cores",  1, NULL, 3},
-                          {"fifo",  0, NULL, 4},
-                          {"rr",  0, NULL, 5},
-                          {"pri",  1, NULL, 6},
-                          {0,       0, 0,    0}
+            {             {"tpre",  1, nullptr, 1},
+                          {"ip6",  0, nullptr, 2},
+                          {"cores",  1, nullptr, 3},
+                          {nullptr,       0, nullptr,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:", long_options, nullptr)) != EOF) {
 
         if (c == -1)
             break;
@@ -248,35 +242,6 @@ static void parseArgs(int argc, char **argv,
                 }
                 break;
 
-            case 4:
-                // use FIFO realtime scheduler
-                if (*useRR) {
-                    fprintf(stderr, "Cannot specify both FIFO and RR\n");
-                }
-                *useFIFO = true;
-                break;
-
-            case 5:
-                // use RR (round robin) realtime scheduler
-                if (*useFIFO) {
-                    fprintf(stderr, "Cannot specify both FIFO and RR\n");
-                }
-                *useRR = true;
-                break;
-
-            case 6:
-                // Realtime priority
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 1) {
-                    *rtPriority = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -pri, pri >= 1\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -305,8 +270,9 @@ static void parseArgs(int argc, char **argv,
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
 static volatile int cpu=-1;
-static std::atomic<uint32_t> droppedPackets;
-static std::atomic<uint32_t> droppedTicks;
+static uint32_t droppedPackets;
+static uint32_t droppedTicks;
+
 typedef struct threadStruct_t {
     char filename[101];
 } threadStruct;
@@ -324,7 +290,7 @@ static void *thread(void *arg) {
 
     // File writing stuff
     bool writeToFile = false;
-    threadStruct *targ = static_cast<threadStruct *>(arg);
+    auto *targ = static_cast<threadStruct *>(arg);
     char *filename = targ->filename;
     FILE *fp;
     if (strlen(filename) > 0) {
@@ -334,7 +300,7 @@ static void *thread(void *arg) {
         // validate file open for writing
         if (!fp) {
             fprintf(stderr, "file open failed: %s\n", strerror(errno));
-            return (NULL);
+            return (nullptr);
         }
 
         // Write column headers
@@ -389,11 +355,11 @@ static void *thread(void *arg) {
 
         // Dropped stuff rates
         droppedPkts = droppedPackets;
-        droppedPackets.store(0);
+        droppedPackets = 0;
         totalDroppedPkts += droppedPkts;
 
         droppedTiks = droppedTicks;
-        droppedTicks.store(0);
+        droppedTicks = 0;
         totalDroppedTiks += droppedTiks;
 
         pktRate = 1000000.0 * ((double) packetCount) / time;
@@ -426,7 +392,7 @@ static void *thread(void *arg) {
     }
 
     fclose(fp);
-    return (NULL);
+    return (nullptr);
 }
 
 
@@ -439,25 +405,23 @@ int main(int argc, char **argv) {
     int bufSize = 1020000;
     int recvBufSize = 0;
     int tickPrescale = 1;
-    int rtPriority = 0;
     uint16_t port = 7777;
     int cores[10];
     bool debug = false;
     bool useIPv6 = false;
-    bool useFIFO = false;
-    bool useRR = false;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
     char filename[101];
     memset(filename, 0, 101);
 
-    for (int i=0; i < 10; i++) {
-        cores[i] = -1;
+    for (int & core : cores) {
+        core = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, &port, &rtPriority, &debug,
-              &useIPv6, &useFIFO, &useRR, listeningAddr, filename);
+    parseArgs(argc, argv, &bufSize, &recvBufSize,
+              &tickPrescale, cores, &port, &debug,
+              &useIPv6, listeningAddr, filename);
 
 #ifdef __linux__
 
@@ -486,66 +450,6 @@ int main(int argc, char **argv) {
         if (rc != 0) {
             std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
         }
-    }
-
-    if (useFIFO || useRR) {
-        // Using the actual pid will set priority of main thd.
-        // Using 0 will set priority of calling thd.
-        pid_t myPid = getpid();
-        // myPid = 0;
-
-        struct sched_param param;
-        int policy = useFIFO ? SCHED_FIFO : SCHED_RR;
-
-        // Set process to correct priority for given scheduler
-        int priMax = sched_get_priority_max(policy);
-        int priMin = sched_get_priority_min(policy);
-
-        // If error
-        if (priMax == -1 || priMin == -1) {
-            perror("Error reading priority");
-            exit(EXIT_FAILURE);
-        }
-
-        if (rtPriority < 1 || rtPriority > priMax) {
-            rtPriority = priMax;
-        }
-        else if (rtPriority < priMin) {
-            rtPriority = priMin;
-        }
-
-        // Current scheduler policy
-        int currPolicy = sched_getscheduler(myPid);
-        if (currPolicy < 0) {
-            perror("Error reading policy");
-            exit(EXIT_FAILURE);
-        }
-        std::cerr << "Current Scheduling Policy: " << currPolicy <<
-                     " (RR = " << SCHED_RR << ", FIFO = " << SCHED_FIFO <<
-                     ", OTHER = " << SCHED_OTHER << ")" << std::endl;
-
-        // Set new scheduler policy
-        std::cerr << "Setting Scheduling Policy to: " << policy << ", pri = " << rtPriority << std::endl;
-        param.sched_priority = rtPriority;
-        int errr = sched_setscheduler(myPid, policy, &param);
-        if (errr < 0) {
-            perror("Error setting scheduler policy");
-            exit(EXIT_FAILURE);
-        }
-
-        errr = sched_getparam(myPid, &param);
-        if (errr < 0) {
-            perror("Error getting priority");
-            exit(EXIT_FAILURE);
-        }
-
-        currPolicy = sched_getscheduler(myPid);
-        if (currPolicy < 0) {
-            perror("Error reading policy");
-            exit(EXIT_FAILURE);
-        }
-
-        std::cerr << "New Scheduling Policy: " << currPolicy << ", pri = " <<  param.sched_priority <<std::endl;
     }
 
 #endif
@@ -633,7 +537,7 @@ int main(int argc, char **argv) {
     }
 
     // Start thread to do rate printout
-    threadStruct *targ = (threadStruct *)malloc(sizeof(threadStruct));
+    auto *targ = (threadStruct *)malloc(sizeof(threadStruct));
     if (targ == nullptr) {
         fprintf(stderr, "out of mem\n");
         return -1;
@@ -644,7 +548,7 @@ int main(int argc, char **argv) {
     }
 
     pthread_t thd;
-    int status = pthread_create(&thd, NULL, thread, (void *) targ);
+    int status = pthread_create(&thd, nullptr, thread, (void *) targ);
     if (status != 0) {
         fprintf(stderr, "\n ******* error creating thread\n\n");
         return -1;
@@ -652,7 +556,7 @@ int main(int argc, char **argv) {
 
     // If bufSize gets too big, it exceeds stack limits, so lets malloc it!
     char *dataBuf = (char *) malloc(bufSize);
-    if (dataBuf == NULL) {
+    if (dataBuf == nullptr) {
         fprintf(stderr, "cannot allocate internal buffer memory of %d bytes\n", bufSize);
         return -1;
     }
@@ -673,8 +577,8 @@ int main(int argc, char **argv) {
 
     // Statistics
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
-    droppedTicks.store(0);
-    droppedPackets.store(0);
+    droppedTicks = 0;
+    droppedPackets = 0;
 
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
@@ -688,13 +592,8 @@ int main(int argc, char **argv) {
         uint64_t diff, prevTick = tick;
 
         // Fill with data
-        nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                             debug, &tick, &dataId, stats,
-                                             tickPrescale, outOfOrderPackets);
-// Test compilation
-//        nBytes = getCompletePacketizedBuffer_NoOutOfOrder(
-//                dataBuf, bufSize, udpSocket, debug,
-//                &tick, &dataId, tickPrescale,nullptr);
+        nBytes = getCompletePacketizedBufferNew(dataBuf, bufSize, udpSocket,
+                                                debug, &tick, &dataId, stats, tickPrescale);
 
         if (nBytes < 0) {
             if (nBytes == BUF_TOO_SMALL) {
@@ -708,8 +607,7 @@ int main(int argc, char **argv) {
 
         // The first tick received may be any value depending on # of backends receiving
         // packets from load balancer. Use the first tick received and subsequent ticks
-        // to check the prescale. Took prescale-checking logic out of ejfat_assemble_ersap.hpp
-        // code. Checking it here makes more sense.
+        // to check the prescale.
         if (firstLoop) {
             prevTick = tick;
             firstLoop = false;
@@ -717,14 +615,13 @@ int main(int argc, char **argv) {
 
         diff = tick - prevTick;
         if (diff != 0) {
-            //fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
             fprintf(stderr, "Expect %" PRIu64 ", got %" PRIu64 ", diff %" PRIu64 "\n", prevTick, tick, diff);
         }
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;
 
-        // atomic
+        // stats
         droppedTicks   += stats->droppedBuffers;
         droppedPackets += stats->droppedPackets;
 

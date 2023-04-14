@@ -827,7 +827,7 @@ int main(int argc, char **argv) {
 
             free(buf);
             buf = (char *) malloc(bufSize);
-            if (buf == NULL) {
+            if (buf == nullptr) {
                 fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufSize);
                 return -1;
             }
@@ -898,8 +898,8 @@ int main(int argc, char **argv) {
             countDown = buffersAtOnce - 1;
         }
 
-        err = sendPacketizedBufferSend(buf, bufSize, maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset,
+        err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload, clientSocket,
+                                           tick, protocol, entropy, version, dataId, bufSize, &offset,
                                            packetDelay, delayPrescale, &delayCounter,
                                            firstBuffer, lastBuffer, debug, &packetsSent);
 
