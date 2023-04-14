@@ -765,11 +765,12 @@ namespace ejfat {
      * @param entropy        entropy in laad balance header.
      * @param version        version in reassembly header.
      * @param dataId         data id in reassembly header.
+     * @param fullLen        size of full dataBuffer in bytes to be sent for this tick.
      * @param offset         value-result parameter that passes in the sequence number of first packet
      *                       and returns the sequence to use for next packet to be sent.
-     * @param delay         delay in microsec between each packet being sent.
-     * @param delayPrescale prescale for delay (i.e. only delay every Nth time).
-     * @param delayCounter  value-result parameter tracking when delay was last run.
+     * @param delay          delay in microsec between each packet being sent.
+     * @param delayPrescale  prescale for delay (i.e. only delay every Nth time).
+     * @param delayCounter   value-result parameter tracking when delay was last run.
      * @param firstBuffer    if true, this is the first buffer to send in a sequence.
      * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
      * @param debug          turn debug printout on & off.
