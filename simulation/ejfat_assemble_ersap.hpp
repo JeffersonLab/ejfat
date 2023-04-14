@@ -31,6 +31,7 @@
 #include <getopt.h>
 #include <climits>
 #include <cinttypes>
+#include <unordered_map>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -715,11 +716,231 @@ static inline uint64_t bswap_64(uint64_t x) {
         }
 
 
+        /**
+         * <p>
+         * Assemble incoming packets into the given buffer.
+         * It will read entire buffer or return an error.
+         * Will work best on small / reasonable sized buffers.
+         * This routine allows for out-of-order packets if they don't cross tick boundaries.
+         * This routine parses the latest ERSAP-EJFAT reassembly header.
+         * Data can only come from 1 source, which is returned in the dataId value-result arg.
+         * Data from a source other than that of the first packet will be ignored.
+         * </p>
+         *
+         * <p>
+         * If the given tick value is <b>NOT</b> 0xffffffffffffffff, then it is the next expected tick.
+         * And in this case, this method makes an attempt at figuring out how many buffers and packets
+         * were dropped using tickPrescale.
+         * </p>
+         *
+         * <p>
+         * A note on statistics. The raw counts are <b>ADDED</b> to what's already
+         * in the stats structure. It's up to the user to clear stats before calling
+         * this method if desired.
+         * </p>
+         *
+         * @param dataBuf           place to store assembled packets.
+         * @param bufLen            byte length of dataBuf.
+         * @param udpSocket         UDP socket to read.
+         * @param debug             turn debug printout on & off.
+         * @param tick              value-result parameter which gives the next expected tick
+         *                          and returns the tick that was built. If it's passed in as
+         *                          0xffff ffff ffff ffff, then ticks are coming in no particular order.
+         * @param dataId            to be filled with data ID from RE header (can be nullptr).
+         * @param stats             to be filled packet statistics.
+         * @param tickPrescale      add to current tick to get next expected tick.
+         *
+         * @return total data bytes read (does not include RE header).
+         *         If there error in recvfrom, return RECV_MSG.
+         *         If buffer is too small to contain reassembled data, return BUF_TOO_SMALL.
+         *         If a pkt contains too little data, return INTERNAL_ERROR.
+         */
+        static ssize_t getCompletePacketizedBufferNew(char* dataBuf, size_t bufLen, int udpSocket,
+                                                   bool debug, uint64_t *tick, uint16_t *dataId,
+                                                   std::shared_ptr<packetRecvStats> stats,
+                                                   uint32_t tickPrescale) {
 
-         /**
+            uint64_t prevTick = UINT_MAX;
+            uint64_t expectedTick = *tick;
+            uint64_t packetTick;
+
+            uint32_t offset, length, pktCount;
+
+            bool dumpTick = false;
+            bool veryFirstRead = true;
+
+            int  version, nBytes;
+            uint16_t packetDataId, srcId;
+            ssize_t dataBytes, bytesRead, totalBytesRead = 0;
+
+            // stats
+            bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
+            bool takeStats = stats != nullptr;
+            int64_t discardedPackets = 0, discardedBytes = 0, discardedBufs = 0;
+
+            // Storage for packet
+            char pkt[9100];
+
+
+            if (debug && takeStats) fprintf(stderr, "getCompletePacketizedBuffer: buf size = %lu, take stats = %d, %p\n",
+                                            bufLen, takeStats, stats.get());
+
+            while (true) {
+
+                if (veryFirstRead) {
+                    totalBytesRead = 0;
+                    pktCount = 0;
+                }
+
+                // Read UDP packet
+                bytesRead = recvfrom(udpSocket, pkt, 9100, 0, nullptr, nullptr);
+                if (bytesRead < 0) {
+                    if (debug) fprintf(stderr, "getCompletePacketizedBuffer: recvmsg failed: %s\n", strerror(errno));
+                    return (RECV_MSG);
+                }
+                else if (bytesRead < HEADER_BYTES) {
+                    if (debug) fprintf(stderr, "getCompletePacketizedBuffer: packet does not contain not enough data\n");
+                    return (INTERNAL_ERROR);
+                }
+                dataBytes = bytesRead - HEADER_BYTES;
+
+                // Parse header
+                parseReHeader(pkt, &version, &packetDataId, &offset, &length, &packetTick);
+                if (veryFirstRead) {
+                    // record data id of first packet of buffer
+                    srcId = packetDataId;
+                }
+                else if (packetDataId != srcId) {
+                    // different data source, reject this packet
+                    continue;
+                }
+
+                // The following if-else is built on the idea that we start with a packet that has offset = 0.
+                // While it's true that, if missing, it may be out-of-order and will show up eventually,
+                // experience has shown that this almost never happens. Thus, for efficiency's sake,
+                // we automatically dump any tick whose first packet does not show up FIRST.
+
+                // To do a complete job of trying to track out-of-order packets, we would need to
+                // simultaneously keep track of packets from multiple ticks. This small routine
+                // would need to keep state - greatly complicating things. So skip that here.
+                // Such work is done in the packetBlasteeNew2.cc program.
+
+                // If we get packet from new tick ...
+                if (packetTick != prevTick) {
+                    // If we're here, either we've just read the very first legitimate packet,
+                    // or we've dropped some packets and advanced to another tick.
+
+                    if (offset != 0) {
+                        // Already have trouble, looks like we dropped the first packet of this new tick,
+                        // and possibly others after it.
+                        // So go ahead and dump the rest of the tick in an effort to keep any high data rate.
+                        if (debug)
+                            fprintf(stderr, "Skip pkt from id %hu, %" PRIu64 " - %u, expected seq 0\n",
+                                    packetDataId, packetTick, offset);
+
+                        // Go back to read beginning of buffer
+                        veryFirstRead = true;
+                        dumpTick = true;
+                        prevTick = packetTick;
+
+                        // stats
+                        discardedPackets++;
+                        discardedBytes += dataBytes;
+                        discardedBufs++;
+
+                        continue;
+                    }
+
+                    if (!veryFirstRead) {
+                        // The last tick's buffer was not fully contructed
+                        // before this new tick showed up!
+                        if (debug) fprintf(stderr, "Discard tick %" PRIu64 "\n", prevTick);
+
+                        pktCount = 0;
+                        totalBytesRead = 0;
+                        srcId = packetDataId;
+                    }
+
+                    // If here, new tick/buffer, offset = 0.
+                    // There's a chance we can construct a full buffer.
+                    // Overwrite everything we saved from previous tick.
+                    dumpTick = false;
+                }
+                else if (dumpTick) {
+                    // Same as last tick.
+                    // If here, we missed beginning pkt(s) for this buf so we're dumping whole tick
+                    veryFirstRead = true;
+
+                    // stats
+                    discardedPackets++;
+                    discardedBytes += dataBytes;
+
+                    if (debug) fprintf(stderr, "Dump pkt from id %hu, %" PRIu64 " - %u, expected seq 0\n",
+                                       packetDataId, packetTick, offset);
+                    continue;
+                }
+
+                // Check to see if there's room to write data into provided buffer
+                if (offset + dataBytes > bufLen) {
+                    if (debug) fprintf(stderr, "getCompletePacketizedBuffer: buffer too small to hold data\n");
+                    return (BUF_TOO_SMALL);
+                }
+
+                // Copy data into buf at correct location (provided by RE header)
+                memcpy(dataBuf + offset, pkt + HEADER_BYTES, dataBytes);
+
+                totalBytesRead += dataBytes;
+                veryFirstRead = false;
+                prevTick = packetTick;
+                pktCount++;
+
+                // If we've written all data to this buf ...
+                if (totalBytesRead >= length) {
+                    // Done
+                    *tick = packetTick;
+                    if (dataId != nullptr) *dataId = packetDataId;
+
+                    // Keep some stats
+                    if (takeStats) {
+                        int64_t diff = 0;
+                        int64_t droppedTicks = 0UL;
+                        if (knowExpectedTick) {
+                            diff = packetTick - expectedTick;
+                            diff = (diff < 0) ? -diff : diff;
+                            droppedTicks = diff / tickPrescale;
+                        }
+
+                        stats->acceptedBytes    += totalBytesRead;
+                        stats->acceptedPackets  += pktCount;
+
+                        stats->discardedBytes   += discardedBytes;
+                        stats->discardedPackets += discardedPackets;
+                        stats->discardedBuffers += discardedBufs;
+
+                        // In this case, it includes the discarded bufs (which it should not)
+                        stats->droppedBuffers   += droppedTicks; // estimate
+                        // This works if all the buffers coming in are exactly the same size.
+                        // If they're not, then the # of packets of this buffer
+                        // is used to guess at how many packets were dropped for the dropped tick(s).
+                        // Again, this includes discarded packets which it should not.
+                        stats->droppedPackets += droppedTicks * pktCount;
+                    }
+
+                    break;
+                }
+            }
+
+            return totalBytesRead;
+        }
+
+
+
+
+        /**
           * <p>
           * Assemble incoming packets into the given buffer.
           * It will read entire buffer or return an error.
+          * Will work best on small / reasonable sized buffers.
           * This routine does NOT allow for out-of-order packets.
           * </p>
           *
