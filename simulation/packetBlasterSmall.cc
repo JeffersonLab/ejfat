@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <cstdint>
-#include <time.h>
+#include <ctime>
 #include <cmath>
 #include <thread>
 #include <pthread.h>
@@ -372,7 +372,7 @@ static void *thread(void *arg) {
         t1 = t2;
     }
 
-    return (NULL);
+    return (nullptr);
 }
 
 
@@ -554,7 +554,7 @@ int main(int argc, char **argv) {
 
     // Start thread to do rate printout
     pthread_t thd;
-    int status = pthread_create(&thd, NULL, thread, (void *) nullptr);
+    int status = pthread_create(&thd, nullptr, thread, (void *) nullptr);
     if (status != 0) {
         fprintf(stderr, "\n ******* error creating thread\n\n");
         return -1;
@@ -572,7 +572,7 @@ int main(int argc, char **argv) {
     // For testing
     int bufCount = 40;
     char **bufArray = (char **) calloc(bufCount, sizeof(char *));
-    if (bufArray == NULL) {
+    if (bufArray == nullptr) {
         fprintf(stderr, "cannot allocate internal array of buffers\n");
         return -1;
     }
@@ -581,7 +581,7 @@ int main(int argc, char **argv) {
     for (int i=0; i < bufCount; i++) {
         bufArray[i] = (char *) malloc(i+1 + 16);
         sizes[i] = i+1 + 16;
-        if (bufArray[i] == NULL) {
+        if (bufArray[i] == nullptr) {
             fprintf(stderr, "cannot allocate buffer\n");
             return -1;
         }
