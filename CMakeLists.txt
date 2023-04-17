@@ -121,9 +121,6 @@ set(DIS_EXEC_FILES
         simulation/scatter.cc
         simulation/gather.cc
         simulation/testBufSupply.cc
-        simulation/packetBlasteeBuf.cc
-        simulation/packetBlasteeFast.cc
-        simulation/packetBlasterFat.cc
         simulation/packetBlasteeNew.cc
         simulation/packetBlasteeNew2.cc
         simulation/packetBlasteeTcpMT.cc
@@ -148,14 +145,7 @@ set(SIM_EXEC_FILES
         simulation/packetBlaster.cc
         simulation/packetBlasterNew.cc
         simulation/packetBlasterSmall.cc
-        simulation/packetBlastee2.cc
         simulation/packetBlaster2.cc
-        simulation/packetBlasterFat2.cc
-        )
-
-set(ZMQ_EXEC_FILES
-        simulation/packetBlasteeZmq.cc
-        simulation/bufferReceiverZmq.cc
         )
 
 set(CLAS_EXEC_FILES
@@ -277,23 +267,6 @@ if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
 endif()
 
 
-# Zeromq build is optional and set it to OFF by default
-option(BUILD_ZMQ "Build ZMQ-related code" OFF)
-
-# if you tell cmake to have code use USE_ZMQ preprocessor macro
-if (BUILD_ZMQ)
-    find_package(ZeroMQ)
-    if (ZeroMQ_FOUND)
-        #add_compile_definitions(BUILD_ZMQ)
-        set(EXEC_FILES ${EXEC_FILES} ${ZMQ_EXEC_FILES})
-    else()
-        message(STATUS "Zeromq cannot be found, compile without it")
-    endif()
-else()
-    message(STATUS "Compile without zeromq")
-endif()
-
-
 # CLAS12 source build is optional and set it to OFF by default
 option(BUILD_CLAS "Build CLAS 12 source code" OFF)
 
@@ -313,78 +286,6 @@ endif()
 if (BUILD_TEST)
     set(EXEC_FILES ${EXEC_FILES} ${TEST_FILES})
 endif()
-
-
-#include(FindPackageHandleStandardArgs)
-#
-#find_package(Doxygen)
-#
-#if( DOXYGEN_FOUND )
-#    message(STATUS "Doxygen found")
-#
-#    # Change these values from cmake defaults in the Doxyfile
-#    set(DOXYGEN_GENERATE_TREEVIEW YES)
-#    set(DOXYGEN_REFERENCED_BY_RELATION YES)
-#    set(DOXYGEN_EXCLUDE_PATTERNS */.* */CMakeFiles/* */_CPack_Packages/* CMakeLists.txt CMakeCache.txt)
-#    #set(DOXYGEN_EXCLUDE src/libsrc++/pugixml.cpp src/libsrc++/pugixml.hpp)
-#    set(DOXYGEN_FILE_PATTERNS *.c *.cpp *.h)
-#    #set(DOXYGEN_WARN_LOGFILE doxyerrors.log)
-#    set(DOXYGEN_SORT_MEMBERS_CTORS_1ST YES)
-#    set(DOXYGEN_SHOW_GROUPED_MEMB_INC YES)
-#    set(DOXYGEN_INLINE_IHERITED_MEMB YES)
-#    set(DOXYGEN_JAVADOC_AUTOBRIEF YES)
-#
-#    # Add target of "docCC"
-#    #set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc/doxygen/CC)
-#    #doxygen_add_docs(docCC src/libsrc++)
-#
-#    # Change these values from cmake defaults in the Doxyfile
-#    set(DOXYGEN_OPTIMIZE_OUTPUT_FOR_C YES)
-#    set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc/doxygen/C)
-#
-#    # Add target of "docC"
-#    doxygen_add_docs(docC src/libsrc src/execsrc)
-#
-#elseif(NOT DEFINED C_ONLY)
-#    message(FATAL_ERROR "Doxygen NOT found, cmake will exit." )
-#endif()
-
-
-# Shared evio C library
-#add_library(evio SHARED ${C_LIB_FILES})
-#set_target_properties(evio PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-#include_directories(evio PUBLIC src/libsrc /usr/local/include)
-
-
-#if (NOT DEFINED C_ONLY)
-#    # Shared evio C++ library
-#    add_library(eviocc SHARED ${CPP_LIB_FILES})
-#    set_target_properties(eviocc PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-#    target_link_libraries(eviocc ${LZ4_LIBRARY} ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY})
-#    include_directories(eviocc PUBLIC src/libsrc++ /usr/local/include
-#            ${Boost_INCLUDE_DIRS} ${LZ4_INCLUDE_DIRS} ${DISRUPTOR_INCLUDE_DIR})
-#
-#    if (DEFINED MAKE_EXAMPLES)
-#        foreach(fileName ${TEST})
-#            # Get file name with no directory or extension as executable name
-#            get_filename_component(execName ${fileName} NAME_WE)
-#            # Create executable from file
-#            add_executable(${execName} ${fileName})
-#            # Put debug extension on if applicable
-#            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-#            # Needs these libs
-#            target_link_libraries(${execName} eviocc pthread ${Boost_LIBRARIES} ${LZ4_LIBRARY} expat dl z m )
-#
-#            # Only install if installation directory has been defined
-#            if (DEFINED INSTALL_DIR_DEFINED)
-#                # Install into bin/testC dir
-#                install(TARGETS ${execName} RUNTIME DESTINATION bin/test)
-#            endif()
-#        endforeach(fileName)
-#    endif()
-#else()
-#    message(STATUS "NOT compiling C++ evio library!!!" )
-#endif()
 
 
 # Test programs
