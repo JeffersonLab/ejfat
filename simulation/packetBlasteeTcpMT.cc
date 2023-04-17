@@ -31,8 +31,6 @@
 #include <cinttypes>
 
 #include "BufferSupply.h"
-#include "BufferSupplyItem.h"
-#include "ByteBuffer.h"
 #include "ByteOrder.h"
 
 #include "ejfat_assemble_ersap.hpp"
@@ -65,14 +63,13 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-b <internal buffer byte sizez>]",
             "        [-r <UDP receive buffer byte size>]",
-            "        [-pri <realtime process priority, default = max>]",
             "        [-f <file for stats>]",
             "        [-s_host <TCP server host>]",
             "        [-s_port <TCP server port>]",
@@ -95,7 +92,6 @@ static void printHelp(char *programName) {
  * @param tickPrescale  expected increase in tick with each incoming buffer.
  * @param cores         array of core ids on which to run assembly thread.
  * @param port          filled with UDP port to listen on.
- * @param rtPriority    filled with realtime priority.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param listenAddr    filled with IP address to listen on.
@@ -106,7 +102,7 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *cores, uint16_t* port, int *rtPriority,
+                      int *cores, uint16_t* port,
                       bool *debug, bool *useIPv6,
                       char *listenAddr, char *filename,
                       char *server, uint16_t *serverPort, char *serverIF) {
@@ -119,7 +115,6 @@ static void parseArgs(int argc, char **argv,
             {             {"tpre",  1, NULL, 1},
                           {"ip6",  0, NULL, 2},
                           {"cores",  1, NULL, 3},
-                          {"pri",  1, NULL, 6},
                           {"s_host",  1, NULL, 7},
                           {"s_port",  1, NULL, 8},
                           {"s_if",  1, NULL, 9},
@@ -267,19 +262,6 @@ static void parseArgs(int argc, char **argv,
                 }
                 break;
 
-            case 6:
-                // Realtime priority
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 1) {
-                    *rtPriority = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -pri, pri >= 1\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
             case 7:
                 // TCP server host
                 if (strlen(optarg) > 100 || strlen(optarg) < 1) {
@@ -337,12 +319,13 @@ static void parseArgs(int argc, char **argv,
 
 
 
-
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
 static volatile int cpu=-1;
-static std::atomic<uint32_t> droppedPackets;
-static std::atomic<uint32_t> droppedTicks;
+static int64_t discardedPackets, discardedBytes;
+static int32_t discardedTicks;
+
+
 typedef struct threadStruct_t {
     char filename[101];
 } threadStruct;
@@ -351,16 +334,16 @@ typedef struct threadStruct_t {
 // Thread to send to print out rates
 static void *thread(void *arg) {
 
-    uint64_t packetCount, byteCount;
-    uint64_t prevTotalPackets, prevTotalBytes;
-    uint64_t currTotalPackets, currTotalBytes;
+    int64_t packetCount, byteCount;
+    int64_t prevTotalPackets, prevTotalBytes;
+    int64_t currTotalPackets, currTotalBytes;
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
 
     // File writing stuff
     bool writeToFile = false;
-    threadStruct *targ = static_cast<threadStruct *>(arg);
+    auto *targ = static_cast<threadStruct *>(arg);
     char *filename = targ->filename;
     FILE *fp;
     if (strlen(filename) > 0) {
@@ -370,7 +353,7 @@ static void *thread(void *arg) {
         // validate file open for writing
         if (!fp) {
             fprintf(stderr, "file open failed: %s\n", strerror(errno));
-            return (NULL);
+            return (nullptr);
         }
 
         // Write column headers
@@ -379,7 +362,7 @@ static void *thread(void *arg) {
 
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
-    int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
+    int64_t totalT = 0, time, discardedPkts, totalDiscardedPkts = 0, discardedTiks, totalDiscardedTiks = 0;
     struct timespec t1, t2, firstT;
 
     // Get the current time
@@ -424,29 +407,29 @@ static void *thread(void *arg) {
         }
 
         // Dropped stuff rates
-        droppedPkts = droppedPackets;
-        droppedPackets.store(0);
-        totalDroppedPkts += droppedPkts;
+        discardedPkts = discardedPackets;
+        discardedPackets = 0;
+        totalDiscardedPkts += discardedPkts;
 
-        droppedTiks = droppedTicks;
-        droppedTicks.store(0);
-        totalDroppedTiks += droppedTiks;
+        discardedTiks = discardedTicks;
+        discardedTicks = 0;
+        totalDiscardedTiks += discardedTiks;
 
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        if (packetCount == 0 && droppedPkts == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = 0?/everything? ", pktRate, pktAvgRate);
+        if (packetCount == 0 && discardedPkts == 0) {
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = 0?/everything? ", pktRate, pktAvgRate);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 " ", pktRate, pktAvgRate, droppedPkts);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = %" PRId64 ",  total %" PRId64 " ",
+                   pktRate, pktAvgRate, discardedPkts, totalDiscardedPkts);
         }
-        printf(": Dropped Ticks = %" PRId64 ", total = %" PRId64 "\n", droppedTiks, totalDroppedTiks);
+        printf(": Dumped Ticks = %" PRId64 ", total = %" PRId64 "\n", discardedTiks, totalDiscardedTiks);
 
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped pkts %" PRId64 ", total %" PRId64 "\n",
-               dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
+        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d\n", dataRate, dataAvgRate, cpu);
 
         totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
         totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
@@ -454,7 +437,7 @@ static void *thread(void *arg) {
 
         if (writeToFile) {
             fprintf(fp, "%" PRId64 ",%d,%d,%" PRId64 ",%" PRId64 ",%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
-                    droppedPkts, totalDroppedPkts, cpu);
+                    discardedPkts, totalDiscardedPkts, cpu);
             fflush(fp);
         }
 
@@ -462,7 +445,7 @@ static void *thread(void *arg) {
     }
 
     fclose(fp);
-    return (NULL);
+    return (nullptr);
 }
 
 
@@ -481,7 +464,6 @@ typedef struct threadArg_t {
     uint64_t expectedTick;
     uint32_t tickPrescale;
 
-    int core;
     int tcpSocket;
 
 } threadArg;
@@ -497,28 +479,8 @@ static void *sendingThread(void *arg) {
     threadArg *tArg = (threadArg *) arg;
     std::shared_ptr<ejfat::BufferSupply> supply = tArg->supply;
     bool debug    = tArg->debug;
-//    int core      = tArg->core;
     int tcpSocket = tArg->tcpSocket;
 
-//#ifdef __linux__
-//
-//    if (core > -1) {
-//        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-//        cpu_set_t cpuset;
-//        CPU_ZERO(&cpuset);
-//
-//        std::cerr << "Run assemble reading thd on core " << core << "\n";
-//        CPU_SET(core, &cpuset);
-//
-//        pthread_t current_thread = pthread_self();
-//        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-//        if (rc != 0) {
-//            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-//        }
-//    }
-//
-//
-//#endif
 
     while (true) {
         //------------------------------------------------------
@@ -567,8 +529,7 @@ int main(int argc, char **argv) {
     int bufSize = 1020000;
     int recvBufSize = 0;
     int tickPrescale = 1;
-    int rtPriority = 0;
-    uint16_t port = 7777;
+    uint16_t port = 17750;
     uint16_t serverPort = 8888;
     int cores[10];
     bool debug = false;
@@ -588,7 +549,7 @@ int main(int argc, char **argv) {
         cores[i] = -1;
     }
 
-    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, &port, &rtPriority, &debug,
+    parseArgs(argc, argv, &bufSize, &recvBufSize, &tickPrescale, cores, &port, &debug,
               &useIPv6, listeningAddr, filename, server, &serverPort, interface);
 
 
@@ -786,22 +747,14 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
 
-    /*
-     * Map to hold out-of-order packets.
-     * map key = sequence/offset from incoming packet
-     * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes),
-     * (is last packet), (is first packet).
-     */
-    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
-
     // Track cpu by calling sched_getcpu roughly once per sec
     int cpuLoops = 50000;
     int loopCount = cpuLoops;
 
     // Statistics
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
-    droppedTicks.store(0);
-    droppedPackets.store(0);
+    discardedTicks = 0;
+    discardedPackets = 0;
 
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
@@ -824,9 +777,9 @@ int main(int argc, char **argv) {
         size_t bufCapacity = itemBuf->capacity();
 
         // Fill with data
-        nBytes = getCompletePacketizedBuffer(buffer, bufCapacity, udpSocket,
+        nBytes = getCompletePacketizedBufferNew(buffer, bufCapacity, udpSocket,
                                              debug, &tick, &dataId, stats,
-                                             tickPrescale, outOfOrderPackets);
+                                             tickPrescale);
         if (nBytes < 0) {
             if (nBytes == BUF_TOO_SMALL) {
                 fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
@@ -863,8 +816,9 @@ int main(int argc, char **argv) {
         totalPackets += stats->acceptedPackets;
 
         // atomic
-        droppedTicks   += stats->discardedBuffers;
-        droppedPackets += stats->droppedPackets;
+        discardedTicks   += stats->discardedBuffers;
+        discardedBytes   += stats->discardedBytes;
+        discardedPackets += stats->discardedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
