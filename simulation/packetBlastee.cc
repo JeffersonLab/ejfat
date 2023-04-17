@@ -270,8 +270,8 @@ static void parseArgs(int argc, char **argv,
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0;
 static volatile int cpu=-1;
-static uint32_t droppedPackets;
-static uint32_t droppedTicks;
+static int64_t discardedPackets, discardedBytes;
+static int32_t discardedTicks;
 
 typedef struct threadStruct_t {
     char filename[101];
@@ -281,9 +281,9 @@ typedef struct threadStruct_t {
 // Thread to send to print out rates
 static void *thread(void *arg) {
 
-    uint64_t packetCount, byteCount;
-    uint64_t prevTotalPackets, prevTotalBytes;
-    uint64_t currTotalPackets, currTotalBytes;
+    int64_t packetCount, byteCount;
+    int64_t prevTotalPackets, prevTotalBytes;
+    int64_t currTotalPackets, currTotalBytes;
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
@@ -309,7 +309,7 @@ static void *thread(void *arg) {
 
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
-    int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
+    int64_t totalT = 0, time, discardedPkts, totalDiscardedPkts = 0, discardedTiks, totalDiscardedTiks = 0;
     struct timespec t1, t2, firstT;
 
     // Get the current time
@@ -354,29 +354,29 @@ static void *thread(void *arg) {
         }
 
         // Dropped stuff rates
-        droppedPkts = droppedPackets;
-        droppedPackets = 0;
-        totalDroppedPkts += droppedPkts;
+        discardedPkts = discardedPackets;
+        discardedPackets = 0;
+        totalDiscardedPkts += discardedPkts;
 
-        droppedTiks = droppedTicks;
-        droppedTicks = 0;
-        totalDroppedTiks += droppedTiks;
+        discardedTiks = discardedTicks;
+        discardedTicks = 0;
+        totalDiscardedTiks += discardedTiks;
 
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        if (packetCount == 0 && droppedPkts == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = 0?/everything? ", pktRate, pktAvgRate);
+        if (packetCount == 0 && discardedPkts == 0) {
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = 0?/everything? ", pktRate, pktAvgRate);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 " ", pktRate, pktAvgRate, droppedPkts);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = %" PRId64 ",  total %" PRId64 " ",
+                     pktRate, pktAvgRate, discardedPkts, totalDiscardedPkts);
         }
-        printf(": Dropped Ticks = %" PRId64 ", total = %" PRId64 "\n", droppedTiks, totalDroppedTiks);
+        printf(": Dumped Ticks = %" PRId64 ", total = %" PRId64 "\n", discardedTiks, totalDiscardedTiks);
 
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped pkts %" PRId64 ", total %" PRId64 "\n",
-               dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
+        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d\n", dataRate, dataAvgRate, cpu);
 
         totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
         totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
@@ -384,7 +384,7 @@ static void *thread(void *arg) {
 
         if (writeToFile) {
             fprintf(fp, "%" PRId64 ",%d,%d,%" PRId64 ",%" PRId64 ",%d\n", totalT/1000000, (int)(pktRate/1000), (int)(dataRate),
-                    droppedPkts, totalDroppedPkts, cpu);
+                    discardedPkts, totalDiscardedPkts, cpu);
             fflush(fp);
         }
 
@@ -577,8 +577,8 @@ int main(int argc, char **argv) {
 
     // Statistics
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
-    droppedTicks = 0;
-    droppedPackets = 0;
+    discardedTicks = 0;
+    discardedPackets = 0;
 
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
@@ -624,8 +624,9 @@ int main(int argc, char **argv) {
         totalPackets += stats->acceptedPackets;
 
         // stats
-        droppedTicks   += stats->droppedBuffers;
-        droppedPackets += stats->droppedPackets;
+        discardedTicks   += stats->discardedBuffers;
+        discardedBytes   += stats->discardedBytes;
+        discardedPackets += stats->discardedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
