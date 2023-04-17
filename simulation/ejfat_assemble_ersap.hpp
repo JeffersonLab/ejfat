@@ -908,6 +908,15 @@ static inline uint64_t bswap_64(uint64_t x) {
                             diff = packetTick - expectedTick;
                             diff = (diff < 0) ? -diff : diff;
                             droppedTicks = diff / tickPrescale;
+
+                            // In this case, it includes the discarded bufs (which it should not)
+                            stats->droppedBuffers   += droppedTicks; // estimate
+
+                            // This works if all the buffers coming in are exactly the same size.
+                            // If they're not, then the # of packets of this buffer
+                            // is used to guess at how many packets were dropped for the dropped tick(s).
+                            // Again, this includes discarded packets which it should not.
+                            stats->droppedPackets += droppedTicks * pktCount;
                         }
 
                         stats->acceptedBytes    += totalBytesRead;
@@ -916,14 +925,6 @@ static inline uint64_t bswap_64(uint64_t x) {
                         stats->discardedBytes   += discardedBytes;
                         stats->discardedPackets += discardedPackets;
                         stats->discardedBuffers += discardedBufs;
-
-                        // In this case, it includes the discarded bufs (which it should not)
-                        stats->droppedBuffers   += droppedTicks; // estimate
-                        // This works if all the buffers coming in are exactly the same size.
-                        // If they're not, then the # of packets of this buffer
-                        // is used to guess at how many packets were dropped for the dropped tick(s).
-                        // Again, this includes discarded packets which it should not.
-                        stats->droppedPackets += droppedTicks * pktCount;
                     }
 
                     break;
