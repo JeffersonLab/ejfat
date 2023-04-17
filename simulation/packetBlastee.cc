@@ -563,14 +563,6 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
 
-    /*
-     * Map to hold out-of-order packets.
-     * map key = sequence/offset from incoming packet
-     * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes),
-     * (is last packet), (is first packet).
-     */
-    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
-
     // Track cpu by calling sched_getcpu roughly once per sec
     int cpuLoops = 50000;
     int loopCount = cpuLoops;
