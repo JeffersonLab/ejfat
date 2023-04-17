@@ -121,8 +121,7 @@ set(DIS_EXEC_FILES
         simulation/scatter.cc
         simulation/gather.cc
         simulation/testBufSupply.cc
-        simulation/packetBlasteeNew.cc
-        simulation/packetBlasteeNew2.cc
+        simulation/packetBlasteeFull.cc
         simulation/packetBlasteeTcpMT.cc
         )
 
@@ -143,9 +142,7 @@ set(SIM_EXEC_FILES
         simulation/packetBlastee.cc
         simulation/packetBlasteeTcp.cc
         simulation/packetBlaster.cc
-        simulation/packetBlasterNew.cc
         simulation/packetBlasterSmall.cc
-        simulation/packetBlaster2.cc
         )
 
 set(CLAS_EXEC_FILES
