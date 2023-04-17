@@ -11,33 +11,39 @@
 /**
  * @file
  * <p>
- * Receive generated data sent by packetBlasterNew.c program(s).
+ * Receive generated data sent by one or more packetBlaster.c programs.
  * This assumes there is an emulator or FPGA between this and the sending program.
  * Note that this program uses fast, non-locking ring buffers.
+ * This program is intended to be a full-blown implementation of how to handle multiple
+ * data sources coming into 1 socket and having it all sorted and assembled into separate
+ * buffers which can then be accessed by the user.
  * </p>
  *
  * <p>
- * In this program, a single, main thread reads from a single socket in which packets from multiple data sources
- * are arriving. There is a ring buffer with pre-allocated structures in which to store the
- * incoming packets. There is 2 additional threads which read packets from that ring in order to do the
- * reassembly. One of these reassembles even numbered ticks and the other odd.
+ * In this program, a single, main thread reads from a single socket in which packets from
+ * multiple (16 max) data sources are arriving. There is a ring buffer with pre-allocated
+ * structures in which to store the incoming packets. There are N (up to 3) additional
+ * threads which read packets from that ring in order to do the
+ * reassembly. Each of these reassembles the Nth numbered event with a different offset
+ * so that each ends up reassembling different events.
  * There are also threads to do calculate rates and to read/dump reassembled buffers.
  * </p>
  * <p>
  * There are maps temporarily containing buffers in which to store reassembled data,
  * one for each incoming data source and specific tick.
  * The buffers come from a ring source much like the structs that hold packets also come from a (different) ring.
- * In the 2nd/3rd threads, packets are retrieved from that packet ring. These are placed in the proper buffer.
- * A buffer for a specific source/tick may already exist
+ * In the reassembly threads, packets are retrieved from the packet ring. These are placed in the proper buffer.
+ * In each of these N threads there is one buffer source for each data source id.
+ * A buffer for a specific source/tick may already exist from previous use
  * (if not a new buf is grabbed) and it's filled with corresponding data.
  * When a buffer is fully reassembled, it's put back into the buffer ring from which it came.
- * There is one buffer supply for each of these 2 reassembly threads.
  * Note that while a buffer is being reassembled there is a place to store
  * it and find it according to its tick value (in unordered_map).
  * </p>
  * <p>
- * There are 1 thread which pull off all reassembled buffers. Also another to do stats.
- * There is some sensitivity to the number of packets in each PacketsItem. Best value seems to be 20.
+ * There are threads which pull off all reassembled buffers - one for each data source.
+ * Also another thread to do stats.
+ * There is some sensitivity to the number of packets in each PacketsItem. Best value seems to be around 20.
  * </p>
  *
  * <p>
@@ -48,17 +54,17 @@
  * Each receiving thread is looking for certain ticks. If there are 2 such threads, one looks for event ticks
  * and the other, odd. So pick the thread looking at even ticks. It knows how many sources are expected and
  * their values (given as cmd line args). One buffer is used to construct/contain data for one src and one tick.
- *
  * </p>
  *
  * <p>
- * Look on my Mac at /Users/timmer/DataGraphs/NumaNodes.xlsx.
- * Use packetBlasterNew to produce events.
- * To produce events at roughly 2.9GB/s, use arg "-cores 60" where 60 can just as
+ * Look on Carl Timmer's Mac at /Users/timmer/DataGraphs/NumaNodes.xlsx in order see results
+ * of a study of the ejfat nodes at Jefferson Lab, 100Gb network.
+ * Use packetBlaster.cc to produce events.
+ * To produce events at roughly 3 GB/s, use arg "-cores 60" where 60 can just as
  * easily be 0-63. To produce at roughly 3.4 GB/s, use cores 64-79, 88-127.
  * To produce at 4.7 GB/s, use cores 80-87. (Notices cores # start at 0).
- * This receiver will be able to receive all data sent at
- * 2.9GB/s, any more than that and it starts dropping packets.
+ * This receiver will be able to receive all data sent at about
+ * 3 GB/s, any more than that and it starts dropping packets.
  * To receive at that rate, the args "-pinRead 80 -pinCnt 5" must be used to specify the fastest
  * network cores for reading packets, and needs at least 5 of them to distribute the work.
  * Even then packets are occasionally dropped.
@@ -138,6 +144,7 @@ static void printHelp(char *programName) {
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
+    fprintf(stderr, "        It can receive from multiple data sources simultaneously.\n");
 }
 
 
@@ -649,6 +656,7 @@ static void *rateThread(void *arg) {
 
             // TODO: currently cpuPkt holds nothing, set in main thread - one value
 
+            // TODO: look at this to see if it works for multiple sources
 #ifdef __linux__
             printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n\n",
                    dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
@@ -674,13 +682,11 @@ static void *rateThread(void *arg) {
 
         }
 
-//        printf("     Combined Bufs:    %u\n\n", stats[0]->combinedBuffers);
-
         t1 = tEnd;
     }
 
     fclose(fp);
-    return (NULL);
+    return (nullptr);
 }
 
 
@@ -763,7 +769,7 @@ typedef struct threadArg_t {
  * fully assembled buffers.
  * </p>
  * <p>
- * How does is the decision made to discard packets?
+ * How is the decision made to discard packets?
  * If packets come out-of-order, more than one buffer may be being constructed at ony one time.
  * This thread tracks the biggest tick # received from each source.
  * If the buffer for a particular tick has not been completed (due to missing packets),
@@ -782,7 +788,7 @@ typedef struct threadArg_t {
  * What happens if a data source dies and restarts?
  * This causes the tick sequence to restart. In order to avoid causing problems
  * calculating various stats, like rates, the "biggest tick" from a source is
- * reset if 1000 packets with smaller ticks show up after.
+ * reset if 100 packets with smaller ticks show up after.
  * </p>
  *
  *
@@ -875,7 +881,7 @@ static void *threadAssemble(void *arg) {
     // Need to figure out if source was killed and restarted, i.e. the tick number
     // sequence has restarted. Account for this if we want stats to be accurate.
     // Do this by counting # of ticks below the max tick received. If we get
-    // 1000 smaller ticks, time to reset the max tic.
+    // 100 smaller ticks, time to reset the max tic.
     // One count for each source: key = source id, val = # of smaller ticks received
     std::unordered_map<int, int> smallerTicks;
 
@@ -955,8 +961,8 @@ std::cout << "Unexpected data source, id = " << srcId << ", ignoring this data" 
                     else if (hdr->tick < largestTick - tickBandwidth) {
                         // If here, we got a tick very much smaller than we should
 
-                        if (++smallerTicks[srcId] > 1000) {
-                            // Got a much smaller tick 1000x so sequence has been restarted, reset stats
+                        if (++smallerTicks[srcId] > 100) {
+                            // Got a much smaller tick 100x so sequence has been restarted, reset stats
                             largestSavedTick[srcId] = hdr->tick;
                             smallerTicks[srcId] = 0;
 
@@ -1010,7 +1016,7 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
                         largestSavedTick[srcId] = hdr->tick;
                     }
                     else if (hdr->tick < largestTick - tickBandwidth) {
-                        if (++smallerTicks[srcId] > 1000) {
+                        if (++smallerTicks[srcId] > 100) {
                             largestSavedTick[srcId] = hdr->tick;
                             smallerTicks[srcId] = 0;
 
@@ -1283,7 +1289,7 @@ int main(int argc, char **argv) {
     uint32_t bufSize = 100000;
     int recvBufSize = 0;
     int tickPrescale = 1;
-    uint16_t startingPort = 7777;
+    uint16_t startingPort = 17750;
     int startingCore = -1;
     int coreCount = 1;
     int startingBufCore = -1;
