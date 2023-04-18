@@ -10,9 +10,10 @@
 
 /**
  * <p>
- * @file Send a single data buffer (full of random data) repeatedly
+ * @file Read the given HIPO data file and send each event in it
  * to an ejfat router (FPGA-based or simulated) which then passes it
- * to the receiving program packetBlastee.cc.
+ * to the receiving program - possibly packetBlastee.cc but more likely
+ * packetBlasteeEtFifoClient.cc .
  * Try /daqfs/java/clas_005038.1231.hipo on the DAQ group disk.
  * </p>
  */
@@ -55,7 +56,7 @@ static void printHelp(char *programName) {
             programName,
             "        -f <filename>",
             "        [-r <# repeat read-file cycles>]",
-            "        [-h] [-v] [-ip6]",
+            "        [-h] [-v] [-ip6] [-sync]",
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
@@ -76,6 +77,7 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
+    fprintf(stderr, "        The -sync arg will send a UDP message to LB every second with last tick sent.\n");
 }
 
 
@@ -89,7 +91,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint32_t *repeats,
                       int *cores,
                       bool *debug,
-                      bool *useIPv6, bool *bufDelay,
+                      bool *useIPv6, bool *bufDelay, bool *sendSync,
                       char* host, char *interface, char *filename) {
 
     *mtu = 0;
@@ -104,6 +106,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"ver",   1, NULL, 3},
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
+             {"sync",   0, NULL, 6},
              {"dpre",  1, NULL, 9},
              {"tpre",  1, NULL, 10},
              {"ipv6",  0, NULL, 11},
@@ -271,6 +274,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     exit(-1);
                 }
                 *protocol = i_tmp;
+                break;
+
+            case 6:
+                // do we send sync messages to LB?
+                *sendSync = true;
                 break;
 
             case 9:
@@ -489,9 +497,9 @@ static void *thread(void *arg) {
         // Must print out t to keep it from being optimized away
         printf(" Data:    %3.4g MB/s,  %3.4g Avg\n", rate, avgRate);
 
-        // Data rates (with header info)
-        totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
-        totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
+        // Data rates (with RE header info)
+        totalRate = ((double) (byteCount + RE_HEADER_BYTES*packetCount)) / time;
+        totalAvgRate = ((double) (currTotalBytes + RE_HEADER_BYTES*currTotalPackets)) / totalT;
         printf(" Total:    %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
 
 
@@ -529,7 +537,9 @@ int main(int argc, char **argv) {
     bool debug = false;
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false;
+    bool sendSync = false;
 
+    char syncBuf[28];
     char host[INPUT_LENGTH_MAX], interface[16], filename[256];
     memset(host, 0, INPUT_LENGTH_MAX);
     memset(interface, 0, 16);
@@ -544,7 +554,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufRate, &avgBufSize, &sendBufSize,
               &delayPrescale, &tickPrescale,  &repeats, cores, &debug,
-              &useIPv6, &bufDelay, host, interface, filename);
+              &useIPv6, &bufDelay, &sendSync, host, interface, filename);
 
 #ifdef __linux__
 
@@ -757,7 +767,8 @@ int main(int argc, char **argv) {
     // Statistics & rate setting
     int64_t packetsSent=0;
     int64_t elapsed, microSecItShouldTake;
-    struct timespec t1, t2;
+    uint64_t syncTime;
+    struct timespec t1, t2, tStart, tEnd;
     int64_t excessTime, lastExcessTime = 0, buffersAtOnce, countDown;
     uint64_t byteRate = 0L;
 
@@ -785,7 +796,8 @@ int main(int argc, char **argv) {
     }
 
 
-    index = 0;
+    uint32_t evtRate;
+    uint64_t bufsSent = 0UL;
 
     while (true) {
 
@@ -852,7 +864,34 @@ int main(int argc, char **argv) {
             exit(1);
         }
 
-        // spin delay
+        bufsSent++;
+        totalBytes   += byteSize;
+        totalPackets += packetsSent;
+        offset = 0;
+        tick += tickPrescale;
+
+        if (sendSync) {
+            clock_gettime(CLOCK_MONOTONIC, &tEnd);
+            syncTime = 1000000000UL * (tEnd.tv_sec - tStart.tv_sec) + (tEnd.tv_nsec - tStart.tv_nsec);
+
+            // if >= 1 sec ...
+            if (syncTime >= 1000000000UL) {
+                // Calculate buf or event rate in Hz
+                evtRate = bufsSent/(syncTime/1000000000);
+
+                // Send sync message to same destination
+if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
+                setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
+                err = send(clientSocket, syncBuf, 28, 0);
+                if (err == -1) {
+                    fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
+                    return (-1);
+                }
+
+                tStart = tEnd;
+                bufsSent = 0;
+            }
+        }
 
         // delay if any
         if (bufDelay) {
@@ -861,11 +900,6 @@ int main(int argc, char **argv) {
                 delayCounter = delayPrescale;
             }
         }
-
-        totalBytes   += byteSize;
-        totalPackets += packetsSent;
-        offset = 0;
-        tick += tickPrescale;
 
         if (--loops < 1) {
             fprintf(stderr, "\nclasBlaster: finished %u loops reading & sending buffers from file\n\n", repeats);
