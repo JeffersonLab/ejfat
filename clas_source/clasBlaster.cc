@@ -21,7 +21,7 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <cstdint>
-#include <time.h>
+#include <ctime>
 #include <cmath>
 #include <thread>
 #include <pthread.h>
@@ -51,7 +51,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <filename>",
             "        [-r <# repeat read-file cycles>]",
@@ -69,8 +69,6 @@ static void printHelp(char *programName) {
             "        [-bufrate <buffers sent per sec>]",
             "        [-bufsize <if setting bufrate, AVERAGE byte size of a single buffer>]",
             "        [-s <UDP send buffer size>]",
-            "        [-fifo (Use SCHED_FIFO realtime scheduler for process - linux)]",
-            "        [-rr (Use SCHED_RR realtime scheduler for process - linux)]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
@@ -78,7 +76,6 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
-    fprintf(stderr, "        Using -sendnocp flag, data is sent using \"send()\" (connect called) and data copy minimized, but original data buffer changed\n");
 }
 
 
@@ -93,7 +90,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *cores,
                       bool *debug,
                       bool *useIPv6, bool *bufDelay,
-                      bool *useFIFO, bool *useRR,
                       char* host, char *interface, char *filename) {
 
     *mtu = 0;
@@ -115,8 +111,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"cores",  1, NULL, 13},
              {"bufrate",  1, NULL, 14},
              {"bufsize",  1, NULL, 15},
-             {"fifo",  0, NULL, 16},
-             {"rr",  0, NULL, 17},
              {0,       0, 0,    0}
             };
 
@@ -396,24 +390,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 break;
 
-            case 16:
-                // use FIFO realtime scheduler
-                if (*useRR) {
-                    fprintf(stderr, "Cannot specify both FIFO and RR, setting using RR to false\n");
-                }
-                *useFIFO = true;
-                *useRR = false;
-                break;
-
-            case 17:
-                // use RR (round robin) realtime scheduler
-                if (*useFIFO) {
-                    fprintf(stderr, "Cannot specify both FIFO and RR, setting using FIFO to false\n");
-                }
-                *useRR = true;
-                *useFIFO = false;
-                break;
-
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -522,7 +498,7 @@ static void *thread(void *arg) {
         t1 = t2;
     }
 
-    return (NULL);
+    return (nullptr);
 }
 
 
@@ -553,8 +529,6 @@ int main(int argc, char **argv) {
     bool debug = false;
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false;
-    bool useFIFO = false;
-    bool useRR = false;
 
     char host[INPUT_LENGTH_MAX], interface[16], filename[256];
     memset(host, 0, INPUT_LENGTH_MAX);
@@ -570,7 +544,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufRate, &avgBufSize, &sendBufSize,
               &delayPrescale, &tickPrescale,  &repeats, cores, &debug,
-              &useIPv6, &bufDelay, &useFIFO, &useRR, host, interface, filename);
+              &useIPv6, &bufDelay, host, interface, filename);
 
 #ifdef __linux__
 
@@ -601,68 +575,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cerr << "Initially running on cpu " << sched_getcpu() <<
-                  ", useFIFO = " << btoa(useFIFO)  << ", useRR = " << btoa(useRR) << "\n";
-
-    if (useFIFO || useRR) {
-        // Using the actual pid will set priority of main thd.
-        // Using 0 will set priority of calling thd.
-        pid_t myPid = getpid();
-        // myPid = 0;
-
-        struct sched_param param;
-        int policy = useFIFO ? SCHED_FIFO : SCHED_RR;
-
-        // Set process to correct priority for given scheduler
-        int priMax = sched_get_priority_max(policy);
-        int priMin = sched_get_priority_min(policy);
-
-        // If error
-        if (priMax == -1 || priMin == -1) {
-            perror("Error reading priority");
-            exit(EXIT_FAILURE);
-        }
-
-        if (rtPriority < 1 || rtPriority > priMax) {
-            rtPriority = priMax;
-        }
-        else if (rtPriority < priMin) {
-            rtPriority = priMin;
-        }
-
-        // Current scheduler policy
-        int currPolicy = sched_getscheduler(myPid);
-        if (currPolicy < 0) {
-            perror("Error reading policy");
-            exit(EXIT_FAILURE);
-        }
-        std::cerr << "Current Scheduling Policy: " << currPolicy <<
-                     " (RR = " << SCHED_RR << ", FIFO = " << SCHED_FIFO <<
-                     ", OTHER = " << SCHED_OTHER << ")" << std::endl;
-
-        // Set new scheduler policy
-        std::cerr << "Setting Scheduling Policy to: " << policy << ", pri = " << rtPriority << std::endl;
-        param.sched_priority = rtPriority;
-        int errr = sched_setscheduler(myPid, policy, &param);
-        if (errr < 0) {
-            perror("Error setting scheduler policy");
-            exit(EXIT_FAILURE);
-        }
-
-        errr = sched_getparam(myPid, &param);
-        if (errr < 0) {
-            perror("Error getting priority");
-            exit(EXIT_FAILURE);
-        }
-
-        currPolicy = sched_getscheduler(myPid);
-        if (currPolicy < 0) {
-            perror("Error reading policy");
-            exit(EXIT_FAILURE);
-        }
-
-        std::cerr << "New Scheduling Policy: " << currPolicy << ", pri = " <<  param.sched_priority <<std::endl;
-    }
+    std::cerr << "Initially running on cpu " << sched_getcpu() << "\n";
 
 #endif
 
@@ -926,9 +839,10 @@ int main(int argc, char **argv) {
         char *buf = &event.getEventBuffer()[0];
         byteSize = event.getSize();
 
-        err = sendPacketizedBufferFast(buf, byteSize,
+        err = sendPacketizedBufferSendNew(buf, byteSize,
                                        maxUdpPayload, clientSocket,
-                                       tick, protocol, entropy, version, dataId, &offset,
+                                       tick, protocol, entropy, version, dataId,
+                                       (uint32_t) byteSize, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
                                        firstBuffer, lastBuffer, debug, &packetsSent);
 
