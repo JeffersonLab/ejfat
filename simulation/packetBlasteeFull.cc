@@ -816,7 +816,11 @@ static void *threadAssemble(void *arg) {
     std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap = tArg->supplyMap;
 
     auto stats    = tArg->stats;
-    auto & mapp = *stats;
+    bool takeStats = stats != nullptr;
+    std::unordered_map<int, std::shared_ptr<packetRecvStats>> mapp;
+    if (takeStats) {
+        mapp = *stats;
+    }
 
     // expected max size of packets
     int mtu = tArg->mtu;
@@ -835,7 +839,6 @@ static void *threadAssemble(void *arg) {
     int loopCount = cpuLoops;
     int clearLoop = 1;
 
-    bool takeStats = stats != nullptr;
 
     std::shared_ptr<BufferItem>  bufItem;
     std::shared_ptr<PacketsItemN> pktItem;
@@ -1381,16 +1384,15 @@ int main(int argc, char **argv) {
     uint16_t dataId;
 
     // Shared pointer to map w/ key = source id & val = shared ptr of stats object
-    auto stats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
-    auto &mapp = *stats;
-    for (int i = 0; i < sourceCount; i++) {
-        if (keepStats) {
-fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
-            mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
-            clearStats(mapp[sourceIds[i]]);
-        }
-        else {
-            mapp[sourceIds[i]] = nullptr;
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats = nullptr;
+
+    if (keepStats) {
+        stats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
+        auto &mapp = *stats;
+        for (int i = 0; i < sourceCount; i++) {
+                fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
+                mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
+                clearStats(mapp[sourceIds[i]]);
         }
     }
 
