@@ -50,6 +50,10 @@ option(BUILD_TEST "Build test code" OFF)
 # cmake -DCMAKE_BUILD_TYPE=Debug ..
 set(CMAKE_BUILD_TYPE Debug)
 
+#add_compile_options(-Wall -Wextra)
+#add_compile_options(-O3)
+
+
 # Place libs & binaries in build/lib and bin (this is not for installation)
 set(LIBRARY_OUTPUT_PATH    ${CMAKE_BINARY_DIR}/lib)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
@@ -89,10 +93,6 @@ if (NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
     set(CMAKE_INSTALL_PLUGINDIR plugins CACHE PATH "Ersap plugins directory (plugins)")
 endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
-
-
-#add_compile_options(-Wall -Wextra)
-add_compile_options(-O3)
 
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
