@@ -826,7 +826,7 @@ int main(int argc, char **argv) {
     }
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
-    
+
     // Track cpu by calling sched_getcpu roughly once per sec
     int cpuLoops = 50000;
     int loopCount = cpuLoops;
@@ -956,7 +956,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "Receiving buffer is too small (%d), exit\n", bufSize);
             }
             else {
-                fprintf(stderr, "Error in getCompletePacketizedBuffer (%ld), exit\n", nBytes);
+                fprintf(stderr, "Error in getCompletePacketizedBufferNew (%ld), exit\n", nBytes);
             }
             et_close(id);
             return -1;
