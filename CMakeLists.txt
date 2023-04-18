@@ -48,10 +48,10 @@ option(BUILD_TEST "Build test code" OFF)
 
 # uncomment to put in debug symbols or do on command line with:
 # cmake -DCMAKE_BUILD_TYPE=Debug ..
-set(CMAKE_BUILD_TYPE Debug)
+#set(CMAKE_BUILD_TYPE Debug)
 
 #add_compile_options(-Wall -Wextra)
-#add_compile_options(-O3)
+add_compile_options(-O3)
 
 
 # Place libs & binaries in build/lib and bin (this is not for installation)
