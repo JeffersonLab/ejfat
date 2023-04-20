@@ -50,7 +50,7 @@ option(BUILD_TEST "Build test code" OFF)
 # cmake -DCMAKE_BUILD_TYPE=Debug ..
 #set(CMAKE_BUILD_TYPE Debug)
 
-#add_compile_options(-Wall -Wextra)
+#add_compile_options(-Wall)
 add_compile_options(-O3)
 
 
