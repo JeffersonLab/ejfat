@@ -586,8 +586,8 @@ int main(int argc, char **argv) {
         uint64_t diff, prevTick = tick;
 
         // Fill with data
-        nBytes = getCompletePacketizedBufferNew(dataBuf, bufSize, udpSocket,
-                                                debug, &tick, &dataId, stats, tickPrescale);
+        nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
+                                             debug, &tick, &dataId, stats, tickPrescale);
 
         if (nBytes < 0) {
             if (nBytes == BUF_TOO_SMALL) {

@@ -777,7 +777,7 @@ int main(int argc, char **argv) {
         size_t bufCapacity = itemBuf->capacity();
 
         // Fill with data
-        nBytes = getCompletePacketizedBufferNew(buffer, bufCapacity, udpSocket,
+        nBytes = getCompletePacketizedBuffer(buffer, bufCapacity, udpSocket,
                                              debug, &tick, &dataId, stats,
                                              tickPrescale);
         if (nBytes < 0) {

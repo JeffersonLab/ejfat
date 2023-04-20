@@ -256,14 +256,6 @@ static void *thread(void *arg) {
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
 
-    /*
-     * Map to hold out-of-order packets.
-     * map key = sequence/offset from incoming packet
-     * map value = tuple of (buffer of packet data which was allocated), (bufSize in bytes),
-     * (is last packet), (is first packet).
-     */
-    std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
-
     // Statistics
     uint32_t packetCount=0, tickPrescale = 1;
     int64_t packetsRead=0, byteCount=0, totalBytes=0, totalPackets=0;
@@ -280,8 +272,7 @@ static void *thread(void *arg) {
 
         // Fill with data
         ssize_t nBytes = getCompletePacketizedBuffer((char *)buf->array(), bufSize, udpSocket,
-                                                      debug, &tick, &dataId, stats, tickPrescale,
-                                                      outOfOrderPackets);
+                                                     debug, &tick, &dataId, stats, tickPrescale);
         if (nBytes < 0) {
             if (debug) {
                 if (nBytes == BUF_TOO_SMALL) {
@@ -316,7 +307,6 @@ static void *thread(void *arg) {
             break;
         }
 
-        outOfOrderPackets.clear();
     }
 
     return (NULL);

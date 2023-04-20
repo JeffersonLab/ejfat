@@ -9,9 +9,9 @@
 
 
 /**
- * @file Receive locally generated data sent by udp_send_order.c program.
- * This program handles sequentially numbered packets that may arrive out-of-order.
- * This assumes there is an emulator or FPGA between this and the sending program.
+ * @file Receive locally generated data sent by udp_send_order.cc program.
+ * This program does <b>not</b> handle packets that arrive out-of-order.
+ * This assumes there is a load balancing FPGA between this and the sending program.
  */
 
 #include "ejfat_assemble_ersap.hpp"
@@ -209,9 +209,9 @@ int main(int argc, char **argv) {
     bool last, firstRead = true;
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
-    uint32_t offset = 0;
+    uint32_t packetCount = 0, offset = 0;
+    uint16_t srcId;
     char dataBuf[bufSize];
-    uint32_t bytesPerPacket, packetCount;
 
     /*
      * Map to hold out-of-order packets.
@@ -222,10 +222,11 @@ int main(int argc, char **argv) {
     std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> outOfOrderPackets;
 
 
+
     while (true) {
         nBytes = getPacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                     debug, firstRead, &last, &tick, &offset,
-                                     &bytesPerPacket, &packetCount, outOfOrderPackets);
+                                     debug, firstRead, &last,
+                                     &srcId, &tick, &offset, &packetCount);
         if (nBytes < 0) {
             if (debug) fprintf(stderr, "Error in getPacketizerBuffer, %ld\n", nBytes);
             break;
