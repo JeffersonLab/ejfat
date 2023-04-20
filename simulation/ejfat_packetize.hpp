@@ -53,6 +53,7 @@
 #ifdef ADD_LB_HEADER
     #define LB_HEADER_BYTES_OLD 16
     #define HEADER_BYTES_OLD    34
+    #define RE_HEADER_BYTES_OLD 18
 
     #define LB_HEADER_BYTES  16
     #define HEADER_BYTES     36
@@ -471,7 +472,6 @@ namespace ejfat {
             veryFirstPacket = true;
         }
 
-        uint32_t packetCounter = *offset;
         // Use this flag to allow transmission of a single zero-length buffer
         bool firstLoop = true;
 
@@ -521,7 +521,6 @@ namespace ejfat {
                     // If this is still the first packet, we can try again. Try 20% reduction.
                     maxUdpPayload = maxUdpPayload * 8 / 10;
                     veryLastPacket = false;
-                    packetCounter--;
                     fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
                     goto startAgain;
                 }
@@ -558,15 +557,13 @@ namespace ejfat {
                 }
             }
 
-            // packetCounter++ acted as offset in old system
             localOffset    += bytesToWrite;
             dataLen        -= bytesToWrite;
             writeHeaderTo  += bytesToWrite;
             veryFirstPacket = false;
             firstLoop       = false;
 
-            if (debug) fprintf(stderr, "Sent pkt %u, remaining bytes = %lu\n\n",
-                              (packetCounter - 1), dataLen);
+            if (debug) fprintf(stderr, "Remaining bytes = %lu\n\n", dataLen);
         }
 
         // This should be equivalent to offset = offset + dataLen

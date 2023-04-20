@@ -834,17 +834,16 @@ static void *threadAssemble(void *arg) {
     int tickPrescale = tArg->tickPrescale;
     std::cerr << "Assemble thd tickPrescale = " << tickPrescale << "\n";
 
-    // Track cpu by calling sched_getcpu roughly once per sec or 2
-    int cpuLoops = 2000;
-    int loopCount = cpuLoops;
-    int clearLoop = 1;
-
-
     std::shared_ptr<BufferItem>  bufItem;
     std::shared_ptr<PacketsItemN> pktItem;
     std::shared_ptr<ByteBuffer>  buf;
 
 #ifdef __linux__
+
+//    // Track cpu by calling sched_getcpu roughly once per sec or 2
+//    int cpuLoops = 2000;
+//    int loopCount = cpuLoops;
+//    int clearLoop = 1;
 
     if (core > -1) {
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
@@ -1287,7 +1286,6 @@ static void *threadReadBuffers(void *arg) {
 int main(int argc, char **argv) {
 
     int status;
-    ssize_t nBytes;
     // Set this to max expected data size
     uint32_t bufSize = 100000;
     int recvBufSize = 0;
@@ -1374,14 +1372,7 @@ int main(int argc, char **argv) {
     recvBufSize = recvBufSize <= 0 ? 25000000 : recvBufSize;
 #endif
 
-    // Let's start with 100kB buffers
-    int BUFSIZE = 100000;
     int TIMEOUT = 1;
-    int sockfd, retval;
-
-    // Start with offset 0 in very first packet to be read
-    uint64_t tick = 0L;
-    uint16_t dataId;
 
     // Shared pointer to map w/ key = source id & val = shared ptr of stats object
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats = nullptr;

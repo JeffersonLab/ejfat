@@ -623,9 +623,11 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
 
+#ifdef __linux__
     // Track cpu by calling sched_getcpu roughly once per sec
     int cpuLoops = 50000;
     int loopCount = cpuLoops;
+#endif
 
     // Statistics
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();

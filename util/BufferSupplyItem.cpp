@@ -45,7 +45,7 @@ namespace ejfat {
     /** Function to create BufferSupplyItems by RingBuffer. */
     const std::function< std::shared_ptr<BufferSupplyItem> () >& BufferSupplyItem::eventFactory() {
         static std::function< std::shared_ptr<BufferSupplyItem> () > result([]  {
-            return std::move(std::make_shared<BufferSupplyItem>());
+            return std::make_shared<BufferSupplyItem>();
         });
         return result;
     }
