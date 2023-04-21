@@ -451,6 +451,8 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer arg.
+         * This header limits transmission of a single buffer to less than
+         * 2^32 = 4.29496e9 bytes in size.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
@@ -2701,7 +2703,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 pktCount++;
                 nextOffset = packetOffset + dataBytes;
 
-                if (length >= nextOffset) {
+                if (nextOffset >= length) {
                     // We're done reading pkts for full reassembly
                     *last = true;
                     break;
