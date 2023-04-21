@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
     }
 
     size_t totalRead = 0;
-    bool last, firstRead = true;
+    bool last = false, firstRead = true;
     // Start with offset 0 in very first packet to be read
     uint64_t tick = 0L;
     uint32_t packetCount = 0, offset = 0;
