@@ -361,7 +361,7 @@ int main(int argc, char **argv) {
         totalBytes += nBytes;
 
         if (readingFromFile) {
-            if (totalBytes == fileSize) {
+            if (totalBytes >= fileSize) {
                 lastBuffer = true;
             }
         }
@@ -374,7 +374,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        fprintf(stderr, "Sending offset = %u, tick = %" PRIu64 "\n", offset, tick);
+//fprintf(stderr, "Sending offset = %u, tick = %" PRIu64 "\n", offset, tick);
         err = sendPacketizedBufferFastNew(buf, nBytes, maxUdpPayload, clientSocket,
                                           tick, protocol, entropy, version, dataId, fileSize,
                                           &offset, delay, delayPrescale, &delayCounter,
@@ -403,7 +403,7 @@ int main(int argc, char **argv) {
                 rewind(fp);
                 continue;
             }
-            fprintf(stderr, "\n ******* last buffer send, END reading\n\n");
+            fprintf(stderr, "\n ******* last buffer sent, END reading\n\n");
             break;
         }
     }
