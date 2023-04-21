@@ -318,9 +318,15 @@ int main(int argc, char **argv) {
             return -1;
         }
         readingFromFile = true;
+
         // find the size of the file
         fseek(fp, 0L, SEEK_END);
         fileSize = ftell(fp);
+        if (fileSize > UINT32_MAX) {
+            fprintf(stderr, "\n ******* file %s, too large to send as a \"single\" buffer, %zu \n\n", fileName, fileSize);
+            return -1;
+        }
+
         rewind(fp);
     }
     else {
