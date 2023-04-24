@@ -2611,9 +2611,6 @@ static inline uint64_t bswap_64(uint64_t x) {
             uint64_t packetTick;
             uint64_t firstTick = *tick;
 
-            // first read in this method
-            bool firstRead = true;
-
             int  version, rejectedPkt = 0;
             uint16_t packetDataId;
             uint16_t firstSrcId = *srcId;
@@ -2698,7 +2695,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 memcpy(dataBuf + offsetLocal, pkt + HEADER_BYTES, dataBytes);
 
                 totalBytesRead += dataBytes;
-                veryFirstRead = firstRead = false;
+                veryFirstRead = false;
                 remainingLen -= dataBytes;
                 pktCount++;
                 nextOffset = packetOffset + dataBytes;

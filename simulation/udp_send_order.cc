@@ -57,16 +57,16 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {{"mtu",   1, NULL, 1},
-             {"host",  1, NULL, 2},
-             {"ver",   1, NULL, 3},
-             {"id",    1, NULL, 4},
-             {"pro",   1, NULL, 5},
-             {0,       0, 0,    0}
+            {{"mtu",   1, nullptr, 1},
+             {"host",  1, nullptr, 2},
+             {"ver",   1, nullptr, 3},
+             {"id",    1, nullptr, 4},
+             {"pro",   1, nullptr, 5},
+             {nullptr,       0, nullptr,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:c:e:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:c:e:", long_options, nullptr)) != EOF) {
 
         if (c == -1)
             break;
@@ -197,6 +197,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 break;
 
             case 'h':
+                fprintf(stderr, "Set argument -h to help\n");
                 help = true;
                 break;
 
@@ -208,7 +209,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
     }
 
     // Grab any default args not in option list
-    if(   !optarg
+    if (  !optarg
           && optind < argc // make sure optind is valid
           && nullptr != argv[optind] // make sure it's not a null string
           && '\0'    != argv[optind][0] // ... or an empty string
