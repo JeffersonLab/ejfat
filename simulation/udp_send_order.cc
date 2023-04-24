@@ -331,6 +331,7 @@ int main(int argc, char **argv) {
         rewind(fp);
     }
     else {
+        fprintf(stderr, "\n ******* Reading from stdin \n\n");
         fp = stdin;
     }
 
@@ -351,6 +352,7 @@ int main(int argc, char **argv) {
 
 
     while (true) {
+        clearerr(fp);
         nBytes = fread(buf, 1, bufsize, fp);
 
         // Check for error
