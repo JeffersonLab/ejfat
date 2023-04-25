@@ -117,6 +117,81 @@
 
 
         /**
+         * Look at all data sources for a single tick
+         * to see if the last bit has been set for each.
+         * Return the percentage of last bits set (0 - 100).
+         * {@link #getBuffers} already checked validity of data id info
+         * passed in through bufIds.
+         * When all last bits are found for a tick, all the entries
+         * associated with that tick in the endCondition map are removed.
+         *
+         * @param tick         tick value to examine.
+         * @param bufIds       set with all data id values in it.
+         * @param endCondition map with all last bit data in it.
+         * @return percent (0 - 100) of data sources for given tick which have set the "last" bit, or -1 if error.
+         */
+        static int percentLastBitsReceived(uint64_t tick, std::set<int> &bufIds,
+                                        std::map<std::pair<uint64_t, uint16_t>, bool> & endCondition)
+        {
+            int idCount = bufIds.size();
+            int endCount = 0, percent;
+            bool allHere = true;
+
+//            fprintf(stderr, "\npercentLastBitsReceived: id count = %d, endCondition size = %lu\n",
+//                    idCount, endCondition.size());
+
+            // There must be one end condition for each id
+            if (endCondition.size() != idCount) {
+                fprintf(stderr, "  too few sources reporting an end\n");
+                return -1;
+            }
+
+            // Look at all data sources for a single tick,
+            // to see if the last bit has been set for each.
+            // If so, return true, else return false.
+            for (const auto & i : endCondition) {
+                // ignore other ticks
+                if (i.first.first != tick) {
+                    continue;
+                }
+
+                // if dataId not contained in vector of ids
+                if (bufIds.count(i.first.second == 0)) {
+                    allHere = false;
+                    continue;
+                }
+
+                // if last bit not set
+                if (!i.second) {
+                    allHere = false;
+                    continue;
+                }
+
+                endCount++;
+            }
+
+            if (!allHere) {
+                percent = 100 * endCount / idCount;
+                return percent;
+            }
+
+            // Since we're done with this tick, remove it from the map
+            for (auto it = endCondition.cbegin(); it != endCondition.cend(); ) {
+                if (it->first.first == tick) {
+                    endCondition.erase(it++);    // or "it = m.erase(it)" since C++11
+                }
+                else {
+                    ++it;
+                }
+            }
+
+//            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %" PRIu64 "\n",
+//                    idCount, endCondition.size(), tick);
+            return 100;
+        }
+
+
+        /**
          * Assemble incoming packets into the given buffer.
          * It will return when the buffer has less space left than it read from the first packet
          * or when the "last" bit is set in a packet.
@@ -141,13 +216,11 @@
         {
 
             // Make this big enough to read a single jumbo packet
-            size_t packetBufSize = 10000;
+            size_t packetBufSize = 9100;
             char packetBuffer[packetBufSize];
 
-            // TODO: build if sequence is file offset
-
             uint64_t tick;
-            uint32_t sequence, expectedSequence;
+            uint32_t bufLen, bufOffset;
             bool packetFirst, packetLast, firstReadForBuf;
 
             // Set true when all buffers of a tick have received the lastPacket
@@ -166,9 +239,6 @@
             et_event *event;
             et_fifo_entry *entry;
 
-            // Key into buffers and expSequence maps and part of value in outOfOrderPackets
-            std::pair<uint64_t, uint16_t> key;
-
             //------------------------------------------------
             // Maps used to store quantities while sorting.
             // Note: most of these could be unordered_maps but,
@@ -181,13 +251,6 @@
             //     value = array of ET events (buffers)
             std::map<uint64_t, et_fifo_entry *> buffers;
 
-            // Map to hold out-of-order packets:
-            //     key   = tuple of {sequence, dataId, tick} (unique for each packet)
-            //     value = tuple of {smart ptr to vector of packet data bytes,
-            //                       is last packet, is first packet}
-            std::map<std::tuple<uint32_t, uint16_t, uint64_t>,
-                    std::tuple<std::unique_ptr<std::vector<char>>, bool, bool>> outOfOrderPackets;
-
             // Map to hold the max bytes per packet for each data source:
             //     key   = data source id
             //     value = max bytes per packet
@@ -197,11 +260,6 @@
             //     key   = pair of {tick, dataId}
             //     value = true if last bit received, else false
             std::map<std::pair<uint64_t, uint16_t>, bool> endCondition;
-
-            // Map to hold the next expected sequence for each tick-dataId combo:
-            //     key   = pair of {tick, dataId}
-            //     value = next expected sequence
-            std::map<std::pair<uint64_t, uint16_t>, uint32_t> expSequence;
 
             //------------------------------------------------
             // We're using buffers created in the ET system -
@@ -243,8 +301,6 @@
 
             while (true) {
 
-                // TODO: build if sequence is file offset
-
                 // Set true when all buffers of a tick have received the lastPacket
                 tickCompleted = false;
 
@@ -252,7 +308,7 @@
 
                 while (true) {
 
-                   // Read in one packet including reassembly header
+                    // Read in one packet including reassembly header
                     int bytesRead = recvfrom(udpSocket, packetBuffer, packetBufSize, 0,  nullptr, nullptr);
                     if (bytesRead < 0) {
                         if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
@@ -264,14 +320,11 @@
                     // Set data source for future copy
                     readDataFrom = packetBuffer + HEADER_BYTES;
 
-                    parseReHeaderOld(packetBuffer, &version, &packetFirst, &packetLast, &dataId, &sequence, &tick);
+                    parseReHeader(packetBuffer, &version, &dataId, &bufOffset, &bufLen, &tick);
                     if (debug) {
-                        fprintf(stderr, "\n\nPkt hdr: ver = %d, first = %s, last = %s, dataId = %hu, seq = %u, tick = %" PRIu64 ", nBytes = %d\n",
-                                version, btoa(packetFirst), btoa(packetLast), dataId, sequence, tick, nBytes);
+                        fprintf(stderr, "\n\nPkt hdr: ver = %d, dataId = %hu, offset = %u, len = %u, tick = %" PRIu64 ", nBytes = %d\n",
+                                version, dataId, bufOffset, bufLen, tick, nBytes);
                     }
-
-                    // Create the key to both the map of buffers and map of next-expected-sequence
-                    key = {tick, dataId};
 
                     // Use tick value to look into the map of associated fifo entries
                     auto it = buffers.find(tick);
@@ -288,9 +341,6 @@ if (debug) fprintf(stderr, "fifo entry already exists, look for id = %hu\n", dat
                         }
  if (debug) fprintf(stderr, "  ev len = %" PRIu64 ", id = %d, hasData = %d\n", event->length, event->control[0], event->control[1]);
 
-                        // Find the next expected sequence
-                        expectedSequence = expSequence[{tick, dataId}];
-
                         // Get data array
                         buffer = reinterpret_cast<char *>(event->pdata);
 
@@ -302,6 +352,11 @@ if (debug) fprintf(stderr, "fifo entry already exists, look for id = %hu\n", dat
                             // No room in buffer, ET system event size needs to be changed to accommodate this!
                             throw std::runtime_error("ET event too small, make > " +
                                                      std::to_string(totalBytesWritten + nBytes) + " bytes");
+                        }
+
+                        // Have we read the whole buffer?
+                        if (totalBytesWritten + nBytes >= bufLen) {
+                            packetLast = true;
                         }
 
                         firstReadForBuf = false;
@@ -330,153 +385,58 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
 
                         buffer = reinterpret_cast<char *>(event->pdata);
 
-                        // First expected sequence is 0
-                        expectedSequence = 0;
-                        // Put expected seq into map for future access
-                        expSequence[key] = 0;
-                        // Bytes previously written into buffer
+                       // Bytes previously written into buffer
                         totalBytesWritten = 0;
-
+                        packetLast = false;
                         firstReadForBuf = true;
                     }
 
-                    if (sequence == 0) {
-                        if (!packetFirst) {
-                            if (debug) fprintf(stderr, "Expecting first bit to be set on first packet but wasn't\n");
-                            return BAD_FIRST_LAST_BIT;
-                        }
-
+                    if (bufOffset == 0) {
                         // Each data source may come over a different network/interface and
                         // thus have a different number of bytes per packet. Track it.
                         // If small payload (< MTU), then this is irrelevant, but save anyway.
                         bytesPerPacket[dataId] = nBytes;
                     }
-                    else if (packetFirst) {
-                        if (debug) fprintf(stderr, "Expecting first bit NOT to be set on read but was\n");
-                        return BAD_FIRST_LAST_BIT;
-                    }
 
-                    if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %" PRIu64 ", in packet #%d, last = %s, firstReadForBuf = %s\n",
-                                       nBytes, dataId, tick, sequence, btoa(packetLast), btoa(firstReadForBuf));
+                    if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %" PRIu64 ", w/ offset %u, last = %s, firstReadForBuf = %s\n",
+                                       nBytes, dataId, tick, bufOffset, btoa(packetLast), btoa(firstReadForBuf));
 
-                    // Check to see if packet is in sequence, if not ...
-                    if (sequence != expectedSequence) {
-                        if (debug) fprintf(stderr, "\n    ID %hu: Got seq %u, expecting %u\n", dataId, sequence, expectedSequence);
+                    // Copy data into buffer
+                    memcpy(buffer + bufOffset, readDataFrom, nBytes);
+                    // Total bytes written into this buffer
+                    totalBytesWritten += nBytes;
+                    // Tell event how many bytes it now contains
+                    et_event_setlength(event, totalBytesWritten);
+                    // Remember that this event has data
+                    et_fifo_setHasData(event, 1);
+                    // Number of bytes left in this buffer
+                    remainingLen = bufSizeMax - totalBytesWritten;
 
-                        // If we get a sequence that we already received, ERROR!
-                        if (sequence < expectedSequence) {
-                            if (debug) fprintf(stderr, "    Already got seq %u once before!\n", sequence);
-                            return OUT_OF_ORDER;
+
+                    if (debug) fprintf(stderr, "remainingLen = %lu, offset = %u, first = %s, last = %s\n",
+                                       remainingLen, bufOffset, btoa(bufOffset == 0), btoa(packetLast));
+
+                    // Is this the last packet for a tick and data source?
+                    if (packetLast) {
+                        // Create key unique for every tick & dataId combo
+                        std::pair<uint64_t, uint16_t> key {tick, dataId};
+
+                        // Store this info so we can look at all data sources with this tick
+                        // and figure out if all its data has been collected
+                        endCondition[key] = true;
+
+                        if (allLastBitsReceived(tick, bufferIds, endCondition)) {
+                            tickCompleted = true;
                         }
-
-                        // Limit how man out-of-order packets we're going to store (1000 packets) while we wait
-                        if (outOfOrderPackets.size() >= 1000) {
-                            if (debug) fprintf(stderr, "    Reached limit of 1000 stored packets!\n");
-                            return OUT_OF_ORDER;
-                        }
-
-                        // Since it's out of order, what was written into packetBuffer
-                        // will need to be copied and stored.
-                        auto ptr = std::make_unique<std::vector<char>>(nBytes);
-                        memcpy(ptr->data(), readDataFrom, nBytes);
-                        ptr->resize(nBytes);
-
-                        if (debug) fprintf(stderr, "    Save and store packet %u, packetLast = %s, storage has %lu\n",
-                                           sequence, btoa(packetLast), outOfOrderPackets.size());
-
-                        // Put it into map. The key of sequence & tick & dataId is unique for each packet
-                        outOfOrderPackets.emplace(std::tuple<uint32_t, uint16_t, uint64_t>
-                                                          {sequence, dataId, tick},
-                                                  std::tuple<std::unique_ptr<std::vector<char>>, bool, bool>
-                                                          {std::move(ptr), packetLast, packetFirst});
-                        // Read next packet
-                        continue;
-                    }
-
-                    while (true) {
-                        if (debug) fprintf(stderr, "\nPacket %u in proper order, last = %s\n", sequence, btoa(packetLast));
-
-                        // Packet was in proper order, write it into appropriate buffer
-
-                        // Copy data into buffer
-                        memcpy(buffer + totalBytesWritten, readDataFrom, nBytes);
-                        // Total bytes written into this buffer
-                        totalBytesWritten += nBytes;
-                        // Tell event how many bytes it now contains
-                        et_event_setlength(event, totalBytesWritten);
-                        // Remember that this event has data
-                        et_fifo_setHasData(event, 1);
-                        // Number of bytes left in this buffer
-                        remainingLen = bufSizeMax - totalBytesWritten;
-                        // Next expected sequence
-                        expSequence[key] = ++expectedSequence;
-
-                        if (debug) fprintf(stderr, "remainingLen = %lu, expected offset = %u, first = %s, last = %s\n",
-                                           remainingLen, expectedSequence, btoa(packetFirst), btoa(packetLast));
-
-                        // Is this the last packet for a tick and data source?
-                        if (packetLast) {
-                            // Create key unique for every tick & dataId combo
-                            std::pair<uint64_t, uint16_t> kee {tick, dataId};
-
-                            // Store this info so we can look at all data sources with this tick
-                            // and figure out if all its data has been collected
-                            endCondition[kee] = packetLast;
-
-                            if (allLastBitsReceived(tick, bufferIds, endCondition)) {
-                                tickCompleted = true;
-                            }
-                        }
-
-                        if (tickCompleted) {
-                            break;
-                        }
-
-                        // Since we have room and don't have all the last packets,
-                        // check out-of-order packets for this tick and dataId
-                        if (!outOfOrderPackets.empty()) {
-                            if (debug) fprintf(stderr, "We have stored packets, look for exp seq = %u, id = %hu, tick = %" PRIu64 "\n",
-                                               expectedSequence, dataId, tick);
-
-                            // Create key (unique for every packet)
-                            std::tuple<uint32_t, uint16_t, uint64_t> kee {expectedSequence, dataId, tick};
-
-                            // Use key to look into the map
-                            auto iter = outOfOrderPackets.find(kee);
-
-                            // If packet of interest exists ...
-                            if (iter != outOfOrderPackets.end()) {
-                                // Get info
-                                auto & dataPtr = std::get<0>(iter->second);
-                                packetLast     = std::get<1>(iter->second);
-                                packetFirst    = std::get<2>(iter->second);
-                                sequence       = expectedSequence;
-                                nBytes         = dataPtr->size();
-                                readDataFrom   = dataPtr->data();
-
-                                // Remove packet from map
-                                outOfOrderPackets.erase(iter);
-                                if (debug) fprintf(stderr, "Go and add stored packet %u, size of map = %lu, last = %s\n",
-                                                   expectedSequence, outOfOrderPackets.size(), btoa(packetLast));
-
-                                // Room for packet?
-                                if (totalBytesWritten + nBytes > bufSizeMax) {
-                                    // No room in buffer, ET system event size needs to be changed to accommodate this!
-                                    throw std::runtime_error("ET event too small, make > " +
-                                                             std::to_string(totalBytesWritten + nBytes) + " bytes");
-                                }
-
-                                // Write this packet into main buffer now
-                                continue;
-                            }
-                        }
-
-                        break;
                     }
 
                     if (tickCompleted) {
                         break;
                     }
+
+                    // TODO: WHat do we do when we drop a packet and get stuck trying to finish creating a buffer?
+                    // Need to find a way of labeling a buffer as having incomplete data.
+
 
                     // read next packet
                 }
