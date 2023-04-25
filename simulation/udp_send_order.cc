@@ -389,10 +389,6 @@ int main(int argc, char **argv) {
                                           &offset, delay, delayPrescale, &delayCounter,
                                           firstBuffer, lastBuffer, debug, &packetsSent);
 
-//        err = sendPacketizedBufferFast(buf, nBytes, maxUdpPayload, clientSocket,
-//                                       tick, protocol, entropy, version, dataId, &offset,
-//                                       delay, delayPrescale, &delayCounter,
-//                                       firstBuffer, lastBuffer, debug, &packetsSent);
         if (err < 0) {
             // Should be more info in errno
             fprintf(stderr, "\nsendPacketizedBuffer: %s\n\n", strerror(errno));

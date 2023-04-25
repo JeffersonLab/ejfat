@@ -8,6 +8,14 @@
 // (757)-269-7100
 
 
+/**
+ * @file This is an example for Vardan or any user of the ET-system-as-a-fifo.
+ * Shows how to read the ET system when it's configured as a fifo.
+ * Other than that, this program is never used or sun.
+ */
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -140,7 +148,7 @@ int main(int argc,char **argv) {
         fprintf(stderr, "          -v    verbose output (also prints data if reading with -read)\n");
         fprintf(stderr, "          -d    delay between fifo gets in milliseconds\n");
 
-        fprintf(stderr, "          This consumer reads data written by ersap packet assebler into ET fifo system\n\n");
+        fprintf(stderr, "          This consumer reads data written by ersap packet assembler into ET fifo system\n\n");
 
         exit(2);
     }

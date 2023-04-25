@@ -10,8 +10,6 @@
 
 /**
  * @file Receive locally generated data sent by udp_send.c program.
- * This program handles sequentially numbered packets that may arrive out-of-order.
- * This assumes there is an emulator or FPGA between this and the sending program.
  */
 
 #include <string.h>

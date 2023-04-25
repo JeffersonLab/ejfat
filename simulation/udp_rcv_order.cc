@@ -9,7 +9,7 @@
 
 
 /**
- * @file Receive locally generated data sent by udp_send_order.cc program.
+ * @file Receive generated data sent by udp_send_order.cc program.
  * This program does <b>not</b> handle packets that arrive out-of-order.
  * This assumes there is a load balancing FPGA between this and the sending program.
  */
