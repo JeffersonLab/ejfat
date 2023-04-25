@@ -70,8 +70,8 @@
         {
             int idCount = bufIds.size();
 
-            fprintf(stderr, "\nallLastBitsReceived: id count = %d, endCondition size = %lu\n",
-                               idCount, endCondition.size());
+//            fprintf(stderr, "\nallLastBitsReceived: id count = %d, endCondition size = %lu\n",
+//                               idCount, endCondition.size());
 
             // There must be one end condition for each id
             if (endCondition.size() != idCount) {
@@ -110,8 +110,8 @@
                 }
             }
 
-            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %" PRIu64 "\n",
-                    idCount, endCondition.size(), tick);
+//            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %" PRIu64 "\n",
+//                    idCount, endCondition.size(), tick);
             return true;
         }
 
@@ -202,17 +202,15 @@
          * @param fid           id for using ET system configured as FIFO.
          * @param debug         turn debug printout on & off.
          *
-         * @return 0 if success.
-         *         If there's an error in recvmsg, it will return RECV_MSG.
-         *         If the packet data is NOT completely read (truncated), it will return TRUNCATED_MSG.
-         *         If the buffer is too small to receive a single packet's data, it will return BUF_TOO_SMALL.
-         *         If a packet is out of order and no recovery is possible (e.g. duplicate sequence),
-         *              it will return OUT_OF_ORDER.
-         *         If a packet has improper value for first or last bit, it will return BAD_FIRST_LAST_BIT.
-         *         If cannot allocate memory, it will return OUT_OF_MEM.
-         *         If userBuf is null or *userBuf is null when noCopy is true, it will return BAD_ARG.
+         * @throws  runtime_exception if ET buffer too small,
+         *                            too many source ids to be held in fifo entry,
+         *                            error in recvmsg,
+         *                            no memory available,
+         *                            error talking to ET system,
+         *                            cannot find correct buffer in fifo entry,
+         *                            data sources were NOT specified when calling et_fifo_openProducer(),
          */
-        static int getBuffers(int udpSocket, et_fifo_id fid, bool debug)
+        static void getBuffers(int udpSocket, et_fifo_id fid, bool debug)
         {
 
             // Make this big enough to read a single jumbo packet
@@ -282,15 +280,13 @@
             int idCount = et_fifo_getIdCount(fid);
             if (debug) fprintf(stderr, "found data sources count = %d\n", idCount);
             if (idCount < 1) {
-                if (debug) fprintf(stderr, "data sources were NOT specified when calling et_fifo_openProducer()!\n");
-                return(-1);
+                throw std::runtime_error("data sources were NOT specified when calling et_fifo_openProducer()");
             }
 
             int bufIds[idCount];
             int err = et_fifo_getBufIds(fid, bufIds);
             if (err < 0) {
-                if (debug) fprintf(stderr, "data sources were NOT specified when calling et_fifo_openProducer()!\n");
-                return(-1);
+                throw std::runtime_error("data sources were NOT specified when calling et_fifo_openProducer()");
             }
 
             // Translate this array into an ordered set for later ease of use
@@ -312,7 +308,7 @@
                     int bytesRead = recvfrom(udpSocket, packetBuffer, packetBufSize, 0,  nullptr, nullptr);
                     if (bytesRead < 0) {
                         if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
-                        return(-1);
+                        throw std::runtime_error("recvmsg failed");
                     }
 
                     // Number of actual data bytes not counting RE header
@@ -446,7 +442,6 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
 
                 // Work on the next tick
             }
-            return 0;
         }
 
 
