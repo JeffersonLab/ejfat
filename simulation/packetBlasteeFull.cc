@@ -138,7 +138,7 @@ static void printHelp(char *programName) {
             "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]",
             "        [-thds <# of reassembly threads, 6 max>]",
-            "        [-pinRead <starting core # or read thd>]",
+            "        [-pinRead <starting core # for read thd>]",
             "        [-pinCnt <# of cores for read thd>]",
             "        [-pinBuf <starting core #, 1 for each buf assembly thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
