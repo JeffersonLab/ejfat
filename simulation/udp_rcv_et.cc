@@ -262,7 +262,7 @@ static void *rateThread(void *arg) {
     struct timespec tStart[sourceCount];
 
 
-    double pktRate, pktAvgRate, dataRate, dataAvgRate;
+    double pktRate, pktAvgRate, dataRate, dataAvgRate, bufRate, bufAvgRate;
     int64_t microSec;
     struct timespec tEnd, t1;
     bool rollOver = false;
@@ -367,18 +367,13 @@ static void *rateThread(void *arg) {
             // Actual Data rates (no header info)
             dataRate    = ((double) byteCount) / microSec;
             dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
-
-            // TODO: currently cpuPkt holds nothing, set in main thread - one value
-
-            // TODO: look at this to see if it works for multiple sources
-#ifdef __linux__
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %u\n\n",
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %u\n",
                    dataRate, dataAvgRate, mapp[src]->builtBuffers);
-#else
-            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n\n",
-                   dataRate, dataAvgRate, mapp[src]->builtBuffers);
-#endif
 
+            // Buffer rates
+            bufRate    = 1000000.0 * ((double) bufCount) / microSec;
+            bufAvgRate = 1000000.0 * ((double) currBuiltBufs[i]) / totalMicroSecs[i];
+            printf("     Bufs:  %3.4g Hz,  %3.4g Avg\n\n", bufRate, bufAvgRate);
         }
 
         t1 = tEnd;
