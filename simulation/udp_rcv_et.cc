@@ -372,8 +372,8 @@ static void *rateThread(void *arg) {
 
             // TODO: look at this to see if it works for multiple sources
 #ifdef __linux__
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n\n",
-                   dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %u\n\n",
+                   dataRate, dataAvgRate, mapp[src]->builtBuffers);
 #else
             printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n\n",
                    dataRate, dataAvgRate, mapp[src]->builtBuffers);
