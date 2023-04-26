@@ -399,7 +399,13 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
 
                         buffer = reinterpret_cast<char *>(event->pdata);
 
-                       // Bytes previously written into buffer
+                        // Keep # of packets built into buffer, stored in the 6th ET control word of event.
+                        // For fifo ET system, the 1st control word is used by ET system to contain srcId,
+                        // the 2nd holds whether data is valid or not. The rest are available.
+                        et_event_getcontrol(event, con);
+                        packetCount = 0;
+
+                        // Bytes previously written into buffer
                         totalBytesWritten = 0;
                         packetLast = false;
                         firstReadForBuf = true;
