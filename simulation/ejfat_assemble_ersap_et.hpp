@@ -201,6 +201,8 @@
          *                      Otherwise, this is used to return a locally allocated data buffer.
          * @param fid           id for using ET system configured as FIFO.
          * @param debug         turn debug printout on & off.
+         * @param stats         shared pointer to map, map elements are shared pointer to stats structure.
+         *                      Use this to keep stats so it can be printed out somewhere.
          *
          * @throws  runtime_exception if ET buffer too small,
          *                            too many source ids to be held in fifo entry,
@@ -210,8 +212,16 @@
          *                            cannot find correct buffer in fifo entry,
          *                            data sources were NOT specified when calling et_fifo_openProducer(),
          */
-        static void getBuffers(int udpSocket, et_fifo_id fid, bool debug)
+        static void getBuffers(int udpSocket, et_fifo_id fid, bool debug,
+                               std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats)
         {
+            // Do we bother to keep stats or not
+            bool takeStats = stats != nullptr;
+            std::unordered_map<int, std::shared_ptr<packetRecvStats>> statMap;
+            if (takeStats) {
+                // map with key = src id, val = pointer to struct for statistics
+                statMap = *stats;
+            }
 
             // Make this big enough to read a single jumbo packet
             size_t packetBufSize = 9100;
@@ -220,9 +230,6 @@
             uint64_t tick;
             uint32_t bufLen, bufOffset;
             bool packetFirst, packetLast, firstReadForBuf;
-
-            // Set true when all buffers of a tick have received the lastPacket
-            bool tickCompleted;
 
             // Initial size to make internal buffers
             size_t   bufSizeMax = et_fifo_getBufSize(fid);
@@ -236,6 +243,8 @@
             char* readDataFrom;
             et_event *event;
             et_fifo_entry *entry;
+            // array to hold event's control words
+            int con[ET_STATION_SELECT_INTS];
 
             //------------------------------------------------
             // Maps used to store quantities while sorting.
@@ -277,28 +286,28 @@
             // data source. Otherwise we're out of luck.
             // WE NEED TO KNOW FROM WHOM WE'RE EXPECTING DATA!
             //-----------------------------------------------
-            int idCount = et_fifo_getIdCount(fid);
-            if (debug) fprintf(stderr, "found data sources count = %d\n", idCount);
-            if (idCount < 1) {
+            int srcIdCount = et_fifo_getIdCount(fid);
+            if (debug) fprintf(stderr, "found data sources count = %d\n", srcIdCount);
+            if (srcIdCount < 1) {
                 throw std::runtime_error("data sources were NOT specified when calling et_fifo_openProducer()");
             }
 
-            int bufIds[idCount];
+            int bufIds[srcIdCount];
             int err = et_fifo_getBufIds(fid, bufIds);
             if (err < 0) {
                 throw std::runtime_error("data sources were NOT specified when calling et_fifo_openProducer()");
             }
 
             // Translate this array into an ordered set for later ease of use
-            std::set<int> bufferIds;
+            std::set<int> srcIds;
             for (auto id : bufIds) {
-                bufferIds.insert(id);
+                srcIds.insert(id);
             }
 
             while (true) {
 
                 // Set true when all buffers of a tick have received the lastPacket
-                tickCompleted = false;
+                bool tickCompleted = false;
 
                 if (debug) fprintf(stderr, "getBuffers: remainingLen = %lu\n", remainingLen);
 
@@ -322,6 +331,9 @@
                                 version, dataId, bufOffset, bufLen, tick, nBytes);
                     }
 
+                    // Track # packets read while assembling each buffer
+                    int64_t packetCount;
+
                     // Use tick value to look into the map of associated fifo entries
                     auto it = buffers.find(tick);
 
@@ -336,6 +348,12 @@ if (debug) fprintf(stderr, "fifo entry already exists, look for id = %hu\n", dat
                             throw std::runtime_error("too many source ids for data to be held in fifo entry");
                         }
  if (debug) fprintf(stderr, "  ev len = %" PRIu64 ", id = %d, hasData = %d\n", event->length, event->control[0], event->control[1]);
+
+                        // Keep # of packets built into buffer, stored in the 6th ET control word of event.
+                        // For fifo ET system, the 1st control word is used by ET system to contain srcId,
+                        // the 2nd holds whether data is valid or not. The rest are available.
+                        et_event_getcontrol(event, con);
+                        packetCount = con[5];
 
                         // Get data array
                         buffer = reinterpret_cast<char *>(event->pdata);
@@ -385,6 +403,7 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         totalBytesWritten = 0;
                         packetLast = false;
                         firstReadForBuf = true;
+                        packetCount = 0;
                     }
 
                     if (bufOffset == 0) {
@@ -408,6 +427,9 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                     // Number of bytes left in this buffer
                     remainingLen = bufSizeMax - totalBytesWritten;
 
+                    // record # packets for this buffer/event
+                    con[5] = ++packetCount;
+                    et_event_setcontrol(event, con, 6);
 
                     if (debug) fprintf(stderr, "remainingLen = %lu, offset = %u, first = %s, last = %s\n",
                                        remainingLen, bufOffset, btoa(bufOffset == 0), btoa(packetLast));
@@ -421,17 +443,25 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         // and figure out if all its data has been collected
                         endCondition[key] = true;
 
-                        if (allLastBitsReceived(tick, bufferIds, endCondition)) {
+                        if (allLastBitsReceived(tick, srcIds, endCondition)) {
                             tickCompleted = true;
                         }
                     }
 
                     if (tickCompleted) {
+                        if (takeStats) {
+                            statMap[dataId]->acceptedBytes += totalBytesWritten;
+                            statMap[dataId]->builtBuffers++;
+                            statMap[dataId]->acceptedPackets += packetCount;
+                        }
+
                         break;
                     }
 
                     // TODO: WHat do we do when we drop a packet and get stuck trying to finish creating a buffer?
                     // Need to find a way of labeling a buffer as having incomplete data.
+                    // One way is to set first control word with:
+                    // et_fifo_setHasData(event, false);
 
 
                     // read next packet

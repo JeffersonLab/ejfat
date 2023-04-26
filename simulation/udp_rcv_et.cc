@@ -31,6 +31,7 @@
  */
 
 #include <iostream>
+#include <thread>
 #include "ejfat_assemble_ersap_et.hpp"
 
 using namespace ejfat;
@@ -212,6 +213,182 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug, int *s
 }
 
 
+// Statistics
+
+
+typedef struct threadStruct_t {
+    int sourceCount;
+    int *sourceIds;
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
+} threadStruct;
+
+
+// Thread to send to print out rates
+static void *rateThread(void *arg) {
+
+    int64_t byteCount, pktCount, bufCount;
+    int64_t missingByteCount; // discarded + dropped
+
+    // Parse arg
+    threadStruct *targ = static_cast<threadStruct *>(arg);
+    int sourceCount = targ->sourceCount;
+    int *sourceIds  = targ->sourceIds;
+
+    auto stats = targ->stats;
+    auto & mapp = (*(stats.get()));
+
+
+    int64_t prevTotalPkts[sourceCount];
+    int64_t prevTotalBytes[sourceCount];
+    int64_t prevBuiltBufs[sourceCount];
+
+    int64_t currTotalPkts[sourceCount];
+    int64_t currTotalBytes[sourceCount];
+    int64_t currBuiltBufs[sourceCount];
+
+    bool dataArrived[sourceCount];
+    for (int i=0; i < sourceCount; i++) {
+        dataArrived[i] = false;
+    }
+
+    int skippedFirst[sourceCount];
+    for (int i=0; i < sourceCount; i++) {
+        skippedFirst[i] = 0;
+    }
+
+    // Total time is different for each source since they may all start
+    // sending their data at different times.
+    int64_t totalMicroSecs[sourceCount];
+    struct timespec tStart[sourceCount];
+
+
+    double pktRate, pktAvgRate, dataRate, dataAvgRate;
+    int64_t microSec;
+    struct timespec tEnd, t1;
+    bool rollOver = false;
+
+    // Get the current time
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    // We've got to handle "sourceCount" number of data sources - each with their own stats
+    while (true) {
+
+        // Loop for zeroing stats when first starting - for accurate rate calc
+        for (int i=0; i < sourceCount; i++) {
+            if (dataArrived[i] && skippedFirst[i] == 1) {
+                // Data is now coming in. To get an accurate rate, start w/ all stats = 0
+                int src = sourceIds[i];
+                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
+                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
+                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
+
+                // Start the clock for this source
+                clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
+                //fprintf(stderr, "started clock for src %d\n", src);
+
+                // From now on we skip this zeroing step
+                skippedFirst[i]++;
+            }
+        }
+
+        for (int i=0; i < sourceCount; i++) {
+            prevTotalPkts[i]   = currTotalPkts[i];
+            prevTotalBytes[i]  = currTotalBytes[i];
+            prevBuiltBufs[i]   = currBuiltBufs[i];
+        }
+
+        // Delay 4 seconds between printouts
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+
+        // Read time
+        clock_gettime(CLOCK_MONOTONIC, &tEnd);
+
+        // Time taken by last loop
+        microSec = (1000000L * (tEnd.tv_sec - t1.tv_sec)) + ((tEnd.tv_nsec - t1.tv_nsec)/1000L);
+
+        for (int i=0; i < sourceCount; i++) {
+            // Total time - can be different for each source
+            totalMicroSecs[i] = (1000000L * (tEnd.tv_sec - tStart[i].tv_sec)) + ((tEnd.tv_nsec - tStart[i].tv_nsec)/1000L);
+
+            int src = sourceIds[i];
+            currTotalPkts[i]    = mapp[src]->acceptedPackets;
+            currTotalBytes[i]   = mapp[src]->acceptedBytes;
+            currBuiltBufs[i]    = mapp[src]->builtBuffers;
+
+            if (currTotalBytes[i] < 0) {
+                rollOver = true;
+            }
+        }
+
+        // Don't start calculating stats until data has come in for a full cycle.
+        // Keep track of when that starts.
+        for (int i=0; i < sourceCount; i++) {
+            if (currTotalPkts[i] > 0) {
+                dataArrived[i] = true;
+            }
+        }
+
+        // Start over tracking bytes and packets if #s roll over
+        if (rollOver) {
+            for (int i=0; i < sourceCount; i++) {
+                int src = sourceIds[i];
+
+                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
+                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
+                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
+            }
+            t1 = tEnd;
+            rollOver = false;
+            continue;
+        }
+
+        for (int i=0; i < sourceCount; i++) {
+            // Dota not coming in yet from this source so do NO calcs
+            if (!dataArrived[i]) continue;
+
+            // Skip first stat cycle as the rate calculations will be off
+            if (skippedFirst[i] < 1) {
+                //printf("%d skip %d\n", sourceIds[i], skippedFirst[i]);
+                skippedFirst[i]++;
+                continue;
+            }
+
+            int src = sourceIds[i];
+
+            // Use for instantaneous rates/values
+            byteCount = currTotalBytes[i] - prevTotalBytes[i];
+            pktCount  = currTotalPkts[i]  - prevTotalPkts[i];
+            bufCount  = currBuiltBufs[i]  - prevBuiltBufs[i];
+
+            pktRate    = 1000000.0 * ((double) pktCount) / microSec;
+            pktAvgRate = 1000000.0 * ((double) currTotalPkts[i]) / totalMicroSecs[i];
+            printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", src, pktRate, pktAvgRate);
+
+            // Actual Data rates (no header info)
+            dataRate    = ((double) byteCount) / microSec;
+            dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
+
+            // TODO: currently cpuPkt holds nothing, set in main thread - one value
+
+            // TODO: look at this to see if it works for multiple sources
+#ifdef __linux__
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n\n",
+                   dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
+#else
+            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n\n",
+                   dataRate, dataAvgRate, mapp[src]->builtBuffers);
+#endif
+
+        }
+
+        t1 = tEnd;
+    }
+
+    return (nullptr);
+}
+
+
+
 int main(int argc, char **argv) {
 
     int udpSocket;
@@ -271,7 +448,48 @@ int main(int argc, char **argv) {
         if (debug) fprintf(stderr, "bind socket error\n");
     }
 
+    // TODO: cmd line option?
+    bool keepStats = true;
+
+    // Place to gather stats for each data source
+    // Shared pointer to map w/ key = source id & val = shared ptr of stats object
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats = nullptr;
+
+    if (keepStats) {
+        stats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
+        auto &mapp = *stats;
+        for (int i = 0; i < sourceCount; i++) {
+            fprintf(stderr, "Store stat for source %d\n", sourceIds[i]);
+            mapp[sourceIds[i]] = std::make_shared<packetRecvStats>();
+            clearStats(mapp[sourceIds[i]]);
+        }
+    }
+
+    //---------------------------------------------------
+    // Start thread to do rate printout
+    //---------------------------------------------------
+    if (keepStats) {
+        threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
+        if (targ == nullptr) {
+            fprintf(stderr, "out of mem\n");
+            return -1;
+        }
+
+        targ->sourceCount = sourceCount;
+        targ->stats = stats;
+        targ->sourceIds = sourceIds;
+
+        pthread_t thd2;
+        int status = pthread_create(&thd2, NULL, rateThread, (void *) targ);
+        if (status != 0) {
+            fprintf(stderr, "\n ******* error creating thread\n\n");
+            return -1;
+        }
+    }
+
+    //-------------------------------------------------------
     // Connect to ET system, by default connect to local sys
+    //-------------------------------------------------------
 
     et_sys_id etid;
     et_fifo_id fid;
@@ -291,8 +509,10 @@ int main(int argc, char **argv) {
     }
 
     // Call routine that reads packets, puts data into fifo entry, places entry into ET in a loop
-    getBuffers(udpSocket, fid, debug);
+    getBuffers(udpSocket, fid, debug, stats);
 
     return 0;
 }
+
+
 
