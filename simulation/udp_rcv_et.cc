@@ -34,6 +34,11 @@
 #include <thread>
 #include "ejfat_assemble_ersap_et.hpp"
 
+#ifdef __linux__
+    #include <sched.h>
+#endif
+
+
 using namespace ejfat;
 
 
@@ -53,12 +58,14 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] ",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-ids <comma-separated list of incoming source ids>]",
+            "        [-core <starting core # for read thd>]",
+            "        [-pinCnt <# of cores for read thd>]",
             "        [-et <ET file name>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver.\n");
@@ -76,7 +83,7 @@ static void printHelp(char *programName) {
  * @param listenAddr  filled with IP address to listen on.
  */
 static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug, int *sourceIds,
-                      char *etFileName, char *listenAddr) {
+                      int *core, int *coreCnt, char *etFileName, char *listenAddr) {
 
     int c, i_tmp;
     bool help=false, err=false;
@@ -86,6 +93,8 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug, int *s
             {
                     {"et", 1, NULL, 1},
                     {"ids",  1, NULL, 2},
+                    {"core",  1, NULL, 3},
+                    {"pinCnt",  1, NULL, 4},
                     {0,    0, 0,    0}
             };
 
@@ -160,6 +169,32 @@ static void parseArgs(int argc, char **argv, uint16_t* port, bool *debug, int *s
                         fprintf(stderr, "Too many sources specified in -ids, max %d\n", MAX_SOURCES);
                         exit(-1);
                     }
+                }
+
+                break;
+
+            case 3:
+                // Cores to run on for packet reading thds
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0) {
+                    *core = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -core, need starting core #\n");
+                    exit(-1);
+                }
+
+                break;
+
+            case 4:
+                // NUmber of cores to run on for packet reading thd
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1) {
+                    *coreCnt = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -pinCnt, need # of read cores (min 1)\n");
+                    exit(-1);
                 }
 
                 break;
@@ -391,6 +426,8 @@ int main(int argc, char **argv) {
     uint16_t port = 7777;
     bool debug = false;
 
+    int startingCore = -1;
+    int coreCount = 1;
     int sourceIds[MAX_SOURCES];
     int sourceCount = 0;
 
@@ -402,7 +439,7 @@ int main(int argc, char **argv) {
         sourceIds[i] = -1;
     }
 
-    parseArgs(argc, argv, &port, &debug, sourceIds, etFileName, listeningAddr);
+    parseArgs(argc, argv, &port, &debug, sourceIds, &startingCore, &coreCount, etFileName, listeningAddr);
 
     for (int i = 0; i < MAX_SOURCES; i++) {
         if (sourceIds[i] > -1) {
@@ -419,6 +456,31 @@ int main(int argc, char **argv) {
         sourceCount = 1;
         std::cerr << "Defaulting to (single) source id = 0" << std::endl;
     }
+
+    bool pinCores = startingCore >= 0 ? true : false;
+
+#ifdef __linux__
+
+    if (pinCores) {
+        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+
+        for (int i=0; i < coreCount; i++) {
+            std::cerr << "Run receiving thd for all sources on core " << (startingCore + i) << "\n";
+            // First cpu is at 0 for CPU_SET
+            // (80 - 87) inclusive is best for receiving over network for ejfat nodes
+            CPU_SET(startingCore + i, &cpuset);
+        }
+
+        pthread_t current_thread = pthread_self();
+        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+        if (rc != 0) {
+            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+        }
+    }
+
+#endif
 
     // Create UDP socket
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
