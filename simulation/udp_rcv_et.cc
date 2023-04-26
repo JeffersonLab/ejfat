@@ -394,7 +394,7 @@ int main(int argc, char **argv) {
     int udpSocket;
     // Set this to max expected data size
     uint16_t port = 7777;
-    bool debug = true;
+    bool debug = false;
 
     int sourceIds[MAX_SOURCES];
     int sourceCount = 0;
