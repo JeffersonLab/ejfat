@@ -50,146 +50,6 @@
         //-----------------------------------------------------------------------
 
 
-        /**
-         * Look at all data sources for a single tick
-         * to see if the last bit has been set for each.
-         * If so, return true, else return false.
-         * {@link #getBuffers} already checked validity of data id info
-         * passed in through bufIds.
-         * When all last bits are found for a tick, all the entries
-         * associated with that tick in the endCondition map are removed.
-         *
-         * @param tick         tick value to examine.
-         * @param bufIds       set with all data id values in it.
-         * @param endCondition map with all last bit data in it.
-         * @return return true if all data sources for given tick have set the "last" bit,
-         *         else false.
-         */
-        static bool allLastBitsReceived(uint64_t tick, std::set<int> &bufIds,
-                                        std::map<std::pair<uint64_t, uint16_t>, bool> & endCondition)
-        {
-            int idCount = bufIds.size();
-
-//            fprintf(stderr, "\nallLastBitsReceived: id count = %d, endCondition size = %lu\n",
-//                               idCount, endCondition.size());
-
-            // There must be one end condition for each id
-            if (endCondition.size() != idCount) {
-                fprintf(stderr, "  too few sources reporting an end\n");
-                return false;
-            }
-
-            // Look at all data sources for a single tick,
-            // to see if the last bit has been set for each.
-            // If so, return true, else return false.
-            for (const auto & i : endCondition) {
-                // ignore other ticks
-                if (i.first.first != tick) {
-                    continue;
-                }
-
-                // if dataId not contained in vector of ids
-                if (bufIds.count(i.first.second == 0)) {
-                    return false;
-                }
-
-                // if last bit not set
-                if (!i.second) {
-                    return false;
-                }
-            }
-
-
-            // Since we're done with this tick, remove it from the map
-            for (auto it = endCondition.cbegin(); it != endCondition.cend(); ) {
-                if (it->first.first == tick) {
-                    endCondition.erase(it++);    // or "it = m.erase(it)" since C++11
-                }
-                else {
-                    ++it;
-                }
-            }
-
-//            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %" PRIu64 "\n",
-//                    idCount, endCondition.size(), tick);
-            return true;
-        }
-
-
-        /**
-         * Look at all data sources for a single tick
-         * to see if the last bit has been set for each.
-         * Return the percentage of last bits set (0 - 100).
-         * {@link #getBuffers} already checked validity of data id info
-         * passed in through bufIds.
-         * When all last bits are found for a tick, all the entries
-         * associated with that tick in the endCondition map are removed.
-         *
-         * @param tick         tick value to examine.
-         * @param bufIds       set with all data id values in it.
-         * @param endCondition map with all last bit data in it.
-         * @return percent (0 - 100) of data sources for given tick which have set the "last" bit, or -1 if error.
-         */
-        static int percentLastBitsReceived(uint64_t tick, std::set<int> &bufIds,
-                                        std::map<std::pair<uint64_t, uint16_t>, bool> & endCondition)
-        {
-            int idCount = bufIds.size();
-            int endCount = 0, percent;
-            bool allHere = true;
-
-//            fprintf(stderr, "\npercentLastBitsReceived: id count = %d, endCondition size = %lu\n",
-//                    idCount, endCondition.size());
-
-            // There must be one end condition for each id
-            if (endCondition.size() != idCount) {
-                fprintf(stderr, "  too few sources reporting an end\n");
-                return -1;
-            }
-
-            // Look at all data sources for a single tick,
-            // to see if the last bit has been set for each.
-            // If so, return true, else return false.
-            for (const auto & i : endCondition) {
-                // ignore other ticks
-                if (i.first.first != tick) {
-                    continue;
-                }
-
-                // if dataId not contained in vector of ids
-                if (bufIds.count(i.first.second == 0)) {
-                    allHere = false;
-                    continue;
-                }
-
-                // if last bit not set
-                if (!i.second) {
-                    allHere = false;
-                    continue;
-                }
-
-                endCount++;
-            }
-
-            if (!allHere) {
-                percent = 100 * endCount / idCount;
-                return percent;
-            }
-
-            // Since we're done with this tick, remove it from the map
-            for (auto it = endCondition.cbegin(); it != endCondition.cend(); ) {
-                if (it->first.first == tick) {
-                    endCondition.erase(it++);    // or "it = m.erase(it)" since C++11
-                }
-                else {
-                    ++it;
-                }
-            }
-
-//            fprintf(stderr, "    id count = %d, endCondition size = %lu, return all bits found for tick %" PRIu64 "\n",
-//                    idCount, endCondition.size(), tick);
-            return 100;
-        }
-
 
         /**
          * Assemble incoming packets into the given buffer.
@@ -201,6 +61,7 @@
          *                      Otherwise, this is used to return a locally allocated data buffer.
          * @param fid           id for using ET system configured as FIFO.
          * @param debug         turn debug printout on & off.
+         * @param tickPrescale  the prescale value (event Nth) expected of incoming ticks.
          * @param stats         shared pointer to map, map elements are shared pointer to stats structure.
          *                      Use this to keep stats so it can be printed out somewhere.
          *
@@ -212,7 +73,7 @@
          *                            cannot find correct buffer in fifo entry,
          *                            data sources were NOT specified when calling et_fifo_openProducer(),
          */
-        static void getBuffers(int udpSocket, et_fifo_id fid, bool debug,
+        static void getBuffers(int udpSocket, et_fifo_id fid, bool debug, int tickPrescale,
                                std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats)
         {
             // Do we bother to keep stats or not
@@ -227,7 +88,7 @@
             size_t packetBufSize = 9100;
             char packetBuffer[packetBufSize];
 
-            uint64_t tick;
+            uint64_t tick, biggestTick = 0;
             uint32_t bufLen, bufOffset;
             bool packetFirst, packetLast, firstReadForBuf;
 
@@ -235,7 +96,7 @@
             size_t   bufSizeMax = et_fifo_getBufSize(fid);
             size_t   remainingLen = bufSizeMax, totalBytesWritten = 0;
 
-            int  version, nBytes;
+            int  version, nBytes, invalidPkts=0;
             uint16_t dataId;
 
             // Buffer to copy data into
@@ -253,33 +114,20 @@
             // keys in that case.
             //------------------------------------------------
 
-            // Map to hold the ET fifo entry (multiple bufs) for each tick:
+            // Map to hold the ET fifo entry (multiple bufs) for each tick.
+            // There is one buffer (et_event) for each dataId.
             //     key   = tick
             //     value = array of ET events (buffers)
-            std::map<uint64_t, et_fifo_entry *> buffers;
-
-            // Map to hold the max bytes per packet for each data source:
-            //     key   = data source id
-            //     value = max bytes per packet
-            std::map<uint16_t, uint32_t> bytesPerPacket;
-
-            // Map to hold the status of the "last" packet bit for each tick-dataId combo:
-            //     key   = pair of {tick, dataId}
-            //     value = true if last bit received, else false
-            std::map<std::pair<uint64_t, uint16_t>, bool> endCondition;
+            std::unordered_map<uint64_t, et_fifo_entry *> buffers;
 
             //------------------------------------------------
             // We're using buffers created in the ET system -
             // one for each tick and dataId combo.
             // A fifo contains a group of buffers/events for 1 tick.
-            //-----------------------------------------------
-
-            //-----------------------------------------------
+            //
             // We will have to keep looping to read everything,
             // since we don't know how much data is coming or in what order.
-            //-----------------------------------------------
-
-            //-----------------------------------------------
+            //
             // We must check, before starting, to see if the et_fifo_openProducer()
             // was called with all source id's.
             // Only then we can figure out if we have a last-bit set from each
@@ -298,11 +146,13 @@
                 throw std::runtime_error("data sources were NOT specified when calling et_fifo_openProducer()");
             }
 
-            // Translate this array into an ordered set for later ease of use
+            // Translate this array into an ordered (sorted by key) set for later ease of use
             std::set<int> srcIds;
             for (auto id : bufIds) {
                 srcIds.insert(id);
             }
+
+
 
             while (true) {
 
@@ -329,6 +179,15 @@
                     if (debug) {
                         fprintf(stderr, "\n\nPkt hdr: ver = %d, dataId = %hu, offset = %u, len = %u, tick = %" PRIu64 ", nBytes = %d\n",
                                 version, dataId, bufOffset, bufLen, tick, nBytes);
+                    }
+
+                    // Check to see if source id is expected
+                    if (srcIds.count(dataId) == 0) {
+                        if (++invalidPkts > 100) {
+                            throw std::runtime_error("received over 100 pkts w/ wrong data id");
+                        }
+                        // Ignore pkt and go to next
+                        continue;
                     }
 
                     // Track # packets read while assembling each buffer
@@ -400,8 +259,6 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         buffer = reinterpret_cast<char *>(event->pdata);
 
                         // Keep # of packets built into buffer, stored in the 6th ET control word of event.
-                        // For fifo ET system, the 1st control word is used by ET system to contain srcId,
-                        // the 2nd holds whether data is valid or not. The rest are available.
                         et_event_getcontrol(event, con);
                         packetCount = 0;
 
@@ -410,13 +267,12 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         packetLast = false;
                         firstReadForBuf = true;
                         packetCount = 0;
-                    }
 
-                    if (bufOffset == 0) {
-                        // Each data source may come over a different network/interface and
-                        // thus have a different number of bytes per packet. Track it.
-                        // If small payload (< MTU), then this is irrelevant, but save anyway.
-                        bytesPerPacket[dataId] = nBytes;
+                        // Track the biggest tick to be received from any source
+                        if (tick > biggestTick) {
+                            //std::cout << "biggest tick " << tick << std::endl;
+                            biggestTick = tick;
+                        }
                     }
 
                     if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %" PRIu64 ", w/ offset %u, last = %s, firstReadForBuf = %s\n",
@@ -445,11 +301,11 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                         // Create key unique for every tick & dataId combo
                         std::pair<uint64_t, uint16_t> key {tick, dataId};
 
-                        // Store this info so we can look at all data sources with this tick
-                        // and figure out if all its data has been collected
-                        endCondition[key] = true;
+                        // Store in event that buffer is fully assembled
+                        et_fifo_hasData(event);
 
-                        if (allLastBitsReceived(tick, srcIds, endCondition)) {
+                        // Has all data in every buffer of this entry been collected?
+                        if (et_fifo_allHaveData(fid, entry, nullptr, nullptr)) {
                             tickCompleted = true;
                         }
                     }
@@ -460,15 +316,57 @@ if (debug) fprintf(stderr, "fifo entry must be created\n");
                             statMap[dataId]->builtBuffers++;
                             statMap[dataId]->acceptedPackets += packetCount;
                         }
-
-                        break;
                     }
 
-                    // TODO: WHat do we do when we drop a packet and get stuck trying to finish creating a buffer?
-                    // Need to find a way of labeling a buffer as having incomplete data.
-                    // One way is to set first control word with:
-                    // et_fifo_setHasData(event, false);
+                    // Do some house cleaning at this point.
+                    // There may be missing packets which have kept some ticks from some sources
+                    // from being completely reassembled and need to cleared out.
+                    // Take the biggest tick received and place all existing ticks
+                    // less than it by 2*tickPrescale and still being constructed, back into the ET system.
+                    // Each of the buffers in such a fifo entry will be individually labelled as
+                    // having valid data or not. Thus the reader of such a fifo entry will be
+                    // able to tell if a buffer was not reassembled properly.
 
+
+                    // Using the iterator and the "erase" method, as shown,
+                    // will avoid problems invalidating the iterator
+                    for (auto iter = buffers.cbegin(); iter != buffers.cend();) {
+
+                        uint64_t tik = iter->first;
+                        entry = iter->second;
+                        //std::cout << "   try " << tck << std::endl;
+
+                        //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
+
+                        // Remember, tick values do NOT wrap around.
+                        // It may make more sense to have the inequality as:
+                        // tck < bigTick - 2*tickPrescale
+                        // Except then we run into trouble early with negative # in unsigned arithemtic
+                        // showing up as huge #s. So have negative term switch sides.
+                        // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
+                        if (tik + 2 * tickPrescale < biggestTick) {
+                            if (takeStats) {
+                                int dBufs = 0;
+                                size_t dBytes = 0;
+                                // This call finds # bufs and bytes in incomplete buffers of fifo entry
+                                et_fifo_allHaveData(fid, entry, &dBufs, &dBytes);
+                                statMap[dataId]->discardedBuffers += dBufs;
+                                statMap[dataId]->discardedBytes   += dBytes;
+                            }
+
+                            //std::cout << "Remove " << tck << std::endl;
+                            iter = buffers.erase(iter);
+
+                            // Take this fifo entry and release it back to the ET system.
+                            // Each event in this entry has already been labelled as "having data"
+                            // if it's been fully reassembled. So reader of this fifo entry
+                            // needs to be aware.
+                            et_fifo_putEntry(entry);
+                        }
+                        else {
+                            ++iter;
+                        }
+                    }
 
                     // read next packet
                 }

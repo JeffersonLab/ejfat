@@ -261,7 +261,7 @@ typedef struct threadStruct_t {
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
 
-    int64_t byteCount, pktCount, bufCount;
+    int64_t byteCount, pktCount, bufCount, discardByteCount, discardBufCount;
     int64_t missingByteCount; // discarded + dropped
 
     // Parse arg
@@ -277,9 +277,15 @@ static void *rateThread(void *arg) {
     int64_t prevTotalBytes[sourceCount];
     int64_t prevBuiltBufs[sourceCount];
 
+    int64_t prevDiscardBytes[sourceCount];
+    int64_t prevDiscardBufs[sourceCount];
+
     int64_t currTotalPkts[sourceCount];
     int64_t currTotalBytes[sourceCount];
     int64_t currBuiltBufs[sourceCount];
+
+    int64_t currDiscardBytes[sourceCount];
+    int64_t currDiscardBufs[sourceCount];
 
     bool dataArrived[sourceCount];
     for (int i=0; i < sourceCount; i++) {
@@ -317,6 +323,9 @@ static void *rateThread(void *arg) {
                 currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
                 currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
 
+                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
+                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
+
                 // Start the clock for this source
                 clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
                 //fprintf(stderr, "started clock for src %d\n", src);
@@ -330,6 +339,9 @@ static void *rateThread(void *arg) {
             prevTotalPkts[i]   = currTotalPkts[i];
             prevTotalBytes[i]  = currTotalBytes[i];
             prevBuiltBufs[i]   = currBuiltBufs[i];
+
+            prevDiscardBytes[i] = currDiscardBytes[i];
+            prevDiscardBufs[i]  = currDiscardBufs[i];
         }
 
         // Delay 4 seconds between printouts
@@ -349,6 +361,9 @@ static void *rateThread(void *arg) {
             currTotalPkts[i]    = mapp[src]->acceptedPackets;
             currTotalBytes[i]   = mapp[src]->acceptedBytes;
             currBuiltBufs[i]    = mapp[src]->builtBuffers;
+
+            currDiscardBytes[i] = mapp[src]->discardedBytes;
+            currDiscardBufs[i]  = mapp[src]->discardedBuffers;
 
             if (currTotalBytes[i] < 0) {
                 rollOver = true;
@@ -371,6 +386,9 @@ static void *rateThread(void *arg) {
                 currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
                 currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
                 currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
+
+                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
+                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
             }
             t1 = tEnd;
             rollOver = false;
@@ -395,6 +413,10 @@ static void *rateThread(void *arg) {
             pktCount  = currTotalPkts[i]  - prevTotalPkts[i];
             bufCount  = currBuiltBufs[i]  - prevBuiltBufs[i];
 
+            discardByteCount = currDiscardBytes[i] - prevDiscardBytes[i];
+            discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
+
+
             pktRate    = 1000000.0 * ((double) pktCount) / microSec;
             pktAvgRate = 1000000.0 * ((double) currTotalPkts[i]) / totalMicroSecs[i];
             printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", src, pktRate, pktAvgRate);
@@ -402,13 +424,14 @@ static void *rateThread(void *arg) {
             // Actual Data rates (no header info)
             dataRate    = ((double) byteCount) / microSec;
             dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %u\n",
-                   dataRate, dataAvgRate, mapp[src]->builtBuffers);
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %u, discard %" PRId64 ", discard total %" PRId64 "\n",
+                   dataRate, dataAvgRate, mapp[src]->builtBuffers, discardByteCount, currDiscardBytes[i]);
 
             // Buffer rates
             bufRate    = 1000000.0 * ((double) bufCount) / microSec;
             bufAvgRate = 1000000.0 * ((double) currBuiltBufs[i]) / totalMicroSecs[i];
-            printf("     Bufs:  %3.4g Hz,  %3.4g Avg\n\n", bufRate, bufAvgRate);
+            printf("     Bufs:  %3.4g Hz,  %3.4g Avg, discard %" PRId64 ", discard total %" PRId64 "\n\n",
+                   bufRate, bufAvgRate, discardBufCount, currDiscardBufs[i]);
         }
 
         t1 = tEnd;
@@ -566,7 +589,7 @@ int main(int argc, char **argv) {
     }
 
     // Call routine that reads packets, puts data into fifo entry, places entry into ET in a loop
-    getBuffers(udpSocket, fid, debug, stats);
+    getBuffers(udpSocket, fid, debug, 1, stats);
 
     return 0;
 }
