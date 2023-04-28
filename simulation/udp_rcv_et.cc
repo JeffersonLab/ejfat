@@ -577,7 +577,14 @@ int main(int argc, char **argv) {
 
     et_open_config_init(&openconfig);
     if (et_open(&etid, etFileName, openconfig) != ET_OK) {
-        printf("et_open problems\n");
+        fprintf(stderr, "et_open problems\n");
+        exit(1);
+    }
+
+    size_t eventSize;
+    err = et_system_geteventsize(etid, &eventSize);
+    if (err != ET_OK || eventSize < 9000) {
+        fprintf(stderr, "Events need to be at least 9000 bytes instead of %d\n", (int)eventSize);
         exit(1);
     }
 
