@@ -344,7 +344,7 @@
                     // showing up as huge #s. So have negative term switch sides.
                     // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
                     if (tik + 2 * tickPrescale < biggestTick) {
-                        std::cout << "entry + (2 * prescale) " << (tik + 2 * tickPrescale) << "< ?? bigT = " <<  biggestTick << std::endl;
+//std::cout << "Remove tick " << tik << ", tick + (2*prescale) " << (tik + 2 * tickPrescale) << " < bigT " <<  biggestTick << std::endl;
                         if (takeStats) {
                             int dBufs = 0;
                             size_t dBytes = 0;
@@ -354,7 +354,6 @@
                             statMap[dataId]->discardedBytes   += dBytes;
                         }
 
-                        std::cout << "Remove " << tik << std::endl;
                         iter = buffers.erase(iter);
 
                         // Take this fifo entry and release it back to the ET system.
