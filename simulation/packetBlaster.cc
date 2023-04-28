@@ -65,7 +65,7 @@ static void printHelp(char *programName) {
             "        [-id <data id>]",
             "        [-pro <protocol>]",
             "        [-e <entropy>]",
-            "        [-b <buffer size>]",
+            "        [-b <buffer size, 1MB default>]",
             "        [-bufrate <buffers sent per sec>]",
             "        [-byterate <bytes sent per sec>]",
             "        [-s <UDP send buffer size>]",
