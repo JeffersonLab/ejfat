@@ -258,10 +258,10 @@
                                    nBytes, dataId, tick, bufOffset, btoa(packetLast), btoa(firstReadForBuf));
 
                 // Room for packet?
-                if (bufOffset + nBytes > bufSizeMax) {
+                if (bufLen > bufSizeMax) {
                     // No room in buffer, ET system event size needs to be changed to accommodate this!
                     throw std::runtime_error("ET event too small, make > " +
-                                             std::to_string(totalBytesWritten + nBytes) + " bytes");
+                                             std::to_string(bufLen) + " bytes");
                 }
 
                 // Copy data into buffer
