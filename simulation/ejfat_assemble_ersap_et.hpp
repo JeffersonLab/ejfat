@@ -29,6 +29,7 @@
 #include <set>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <vector>
 #include <memory>
@@ -154,6 +155,15 @@
                 srcIds.insert(id);
             }
 
+            // Have a list of 10 empty entries for use
+            std::unordered_set<et_fifo_entry *> freeEntries;
+            for (int i=0; i < 10; i++) {
+                entry = et_fifo_entryCreate(fid);
+                if (entry == nullptr) {
+                    throw std::runtime_error("no memory");
+                }
+                freeEntries.insert(entry);
+            }
 
             while (true) {
 
@@ -209,20 +219,29 @@
                     packetCount = con[5];
 
                     // Get data array
-                    buffer = reinterpret_cast<char *>(event->pdata);
+                    et_event_getdata(event, (void **)&buffer);
 
                     // Bytes previously written into buffer
                     et_event_getlength(event, &totalBytesWritten);
                     firstReadForBuf = false;
                 }
                 else {
-                    if (debug) fprintf(stderr, "fifo entry must be created\n");
-                    entry = et_fifo_entryCreate(fid);
-                    if (entry == nullptr) {
-                        throw std::runtime_error("no memory");
+                    auto itt = freeEntries.cbegin();
+                    if (itt == freeEntries.cend()) {
+                        // There is no free fifo entry available, so make another one
+fprintf(stderr, "fifo entry must be created\n");
+                        et_fifo_entry *e =  et_fifo_entryCreate(fid);
+                        if (e == nullptr) {
+                            throw std::runtime_error("out of memory");
+                        }
+                        entry = e;
+                    }
+                    else {
+                        entry = *itt;
+                        // remove from set while being used
+                        freeEntries.erase(itt);
                     }
 
-                    // There is no fifo entry for this tick, so get one
                     err = et_fifo_newEntry(fid, entry);
                     if (err != ET_OK) {
                         throw std::runtime_error(et_perror(err));
@@ -237,7 +256,7 @@
                         throw std::runtime_error("cannot find buf w/ id = " + std::to_string(dataId));
                     }
 
-                    buffer = reinterpret_cast<char *>(event->pdata);
+                    et_event_getdata(event, (void **)&buffer);
 
                     // Keep # of packets built into buffer, stored in the 6th ET control word of event.
                     et_event_getcontrol(event, con);
@@ -323,6 +342,9 @@
 
                         // Put complete array of buffers associated w/ one tick back into ET
                         et_fifo_putEntry(entry);
+
+                        // Put entry back into freeEntries for reuse
+                        freeEntries.insert(entry);
                     }
                 }
 
@@ -378,6 +400,9 @@
                         // if it's been fully reassembled. So reader of this fifo entry
                         // needs to be aware.
                         et_fifo_putEntry(entrie);
+
+                        // Put entry back into freeEntries for reuse
+                        freeEntries.insert(entrie);
                     }
                     else {
                         ++iter;
