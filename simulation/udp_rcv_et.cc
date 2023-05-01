@@ -402,7 +402,10 @@ static void *rateThread(void *arg) {
 
         for (int i=0; i < sourceCount; i++) {
             // Dota not coming in yet from this source so do NO calcs
-            if (!dataArrived[i]) continue;
+            if (!dataArrived[i]) {
+                std::cerr << "data not arrived from source " << sourceIds[i] << std::endl;
+                continue;
+            }
 
             // Skip first stat cycle as the rate calculations will be off
             if (skippedFirst[i] < 1) {
