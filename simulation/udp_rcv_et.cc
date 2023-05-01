@@ -311,7 +311,8 @@ static void *rateThread(void *arg) {
     double pktRate, pktAvgRate, dataRate, dataAvgRate, bufRate, bufAvgRate;
     int64_t microSec;
     struct timespec tEnd, t1;
-    bool rollOver = false;
+    bool rollOver = false, allSrcsSending = false;
+    int sendingSrcCount = 0;
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
@@ -333,7 +334,7 @@ static void *rateThread(void *arg) {
 
                 // Start the clock for this source
                 clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
-fprintf(stderr, "started clock for src %d, clear currTotalPkts[%d] = %" PRId64 "\n", src, i, currTotalPkts[i]);
+//fprintf(stderr, "started clock for src %d, clear currTotalPkts[%d] = %" PRId64 "\n", src, i, currTotalPkts[i]);
 
                 // From now on we skip this zeroing step
                 skippedFirst[i]++;
@@ -342,7 +343,6 @@ fprintf(stderr, "started clock for src %d, clear currTotalPkts[%d] = %" PRId64 "
 
         for (int i=0; i < sourceCount; i++) {
             prevTotalPkts[i]   = currTotalPkts[i];
-fprintf(stderr, "prev currTotalPkts[%d] = %" PRId64 "\n", i, currTotalPkts[i]);
             prevTotalBytes[i]  = currTotalBytes[i];
             prevBuiltBufs[i]   = currBuiltBufs[i];
 
@@ -365,7 +365,6 @@ fprintf(stderr, "prev currTotalPkts[%d] = %" PRId64 "\n", i, currTotalPkts[i]);
 
             int src = sourceIds[i];
             currTotalPkts[i]    = mapp[src]->acceptedPackets;
-fprintf(stderr, "now currTotalPkts[%d] = %" PRId64 "\n", i, currTotalPkts[i]);
             currTotalBytes[i]   = mapp[src]->acceptedBytes;
             currBuiltBufs[i]    = mapp[src]->builtBuffers;
 
@@ -377,12 +376,20 @@ fprintf(stderr, "now currTotalPkts[%d] = %" PRId64 "\n", i, currTotalPkts[i]);
             }
         }
 
-        // Don't start calculating stats until data has come in for a full cycle.
-        // Keep track of when that starts.
-        for (int i=0; i < sourceCount; i++) {
-            if (currTotalPkts[i] > 0) {
+        // Don't start calculating stats until data has come in all channels for a full cycle.
+        // Keep track of when that starts
+        if (!allSrcsSending) {
+            for (int i = 0; i < sourceCount; i++) {
+                if (!dataArrived[i] && currTotalPkts[i] > 0) {
 fprintf(stderr, "currTotalPkts[%d] = %" PRId64 ", set dataArrived[%d] = true\n", i, currTotalPkts[i], i);
-                dataArrived[i] = true;
+                    dataArrived[i] = true;
+                    sendingSrcCount++;
+
+                    if (sendingSrcCount == sourceCount) {
+                        allSrcsSending = true;
+fprintf(stderr, "All %d data sources are sending data now\n", sourceCount);
+                    }
+                }
             }
         }
 
