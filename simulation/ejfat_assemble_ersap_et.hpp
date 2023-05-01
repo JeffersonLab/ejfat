@@ -65,6 +65,7 @@
          * @param tickPrescale  the prescale value (event Nth) expected of incoming ticks.
          * @param stats         shared pointer to map, map elements are shared pointer to stats structure.
          *                      Use this to keep stats so it can be printed out somewhere.
+         *                      Map has key = src id, val = pointer to struct for statistics.
          *
          * @throws  runtime_exception if ET buffer too small,
          *                            too many source ids to be held in fifo entry,
@@ -211,8 +212,7 @@
                     buffer = reinterpret_cast<char *>(event->pdata);
 
                     // Bytes previously written into buffer
-                    totalBytesWritten = event->length;
-
+                    et_event_getlength(event, &totalBytesWritten);
                     firstReadForBuf = false;
                 }
                 else {
@@ -304,9 +304,18 @@
 
                     if (tickCompleted) {
                         if (takeStats) {
-                            statMap[dataId]->acceptedBytes += totalBytesWritten;
-                            statMap[dataId]->builtBuffers++;
-                            statMap[dataId]->acceptedPackets += packetCount;
+                            // Each tick has a component from each incoming data source - update all.
+                            et_event **evs = et_fifo_getBufs(entry);
+                            for (int i=0; i < srcIdCount; i++) {
+                                int id = bufIds[i];
+                                et_event *ev = evs[i];
+                                et_event_getcontrol(ev, con);
+                                et_event_getlength(ev, &totalBytesWritten);
+
+                                statMap[id]->acceptedBytes += totalBytesWritten;
+                                statMap[id]->builtBuffers++;
+                                statMap[id]->acceptedPackets += con[5];
+                            }
                         }
 
                         // Take this out of buffers map
@@ -335,23 +344,30 @@
                     et_fifo_entry *entrie = iter->second;
                     //std::cout << "   try " << tck << std::endl;
 
-                    //std::cout << "entry + (2 * tickPrescale) " << (tck + 2 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
+//std::cout << "entry + (4 * tickPrescale) " << (tck + 4 * tickPrescale) << "< ?? bigT = " <<  bigTick << std::endl;
 
                     // Remember, tick values do NOT wrap around.
                     // It may make more sense to have the inequality as:
-                    // tck < bigTick - 2*tickPrescale
+                    // tck < bigTick - 4*tickPrescale
                     // Except then we run into trouble early with negative # in unsigned arithemtic
                     // showing up as huge #s. So have negative term switch sides.
-                    // The idea is that any tick < 2 prescales below max Tick need to be removed from maps
-                    if (tik + 2 * tickPrescale < biggestTick) {
-//std::cout << "Remove tick " << tik << ", tick + (2*prescale) " << (tik + 2 * tickPrescale) << " < bigT " <<  biggestTick << std::endl;
+                    // The idea is that any tick < 4 prescales below max Tick need to be removed from maps
+                    if (tik + 4 * tickPrescale < biggestTick) {
+//std::cout << "Remove tick " << tik << ", tick + (4*prescale) " << (tik + 4 * tickPrescale) << " < bigT " <<  biggestTick << std::endl;
                         if (takeStats) {
-                            int dBufs = 0;
-                            size_t dBytes = 0;
-                            // This call finds # bufs and bytes in incomplete buffers of fifo entry
-                            et_fifo_allHaveData(fid, entrie, &dBufs, &dBytes);
-                            statMap[dataId]->discardedBuffers += dBufs;
-                            statMap[dataId]->discardedBytes   += dBytes;
+                            // Each tick has a component from each incoming data source - update all.
+                            et_event **evs = et_fifo_getBufs(entry);
+                            for (int i=0; i < srcIdCount; i++) {
+                                int id = bufIds[i];
+                                et_event *ev = evs[i];
+                                et_event_getcontrol(event, con);
+                                int hData = con[1];
+
+                                et_event_getlength(event, &totalBytesWritten);
+                                statMap[id]->discardedBytes += totalBytesWritten;
+                                statMap[id]->discardedBuffers++;
+                                statMap[id]->discardedPackets += con[5];
+                            }
                         }
 
                         iter = buffers.erase(iter);
