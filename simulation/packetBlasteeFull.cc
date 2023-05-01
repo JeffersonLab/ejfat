@@ -510,7 +510,8 @@ static void *rateThread(void *arg) {
     double pktRate, pktAvgRate, dataRate, dataAvgRate;
     int64_t microSec;
     struct timespec tEnd, t1;
-    bool rollOver = false;
+    bool rollOver = false, allSrcsSending = false;
+    int sendingSrcCount = 0;
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
@@ -587,11 +588,19 @@ static void *rateThread(void *arg) {
 
         // Don't start calculating stats until data has come in for a full cycle.
         // Keep track of when that starts.
-        for (int i=0; i < sourceCount; i++) {
-            if (currTotalPkts[i] > 0) {
-                dataArrived[i] = true;
+        if (!allSrcsSending) {
+            for (int i = 0; i < sourceCount; i++) {
+                if (!dataArrived[i] && currTotalPkts[i] > 0) {
+                    dataArrived[i] = true;
+                    sendingSrcCount++;
+
+                    if (sendingSrcCount == sourceCount) {
+                        allSrcsSending = true;
+                    }
+                }
             }
         }
+
 
         // Start over tracking bytes and packets if #s roll over
         if (rollOver) {
