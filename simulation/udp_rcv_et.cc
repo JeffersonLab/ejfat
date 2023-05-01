@@ -333,7 +333,7 @@ static void *rateThread(void *arg) {
 
                 // Start the clock for this source
                 clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
-                //fprintf(stderr, "started clock for src %d\n", src);
+fprintf(stderr, "started clock for src %d, clear currTotalPkts[%d] = %" PRId64 "\n", src, i, currTotalPkts[i]);
 
                 // From now on we skip this zeroing step
                 skippedFirst[i]++;
@@ -342,6 +342,7 @@ static void *rateThread(void *arg) {
 
         for (int i=0; i < sourceCount; i++) {
             prevTotalPkts[i]   = currTotalPkts[i];
+fprintf(stderr, "prev currTotalPkts[%d] = %" PRId64 "\n", i, currTotalPkts[i]);
             prevTotalBytes[i]  = currTotalBytes[i];
             prevBuiltBufs[i]   = currBuiltBufs[i];
 
@@ -364,6 +365,7 @@ static void *rateThread(void *arg) {
 
             int src = sourceIds[i];
             currTotalPkts[i]    = mapp[src]->acceptedPackets;
+fprintf(stderr, "now currTotalPkts[%d] = %" PRId64 "\n", i, currTotalPkts[i]);
             currTotalBytes[i]   = mapp[src]->acceptedBytes;
             currBuiltBufs[i]    = mapp[src]->builtBuffers;
 
@@ -379,6 +381,7 @@ static void *rateThread(void *arg) {
         // Keep track of when that starts.
         for (int i=0; i < sourceCount; i++) {
             if (currTotalPkts[i] > 0) {
+fprintf(stderr, "currTotalPkts[%d] = %" PRId64 ", set dataArrived[%d] = true\n", i, currTotalPkts[i], i);
                 dataArrived[i] = true;
             }
         }
