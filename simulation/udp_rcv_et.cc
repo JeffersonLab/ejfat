@@ -262,7 +262,6 @@ typedef struct threadStruct_t {
 static void *rateThread(void *arg) {
 
     int64_t byteCount, pktCount, bufCount, discardByteCount, discardBufCount;
-    int64_t missingByteCount; // discarded + dropped
 
     // Parse arg
     threadStruct *targ = static_cast<threadStruct *>(arg);
@@ -381,13 +380,13 @@ static void *rateThread(void *arg) {
         if (!allSrcsSending) {
             for (int i = 0; i < sourceCount; i++) {
                 if (!dataArrived[i] && currTotalPkts[i] > 0) {
-fprintf(stderr, "currTotalPkts[%d] = %" PRId64 ", set dataArrived[%d] = true\n", i, currTotalPkts[i], i);
+//fprintf(stderr, "currTotalPkts[%d] = %" PRId64 ", set dataArrived[%d] = true\n", i, currTotalPkts[i], i);
                     dataArrived[i] = true;
                     sendingSrcCount++;
 
                     if (sendingSrcCount == sourceCount) {
                         allSrcsSending = true;
-fprintf(stderr, "All %d data sources are sending data now\n", sourceCount);
+//fprintf(stderr, "All %d data sources are sending data now\n", sourceCount);
                     }
                 }
             }
