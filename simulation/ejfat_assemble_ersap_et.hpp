@@ -360,13 +360,14 @@
                             for (int i=0; i < srcIdCount; i++) {
                                 int id = bufIds[i];
                                 et_event *ev = evs[i];
-                                et_event_getcontrol(event, con);
-                                int hData = con[1];
+                                if (ev != nullptr) {
+                                    et_event_getcontrol(event, con);
+                                    et_event_getlength(event, &totalBytesWritten);
 
-                                et_event_getlength(event, &totalBytesWritten);
-                                statMap[id]->discardedBytes += totalBytesWritten;
-                                statMap[id]->discardedBuffers++;
-                                statMap[id]->discardedPackets += con[5];
+                                    statMap[id]->discardedBytes += totalBytesWritten;
+                                    statMap[id]->discardedBuffers++;
+                                    statMap[id]->discardedPackets += con[5];
+                                }
                             }
                         }
 
