@@ -269,6 +269,11 @@ static void *rateThread(void *arg) {
     int sourceCount = targ->sourceCount;
     int *sourceIds  = targ->sourceIds;
 
+    for (int i=0; i < sourceCount; i++)  {
+        std::cerr << "Stat thd, expecting source " << sourceIds[i] << " in position " << i << std::endl;
+    }
+
+
     auto stats = targ->stats;
     auto & mapp = (*(stats.get()));
 
