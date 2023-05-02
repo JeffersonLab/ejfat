@@ -185,6 +185,13 @@
                             version, dataId, bufOffset, bufLen, tick, nBytes);
                 }
 
+
+                statMap[dataId]->acceptedBytes += nBytes;
+               // statMap[dataId]->builtBuffers++;
+                statMap[dataId]->acceptedPackets++;
+
+                continue;
+
                 // Check to see if source id is expected
                 if (srcIds.count(dataId) == 0) {
                     if (++invalidPkts > 100) {
