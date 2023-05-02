@@ -611,6 +611,10 @@ int main(int argc, char **argv) {
         cores[i] = -1;
     }
 
+    for (int i = 0; i < MAX_SOURCES; i++) {
+        sourceIds[i] = -1;
+    }
+
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &port, &tick,
               &delay, sourceIds, &bufRate, &avgBufSize, &sendBufSize,
               &delayPrescale, &tickPrescale,  &repeats, cores, &debug,
