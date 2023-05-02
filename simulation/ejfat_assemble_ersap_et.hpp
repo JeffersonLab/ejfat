@@ -93,7 +93,7 @@
 
             uint64_t tick, prevTick = UINT64_MAX, biggestTick = 0;
             uint32_t bufLen, bufOffset;
-            bool packetFirst, packetLast, firstReadForBuf;
+            bool packetFirst, packetLast;
 
             // Initial size to make internal buffers
             size_t   bufSizeMax = et_fifo_getBufSize(fid);
@@ -149,13 +149,14 @@
                 throw std::runtime_error("data sources were NOT specified when calling et_fifo_openProducer()");
             }
 
-            // Translate this array into an ordered (sorted by key) set for later ease of use
-            std::set<int> srcIds;
-            for (auto id : bufIds) {
-                srcIds.insert(id);
+            // Translate bufIds array into a map which maps from srcId back to original index for later ease of use.
+            // Key = srcId, Val = original index
+            std::unordered_map<int, int> bufIdReverseMap;
+            for (int i=0; i < srcIdCount; i++) {
+                bufIdReverseMap[bufIds[i]] = i;
             }
 
-            // Have a list of 10 empty entries for use
+            // Have a list of 10 empty entries for use & reuse
             std::unordered_set<et_fifo_entry *> freeEntries;
             for (int i=0; i < 10; i++) {
                 entry = et_fifo_entryCreate(fid);
@@ -165,6 +166,12 @@
                 freeEntries.insert(entry);
             }
 
+            // To speed things up, keep some arrays with previously determined values (from previous tick)
+            char* bufs[srcIdCount];
+            int packetCnts[srcIdCount];
+            size_t bytesWritten[srcIdCount];
+            et_event* events[srcIdCount];
+            int controls[srcIdCount][ET_STATION_SELECT_INTS];
 
 
             while (true) {
@@ -188,7 +195,7 @@
                 }
 
                 // Check to see if source id is expected
-                if (srcIds.count(dataId) == 0) {
+                if (bufIdReverseMap.count(dataId) == 0) {
                     if (++invalidPkts > 100) {
                         throw std::runtime_error("received over 100 pkts w/ wrong data id");
                     }
@@ -199,9 +206,8 @@
                 // Track # packets read while assembling each buffer
                 int64_t packetCount;
 
+                // If packet with different tick than last time came in
                 if (tick != prevTick) {
-                    // Packet with different tick than last time came in
-
                     // Use tick value to look into the map of associated fifo entries
                     auto it = buffers.find(tick);
 
@@ -209,28 +215,46 @@
                     if (it != buffers.end()) {
                         if (debug) fprintf(stderr, "fifo entry already exists, look for id = %hu\n", dataId);
                         entry = it->second;
-                        // Find the buffer associated with dataId or the first unused
-                        event = et_fifo_getBuf(dataId, entry);
-                        if (event == NULL) {
-                            // Major error
-                            throw std::runtime_error("too many source ids for data to be held in fifo entry");
+
+                        // Get info for every incoming data source
+                        et_event **evts =  et_fifo_getBufs(entry);
+                        for (int i=0; i < srcIdCount; i++) {
+                            packetCnts[i] = 0;
+                            bytesWritten[i] = 0;
+                            events[i] = evts[i];
+                            et_event_getdata(events[i], (void **) &bufs[i]);
+                            et_event_getcontrol(events[i], controls[i]);
                         }
-                        if (debug)
-                            fprintf(stderr, "  ev len = %" PRIu64 ", id = %d, hasData = %d\n", event->length,
-                                    event->control[0], event->control[1]);
 
-                        // Keep # of packets built into buffer, stored in the 6th ET control word of event.
-                        // For fifo ET system, the 1st control word is used by ET system to contain srcId,
-                        // the 2nd holds whether data is valid or not. The rest are available.
-                        et_event_getcontrol(event, con);
-                        packetCount = con[5];
+                        int index = bufIdReverseMap[dataId];
 
-                        // Get data array
-                        et_event_getdata(event, (void **) &buffer);
+                        event             = events[index];
+                        buffer            = bufs[index];
+                        memcpy(con, controls[index], ET_STATION_SELECT_INTS*sizeof(int));
+                        packetCount       = 0;
+                        totalBytesWritten = 0;
 
-                        // Bytes previously written into buffer
-                        et_event_getlength(event, &totalBytesWritten);
-                        firstReadForBuf = false;
+//                        // Find the buffer associated with dataId or the first unused
+//                        event = et_fifo_getBuf(dataId, entry);
+//                        if (event == NULL) {
+//                            // Major error
+//                            throw std::runtime_error("too many source ids for data to be held in fifo entry");
+//                        }
+//                        if (debug)
+//                            fprintf(stderr, "  ev len = %" PRIu64 ", id = %d, hasData = %d\n", event->length,
+//                                    event->control[0], event->control[1]);
+//
+//                        // Keep # of packets built into buffer, stored in the 6th ET control word of event.
+//                        // For fifo ET system, the 1st control word is used by ET system to contain srcId,
+//                        // the 2nd holds whether data is valid or not. The rest are available.
+//                        et_event_getcontrol(event, con);
+//                        packetCount = con[5];
+//
+//                        // Get data array
+//                        et_event_getdata(event, (void **) &buffer);
+//
+//                        // Bytes previously written into buffer
+//                        et_event_getlength(event, &totalBytesWritten);
                     }
                     else {
                         auto itt = freeEntries.cbegin();
@@ -257,21 +281,39 @@
                         // Put fifo entry into map for future access
                         buffers[tick] = entry;
 
-                        // Get data array, assume room for 1 packet
-                        event = et_fifo_getBuf(dataId, entry);
-                        if (event == NULL) {
-                            throw std::runtime_error("cannot find buf w/ id = " + std::to_string(dataId));
+                        // Get info for every incoming data source
+                        et_event **evts =  et_fifo_getBufs(entry);
+                        for (int i=0; i < srcIdCount; i++) {
+                            packetCnts[i] = 0;
+                            bytesWritten[i] = 0;
+                            events[i] = evts[i];
+                            et_event_getdata(events[i], (void **) &bufs[i]);
+                            et_event_getcontrol(events[i], controls[i]);
                         }
 
-                        et_event_getdata(event, (void **) &buffer);
+                        int index = bufIdReverseMap[dataId];
 
-                        // Keep # of packets built into buffer, stored in the 6th ET control word of event.
-                        et_event_getcontrol(event, con);
-                        packetCount = 0;
-
-                        // Bytes previously written into buffer
+                        event             = events[index];
+                        buffer            = bufs[index];
+                        memcpy(con, controls[index], ET_STATION_SELECT_INTS*sizeof(int));
+                        packetCount       = 0;
                         totalBytesWritten = 0;
-                        firstReadForBuf = true;
+
+//
+//                        // Get data array, assume room for 1 packet
+//                        event = et_fifo_getBuf(dataId, entry);
+//                        if (event == NULL) {
+//                            throw std::runtime_error("cannot find buf w/ id = " + std::to_string(dataId));
+//                        }
+//
+//                        et_event_getdata(event, (void **) &buffer);
+//
+//                        // Keep # of packets built into buffer, stored in the 6th ET control word of event.
+//                        et_event_getcontrol(event, con);
+//                        packetCount = 0;
+//
+//                        // Bytes previously written into buffer
+//                        totalBytesWritten = 0;
 
                         // Track the biggest tick to be received from any source
                         if (tick > biggestTick) {
@@ -283,31 +325,35 @@
                 else {
                     // Same tick as last time, so use same entry.
 
-                    // Find the buffer associated with dataId or the first unused
-                    event = et_fifo_getBuf(dataId, entry);
-                    if (event == NULL) {
-                        // Major error
-                        throw std::runtime_error("too many source ids for data to be held in fifo entry");
-                    }
-//                    if (debug)
-//                        fprintf(stderr, "  ev len = %" PRIu64 ", id = %d, hasData = %d\n", event->length,
-//                                event->control[0], event->control[1]);
+                    int index = bufIdReverseMap[dataId];
 
-                    et_event_getcontrol(event, con);
-                    packetCount = con[5];
+                    event             = events[index];
+                    buffer            = bufs[index];
+                    memcpy(con, controls[index], ET_STATION_SELECT_INTS*sizeof(int));
+                    packetCount       = packetCnts[index];
+                    totalBytesWritten = bytesWritten[index];
 
-                    // Get data array
-                    et_event_getdata(event, (void **) &buffer);
-
-                    // Bytes previously written into buffer
-                    et_event_getlength(event, &totalBytesWritten);
-                    firstReadForBuf = false;
+//                    // Find the buffer associated with dataId or the first unused
+//                    event = et_fifo_getBuf(dataId, entry);
+//                    if (event == NULL) {
+//                        // Major error
+//                        throw std::runtime_error("too many source ids for data to be held in fifo entry");
+//                    }
+//
+//                    et_event_getcontrol(event, con);
+//                    packetCount = con[5];
+//
+//                    // Get data array
+//                    et_event_getdata(event, (void **) &buffer);
+//
+//                    // Bytes previously written into buffer
+//                    et_event_getlength(event, &totalBytesWritten);
                 }
 
                 prevTick = tick;
 
-                if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %" PRIu64 ", w/ offset %u, last = %s, firstReadForBuf = %s\n",
-                                   nBytes, dataId, tick, bufOffset, btoa(packetLast), btoa(firstReadForBuf));
+                if (debug) fprintf(stderr, "Received %d bytes from sender %hu, tick %" PRIu64 ", w/ offset %u, last = %s\n",
+                                   nBytes, dataId, tick, bufOffset, btoa(packetLast));
 
                 // Room for packet?
                 if (bufLen > bufSizeMax) {
