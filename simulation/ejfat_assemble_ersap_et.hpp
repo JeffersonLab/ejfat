@@ -173,6 +173,8 @@
             et_event* events[srcIdCount];
             int controls[srcIdCount][ET_STATION_SELECT_INTS];
 
+            // original index of bufIds corresponding to current dataId
+            int index;
 
             while (true) {
 
@@ -226,7 +228,7 @@
                             et_event_getcontrol(events[i], controls[i]);
                         }
 
-                        int index = bufIdReverseMap[dataId];
+                        index = bufIdReverseMap[dataId];
 
                         event             = events[index];
                         buffer            = bufs[index];
@@ -291,7 +293,7 @@
                             et_event_getcontrol(events[i], controls[i]);
                         }
 
-                        int index = bufIdReverseMap[dataId];
+                        index = bufIdReverseMap[dataId];
 
                         event             = events[index];
                         buffer            = bufs[index];
@@ -325,7 +327,7 @@
                 else {
                     // Same tick as last time, so use same entry.
 
-                    int index = bufIdReverseMap[dataId];
+                    index = bufIdReverseMap[dataId];
 
                     event             = events[index];
                     buffer            = bufs[index];
@@ -374,6 +376,9 @@
                 // record # packets for this buffer/event
                 con[5] = ++packetCount;
                 et_event_setcontrol(event, con, 6);
+
+                packetCnts[index]   = packetCount;
+                bytesWritten[index] = totalBytesWritten;
 
                 // Have we read the whole buffer?
                 packetLast = false;
