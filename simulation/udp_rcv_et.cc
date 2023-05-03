@@ -598,6 +598,8 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    et_open_config_destroy(openconfig);
+
     size_t eventSize;
     err = et_system_geteventsize(etid, &eventSize);
     if (err != ET_OK || eventSize < 9000) {
