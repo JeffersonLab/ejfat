@@ -22,12 +22,17 @@
  * You can then run this program like:
  *
  * <code>
- *   udp_rcv_et -et /tmp/fifoEt -ids 1,3,76 -p 17750
+ *   udp_rcv_et -et /tmp/fifoEt -ids 1,3,76 -p 17750 -core 80 -pinCnt 4
  * </code>
  *
  * This expects data sources 1,3, and 76. There will be room in each ET fifo entry to have
  * 3 buffers (ET events), one for each source. There will be 1000 entries. Each buffer will
  * be 150kB. Max # of sources is 16 (can change that below).
+ *
+ * You can run the data producing program like:
+ * <code>
+ * ./clasBlasterIds -f /daqfs/java/clas_005038.1231.hipo -host 172.19.22.244 -p 19522 -mtu 9000 -s 25000000 -cores 60 -ids 1,3,76  -bufdelay -d 50000
+ * </code>
  */
 
 #include <iostream>
