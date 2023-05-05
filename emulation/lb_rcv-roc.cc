@@ -242,8 +242,6 @@ int main (int argc, char *argv[])
             perror("perror: recvfrom() == -1");
             std::cerr<<"perror: recvfrom() == -1: evnt_num = "<< evnt_num << '\n';
         }
-//std::cerr<<"nBytes: "<<nBytes<<'\n';
-        evnt_sz += std::max(0,nBytes-int(mdlen)); 
 
         // RE meta data is at front of in_buff
         auto* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)];
