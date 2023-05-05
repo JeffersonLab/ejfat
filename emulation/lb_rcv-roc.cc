@@ -4,8 +4,8 @@
 // writes reassembled binary data to disc
 
 #include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,49 +13,50 @@
 #include <netinet/udp.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <string.h>
-#include <string.h>
+#include <cstring>
 #include <fstream>
 #include <iostream>
-#include <inttypes.h>
+#include <cinttypes>
 #include <netdb.h>
-#include <time.h>
-#include <chrono>
 #include <ctime>
+#include <chrono>
 
 using namespace std;
 
-#define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
-#define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
-
-#ifdef __APPLE__
-#include <ctype.h>
+#ifdef __linux__
+    #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
+    #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 #endif
 
+#ifdef __APPLE__
+#include <cctype>
+#endif
+
+#define btoa(x) ((x)?"true":"false")
+
+
 const size_t max_pckt_sz  = 9000-20-8;  // = MTU - IP header - UDP header
-const size_t enet_pad     = 2;
-const size_t relen        = 8+8+enet_pad;     // 8 for flags, data_id, 8 for tick (event_id), 2bytes of pad to avoid ethernet packets < 64B
+const size_t relen        = 20;         // 4 for ver & data_id, 4 for offset, 4 for len, 8 for tick (event_id)
 const size_t mdlen        = relen;
-const size_t max_pckts    = 100;          // support up to 100 packets
+const size_t max_pckts    = 100;        // support up to 100 packets
 
-uint8_t  in_buff[max_pckts][max_pckt_sz];
-size_t   evnt_buff_idx[max_pckts];
-size_t   pckt_sz[max_pckts];
+const int outBufMaxLen = max_pckts*max_pckt_sz; // 100*8972 = 897kB
+uint8_t  out_buff[outBufMaxLen];
+uint8_t  in_buff[max_pckt_sz];
 
-void   Usage(void)
+void   Usage()
 {
     char usage_str[] =
         "\nUsage: \n\
         -6 Use IPV6 \n\
-        -i listen address  \n\
-        -p listen port  \n\
+        -i listen address (default INADDR_ANY)  \n\
+        -p listen port (default 17750)  \n\
         -n num events  \n\
         -l simulated extra latency (loop count)  \n\
         -v verbose mode (default is quiet)  \n\
         -x omit event size prefix  \n\
         -h help \n\n";
         cerr<<usage_str;
-        cerr<<"Required: -i -p\n";
 }
 
 static volatile int cpu=-1;
@@ -63,14 +64,13 @@ static volatile int cpu=-1;
 int main (int argc, char *argv[])
 {
     int optc;
-    extern char *optarg;
-    extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passed6=false, passedN=false;
     bool passedV=false, passedX=false, passedL=false;
 
     char     lstn_ip[INET6_ADDRSTRLEN]; // listening ip
-    uint16_t lstn_prt;                  // listening port
+    lstn_ip[0] = 0;
+    uint16_t lstn_prt = 17750;          // listening port
     uint32_t num_evnts = 1;             // number of events to recv
     uint64_t lat_lps = 0;               // loop count to simulate extra latency
 
@@ -120,7 +120,6 @@ int main (int argc, char *argv[])
         }
     }
     fprintf(stderr, "\n");
-    if(!(passedI && passedP && passedN)) { Usage(); exit(1); }
 
     // pre-open stream for port
     ofstream rs;
@@ -134,7 +133,7 @@ int main (int argc, char *argv[])
     rslg.open(xlg,std::ios::out);
 
 //===================== data reception setup ===================================
-    int lstn_sckt, nBytes;
+    int lstn_sckt, nBytes, dataBytes;
     socklen_t addr_size;
     struct sockaddr_storage src_addr;
 
@@ -167,8 +166,13 @@ int main (int argc, char *argv[])
         /* the port we are going to send to, in network byte order */
         lstn_addr6.sin6_port = htons(lstn_prt);           // "LB" = 0x4c42 by spec (network order)
         /* the server IP address, in network byte order */
-        inet_pton(AF_INET6, lstn_ip, &lstn_addr6.sin6_addr);  // LB address
-        ///bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
+        if (strlen(lstn_ip) > 0) {
+            inet_pton(AF_INET6, lstn_ip, &lstn_addr6.sin6_addr);  // LB address
+        }
+        else {
+            lstn_addr6.sin6_addr = in6addr_any;
+        }
+
         bind(lstn_sckt, (struct sockaddr *) &lstn_addr6, sizeof(lstn_addr6));
     } else {
         struct sockaddr_in lstn_addr;
@@ -190,7 +194,15 @@ int main (int argc, char *argv[])
         /*Configure settings in address struct*/
         lstn_addr.sin_family = AF_INET;
         lstn_addr.sin_port = htons(lstn_prt); // "LB"
-        lstn_addr.sin_addr.s_addr = inet_addr(lstn_ip); //indra-s2
+        if (strlen(lstn_ip) > 0) {
+            fprintf (stderr, "Using addr = %s\n", lstn_ip);
+            lstn_addr.sin_addr.s_addr = inet_addr(lstn_ip); //indra-s2
+        }
+        else {
+            fprintf (stderr, "Using INADDR_ANY\n");
+            lstn_addr.sin_addr.s_addr = INADDR_ANY;
+        }
+
         memset(lstn_addr.sin_zero, '\0', sizeof lstn_addr.sin_zero);
 
         /*Bind socket with address struct*/
@@ -210,10 +222,11 @@ int main (int argc, char *argv[])
 
     uint32_t evnt_sz = 0;  // event size for ERSAP
 
-    uint32_t xseq   = 0; //expected seq #
+    uint32_t totalBytesRead = 0;
+    bool veryFirstRead = true;
+    uint16_t veryFirstId = UINT16_MAX;
 
-    size_t in_buff_idx = 0;
-    
+
     do {
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
@@ -223,95 +236,113 @@ int main (int argc, char *argv[])
 #endif
 
 //        nBytes = recvfrom(lstn_sckt, (void*)in_buff, sizeof(in_buff), 0, (struct sockaddr *)&src_addr, &addr_size);
-        nBytes = recv(lstn_sckt, (void*)in_buff[in_buff_idx], sizeof(in_buff[0]), 0);
+        nBytes = recv(lstn_sckt, (void*)in_buff, max_pckt_sz, 0);
         if(nBytes == -1)
         {
             perror("perror: recvfrom() == -1");
-            std::cerr<<"perror: recvfrom() == -1: evnt_num = "<<evnt_num<<" seq = "<<xseq<<'\n';
+            std::cerr<<"perror: recvfrom() == -1: evnt_num = "<< evnt_num << '\n';
         }
 //std::cerr<<"nBytes: "<<nBytes<<'\n';
         evnt_sz += std::max(0,nBytes-int(mdlen)); 
 
         // RE meta data is at front of in_buff
-        uint8_t* pBufRe = in_buff[in_buff_idx];
-
-        uint64_t* pReTick = (uint64_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-enet_pad];
-        uint32_t* pSeq    = (uint32_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)-enet_pad];
-        uint16_t* pDid    = (uint16_t*) &in_buff[in_buff_idx][mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)-enet_pad];
+        auto* pReTick = (uint64_t*) &in_buff[mdlen-sizeof(uint64_t)];
+        auto* pLen    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
+        auto* pOff    = (uint32_t*) &in_buff[mdlen-sizeof(uint64_t)-2*sizeof(uint32_t)];
+        auto* pDid    = (uint16_t*) &in_buff[mdlen-sizeof(uint64_t)-2*sizeof(uint32_t)-sizeof(uint16_t)];
 
         // decode to host encoding
-        uint32_t seq     = ntohl(*pSeq);
+        uint32_t off     = ntohl(*pOff);
+        uint32_t len     = ntohl(*pLen);
         uint16_t data_id = ntohs(*pDid);
-        uint64_t tick    = NTOHLL(*pReTick);
+        uint64_t tick_net = *pReTick;
+#ifdef __APPLE__
+        uint64_t tick = NTOHLL(tick_net); // Beware on Mac, NTOHLL swaps actual arg!
+        NTOHLL(tick_net); // Swap it back
+#else
+        uint64_t tick = NTOHLL(tick_net);
+#endif
 
-        uint8_t vrsn = pBufRe[0] & 0xf;
-        uint8_t frst = (pBufRe[1] & 0x02) >> 1;
-        uint8_t lst  =  pBufRe[1] & 0x01;
+        //uint8_t vrsn  = (in_buff[0] >> 4) & 0xf;
 
-        if(passedV && (evnt_num > 0) && frst) 
-        {
-            if(passedV)
-            {
-                t_start = std::chrono::steady_clock::now();
-                std::cerr << "Interval: "
-                          << std::chrono::duration<double, std::micro>(t_start-t_start0).count()
-                          << " us" << std::endl;
-                t_start0 = t_start;
-            }
+        // At this point we dump packets from other sources
+        if (veryFirstRead) {
+            veryFirstId = data_id;
         }
-        
+        else if (data_id != veryFirstId) {
+            // Dump packet
+            if(passedV) fprintf (stderr, "Dump packet from src %hu\n", data_id);
+            continue;
+        }
+
+        dataBytes = nBytes - relen;
+        totalBytesRead += dataBytes;
+        bool frst = (off == 0);
+        bool lst  = (totalBytesRead >= len);
+
+
+        if(passedV && (evnt_num > 0) && frst) {
+            t_start = std::chrono::steady_clock::now();
+            std::cerr << "Interval: "
+                      << std::chrono::duration<double, std::micro>(t_start-t_start0).count()
+                      << " us" << std::endl;
+            t_start0 = t_start;
+        }
+
         if(passedV && evnt_num == 0 && frst) t_start0 = std::chrono::steady_clock::now();
 
-        evnt_buff_idx[seq] = in_buff_idx; //capture logical order of physical order
-        pckt_sz[seq]   = nBytes-mdlen;   //bytes recd not including re meta data
-
-        //rs.write((char*)&in_buff[mdlen], nBytes-mdlen);
-        if(passedV)
-        {
+        if(passedV) {
             char s[1024];
             sprintf ( s, "Received %d bytes: ", nBytes);
-//            sprintf ( s, "Writing %d bytes: ", int(nBytes-mdlen));
-            sprintf ( s, "Capture %d bytes for seq %d in buff idx %d: ", int(nBytes-mdlen), int(seq), int(in_buff_idx));
+            sprintf ( s, "Capture %d bytes for offset %d: ", int(nBytes-mdlen), int(off));
             rslg.write((char*)s, strlen(s));
-            sprintf ( s, "frst = %d / lst = %d ", frst, lst);
+            sprintf ( s, "frst = %s / lst = %s ", btoa(frst), btoa(lst));
             rslg.write((char*)s, strlen(s));
-            sprintf ( s, " / data_id = %d / seq = %d / tick = %ld\n", data_id, seq, tick);
+            sprintf ( s, " / data_id = %hu / off = %u / len = %u / tick = %" PRIu64 "\n", data_id, off, len, tick);
             rslg.write((char*)s, strlen(s));
             sprintf( s, "cpu\t%d\n", cpu);
             rslg.write((char*)s, strlen(s));
         }
-        xseq++;
-        in_buff_idx++;
-        if(lst) 
-        {
-            if(passedV) std:cerr << "Event_size: "<<evnt_sz<<" data_id: "<<lstn_prt<<'\n';
-            xseq = 0;
+
+        // Check to see if there's room to write all data into buf
+        if (len > outBufMaxLen) {
+            fprintf(stderr, "Internal buffer too small to hold data\n");
+            return (1);
+        }
+
+        // Copy data into buf at correct location (provided by RE header).
+        // This automatically corrects for out of order packets as long as they don't
+        // cross tick boundaries.
+        memcpy(out_buff + off, in_buff + relen, dataBytes);
+        veryFirstRead = false;
+
+        if(lst) {
+            if(passedV) std:cerr << "Event_size: " << totalBytesRead << " data_id: " << data_id << '\n';
             ++evnt_num;
             t_end = std::chrono::steady_clock::now();
 //            ltncy_mn *= (evnt_num-1)/evnt_num; //incremental formula
 //            ltncy_mn += std::chrono::duration<double, std::micro>(t_end-t_start).count()/evnt_num; //incremental formula
 
             // first four bytes must be event size for ERSAP
+            evnt_sz = totalBytesRead;
             if(!passedX) rs.write((char*)&evnt_sz, sizeof(evnt_sz));
 
-
-            for(size_t i=0;i<in_buff_idx;i++) {
-                rs.write((char*)&(in_buff[evnt_buff_idx[i]][mdlen]), pckt_sz[i]);
-//                rs.write((char*)&(in_buff[i][mdlen]), pckt_sz[i]);
-                if(passedV) {
-                    char s[1024];
-                    sprintf ( s, "Assembling %d bytes for seq %d in buff idx %d\n ", int(pckt_sz[i]), int(i), int(evnt_buff_idx[i]));
-                    rslg.write((char*)s, strlen(s));
-                }
+            // write out all data
+            rs.write((char*) in_buff, totalBytesRead);
+            if(passedV) {
+                char s[1024];
+                sprintf ( s, "Assembled %u bytes for tick %" PRIu64 " from id %hu\n ", totalBytesRead, tick, data_id);
+                rslg.write((char*)s, strlen(s));
             }
 
-            in_buff_idx = 0; //assuming packet marked as last really is last
+            // Start over, assuming packet marked as last really is last
+            totalBytesRead = 0;
+            veryFirstRead = true;
             evnt_sz = 0;
             
             if(passedL) for(size_t i=0;i<lat_lps;i++) i++; //simulated extra latency
             
-            if(passedV)
-            {
+            if(passedV) {
                 std::cerr << "Latency: "
                           << std::chrono::duration<double, std::micro>(t_end-t_start0).count()
                           << " us" << std::endl;
