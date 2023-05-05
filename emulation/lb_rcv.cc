@@ -194,7 +194,6 @@ int main (int argc, char *argv[])
         uint32_t len     = ntohl(*pLen);
         uint16_t data_id = ntohs(*pDid);
         uint64_t re_tick_net = *pReTick;
-
 #ifdef __APPLE__
         uint64_t re_tick = NTOHLL(re_tick_net); // Beware on Mac, NTOHLL swaps actual arg!
         NTOHLL(re_tick_net); // Swap it back
