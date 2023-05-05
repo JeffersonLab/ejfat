@@ -1,8 +1,8 @@
 /************* Load Balancer Emulation  *******************/
 
 #include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -10,51 +10,54 @@
 #include <netinet/udp.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <string.h>
-#include <inttypes.h>
+#include <cstring>
+#include <cinttypes>
 #include <netdb.h>
-#include <time.h>
+#include <ctime>
 
-#define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
-#define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
+#ifdef __linux__
+    #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
+    #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
+#endif
 
 #ifdef __APPLE__
-#include <ctype.h>
+#include <cctype>
 #endif
+
+#define btoa(x) ((x)?"true":"false")
+
 
 const size_t max_pckt_sz = 9000-20-8;  // = MTU - IP header - UDP header
 const size_t lblen       = 16;
-const size_t enet_pad    = 2;
-const size_t relen       = 8+8+enet_pad;   //2bytes of pad to avoid ethernet packets < 64B
+const size_t relen       = 20;
 const size_t mdlen       = lblen + relen;
 
 
-void   Usage(void)
+void   Usage()
 {
     char usage_str[] =
         "\nUsage: \n\
         -6 Use IPV6 \n\
-        -i listen address \n\
-        -p listen port   \n\
+        -i listen address (default INADDR_ANY) \n\
+        -p listen port (default 19522) \n\
         -t send address   \n\
         -r send base port \n\
         -e num base port entropy bits (0) \n\
         -v verbose mode (quiet)  \n\
         -h help \n\n";
         fprintf(stdout, "%s", usage_str);
-        fprintf(stdout, "Required: -i -p -t -r\n");
+        fprintf(stdout, "Required: -t -r\n");
 }
 
 int main (int argc, char *argv[])
 {
     int optc;
-    extern char *optarg;
-    extern int   optind, optopt;
 
     bool passedI=false, passedP=false, passedT=false, passedR=false, 
         passed6=false, passedV=false, passedE=false;
 
     char     re_lstn_ip[INET6_ADDRSTRLEN], dst_ip[INET6_ADDRSTRLEN]; // listening, target ip
+    re_lstn_ip[0] = 0;
     uint16_t re_lstn_prt = 0x4c42, dst_prt;                          // listening, target ports
     uint8_t  nm_entrp_bts = 0;                                       // number of entropy bits
 
@@ -105,7 +108,7 @@ int main (int argc, char *argv[])
         }
     }
     fprintf(stdout, "\n");
-    if(!(passedI && passedP && passedT && passedR)) { Usage(); exit(1); }
+    if(!(passedT && passedR)) { Usage(); exit(1); }
 
 //===================== data reception setup ===================================
     int re_lstn_sckt, nBytes;
@@ -141,8 +144,13 @@ int main (int argc, char *argv[])
         /* the port we are going to send to, in network byte order */
         re_lstn_addr6.sin6_port = htons(re_lstn_prt);           // "LB" = 0x4c42 by spec (network order)
         /* the server IP address, in network byte order */
-        inet_pton(AF_INET6, re_lstn_ip, &re_lstn_addr6.sin6_addr);  // LB address
-        ///bind(re_lstn_sckt, (struct sockaddr *) &re_lstn_addr6, sizeof(re_lstn_addr6));
+        if (strlen(re_lstn_ip) > 0) {
+            inet_pton(AF_INET6, re_lstn_ip, &re_lstn_addr6.sin6_addr);  // LB address
+        }
+        else {
+            re_lstn_addr6.sin6_addr = in6addr_any;
+        }
+
         bind(re_lstn_sckt, (struct sockaddr *) &re_lstn_addr6, sizeof(re_lstn_addr6));
     } else {
         struct sockaddr_in re_lstn_addr;
@@ -158,7 +166,15 @@ int main (int argc, char *argv[])
         /*Configure settings in address struct*/
         re_lstn_addr.sin_family = AF_INET;
         re_lstn_addr.sin_port = htons(re_lstn_prt); // "LB"
-        re_lstn_addr.sin_addr.s_addr = inet_addr(re_lstn_ip); //indra-s2
+        if (strlen(re_lstn_ip) > 0) {
+            fprintf (stderr, "Using addr = %s\n", re_lstn_ip);
+            re_lstn_addr.sin_addr.s_addr = inet_addr(re_lstn_ip); //indra-s2
+        }
+        else {
+            fprintf (stderr, "Using INADDR_ANY\n");
+            re_lstn_addr.sin_addr.s_addr = INADDR_ANY;
+        }
+
         memset(re_lstn_addr.sin_zero, '\0', sizeof re_lstn_addr.sin_zero);
 //fprintf( stdout, "Receiving on port %hu / host %s", re_lstn_prt, re_lstn_ip);
 
@@ -221,17 +237,19 @@ int main (int argc, char *argv[])
     }
 //=======================================================================
 
-    uint8_t buffer[max_pckt_sz];
-
+    uint8_t   buffer[max_pckt_sz];
     uint8_t*  pBufLb =  buffer;
     uint8_t*  pBufRe = &buffer[lblen];
-    uint16_t* pLbEntrp = (uint16_t*) &buffer[lblen-sizeof(uint16_t)-sizeof(uint64_t)];
-    uint64_t* pLbTick  = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
-    uint16_t* pReDid   = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-sizeof(uint16_t)-enet_pad];
-    uint32_t* pReSeq   = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)-enet_pad];
-    uint64_t* pReTick  = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)-enet_pad];
 
-    while(1){
+    auto* pLbEntrp = (uint16_t*) &buffer[lblen-sizeof(uint16_t)-sizeof(uint64_t)];
+    auto* pLbTick  = (uint64_t*) &buffer[lblen-sizeof(uint64_t)];
+
+    auto* pReDid   = (uint16_t*) &buffer[mdlen-sizeof(uint64_t)-2*sizeof(uint32_t)-sizeof(uint16_t)];
+    auto* pReOff   = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-2*sizeof(uint32_t)];
+    auto* pReLen   = (uint32_t*) &buffer[mdlen-sizeof(uint64_t)-sizeof(uint32_t)];
+    auto* pReTick  = (uint64_t*) &buffer[mdlen-sizeof(uint64_t)];
+
+    while(true){
         // Try to receive any incoming UDP datagram. Address and port of
         //  requesting client will be stored on src_addr variable
 
@@ -243,47 +261,59 @@ int main (int argc, char *argv[])
         }
 
         // decode to host encoding
-        uint16_t lb_entrp   = ntohs(*pLbEntrp);
-        uint64_t lb_tick    = NTOHLL(*pLbTick);
-        uint32_t re_seq     = ntohl(*pReSeq);
-        uint16_t re_data_id = ntohs(*pReDid);
-        uint64_t re_tick    = NTOHLL(*pReTick);
-        uint8_t re_vrsn     = (pBufRe[0] & 0xf0) >> 4;
-        uint8_t re_frst     = (pBufRe[1] & 0x02) >> 1;
-        uint8_t re_lst      =  pBufRe[1] & 0x01;
+        uint16_t lb_entrp = ntohs(*pLbEntrp);
 
-        char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
-        if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
-                       sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV) ) {
-            perror("getnameinfo ");
-        }
         if(passedV) {
+            uint64_t lb_tick    = NTOHLL(*pLbTick);
+            uint32_t re_len     = ntohl(*pReLen);
+            uint32_t re_off     = ntohl(*pReOff);
+            uint16_t re_data_id = ntohs(*pReDid);
+#ifdef __APPLE__
+            // Mac's NTOHLL swaps actual arg which is bad since we gotta pass that data on
+            uint64_t tick_net   = *pReTick;
+            uint64_t re_tick    = NTOHLL(tick_net);
+#else
+            uint64_t re_tick    = NTOHLL(*pReTick);
+#endif
+            uint8_t re_vrsn     = (pBufRe[0] >> 4) & 0xf;
+
+            bool re_frst = (re_off == 0);
+            // This is only true if last packet is not out of order
+            bool re_lst  = (re_off + nBytes - mdlen) >= re_len;
+
+            char gtnm_ip[NI_MAXHOST], gtnm_srvc[NI_MAXSERV];
+            if (getnameinfo((struct sockaddr*) &src_addr, addr_size, gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
+                            sizeof(gtnm_srvc), NI_NUMERICHOST | NI_NUMERICSERV) ) {
+                perror("getnameinfo ");
+            }
+
             fprintf( stdout, "Received %d bytes from source %s / %s : ", nBytes, gtnm_ip, gtnm_srvc);
             fprintf( stdout, "l = %c / b = %c ", pBufLb[0], pBufLb[1]);
             fprintf( stdout, "lb_tick = %" PRIu64 " ", lb_tick);
             fprintf( stdout, "lb_entrp = %d ", lb_entrp);
-            fprintf( stdout, "re_frst = %d / re_lst = %d ", re_frst, re_lst); 
-            fprintf( stdout, " / re_data_id = %d / re_seq = %d\n", re_data_id, re_seq);	
+            fprintf( stdout, "re_frst = %s / re_lst = %s ", btoa(re_frst), btoa(re_lst));
+            fprintf( stdout, " / re_data_id = %hu / re_off = %u / re_len = %u\n", re_data_id, re_off, re_len);
             fprintf( stdout, "re_tick = %" PRIu64 " ", re_tick);
         }
         
         // forward data to sink skipping past lb meta data
         /* now send a datagram */
         ssize_t rtCd = 0;
+        int index = lb_entrp % nm_rcv_prts;
         if (passed6) {
-            if ((rtCd = sendto(dst_sckt[lb_entrp % nm_rcv_prts], &buffer[lblen], nBytes-lblen, 0, 
-                    (struct sockaddr *)&dst_addr6[lb_entrp % nm_rcv_prts], sizeof dst_addr6[lb_entrp % nm_rcv_prts])) < 0) {
+            if ((rtCd = sendto(dst_sckt[index], &buffer[lblen], nBytes-lblen, 0,
+                    (struct sockaddr *)&dst_addr6[index], sizeof dst_addr6[index])) < 0) {
                 perror("sendto failed");
                 exit(4);
             }
         } else {
-            if ((rtCd = sendto(dst_sckt[lb_entrp % nm_rcv_prts], &buffer[lblen], nBytes-lblen, 0,
-                    (struct sockaddr *)&dst_addr[lb_entrp % nm_rcv_prts], sizeof dst_addr[lb_entrp % nm_rcv_prts])) < 0) {
+            if ((rtCd = sendto(dst_sckt[index], &buffer[lblen], nBytes-lblen, 0,
+                    (struct sockaddr *)&dst_addr[index], sizeof dst_addr[index])) < 0) {
                 perror("sendto failed");
                 exit(4);
             }
         }
-        if(passedV) fprintf( stdout, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt+(lb_entrp % nm_rcv_prts));
+        if(passedV) fprintf( stdout, "Sent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt+index);
 
 /*** why is this not working ?
         if (getnameinfo((struct sockaddr*) &dst_addr6, sizeof(dst_addr6), gtnm_ip, sizeof(gtnm_ip), gtnm_srvc,
