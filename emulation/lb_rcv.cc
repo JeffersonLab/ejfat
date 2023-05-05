@@ -195,8 +195,10 @@ int main (int argc, char *argv[])
         uint16_t data_id = ntohs(*pDid);
         uint64_t re_tick_net = *pReTick;  // Beware on Mac, NTOHLL swaps actual arg!
         uint64_t re_tick = NTOHLL(re_tick_net);
-        if (re_tick != re_tick_net) {
-            fprintf ( stdout, "Mac NOTHLL(x) is a problem!!");
+        int test_pre_swap = 1, test_post_swap = 1;
+        NTOHLL(test_post_swap);
+        if (test_pre_swap != test_post_swap) {
+            fprintf ( stdout, "NOTHLL(x) is a problem, pre swap i = 1, post swap i = %d\n", test_post_swap);
         }
         //uint8_t vrsn  = (pBufRe[0] >> 4) & 0xf;
 
