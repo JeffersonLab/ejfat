@@ -215,7 +215,7 @@ int main (int argc, char *argv[])
     // HTONLL swaps the arg itself on Mac so beware!
     *pTick      = HTONLL(lb_tick_net);
 #else
-    *pTick      = lb_tick_net = htonll(lb_tick);
+    *pTick      = lb_tick_net = HTONLL(lb_tick);
 #endif
 
     // RE metadata

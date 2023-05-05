@@ -199,7 +199,7 @@ int main (int argc, char *argv[])
         uint64_t re_tick = NTOHLL(re_tick_net); // Beware on Mac, NTOHLL swaps actual arg!
         NTOHLL(re_tick_net);
 #else
-        uint64_t re_tick = ntohll(re_tick_net);
+        uint64_t re_tick = NTOHLL(re_tick_net);
 #endif
 
         int test_pre_swap = 1, test_post_swap = 1;
