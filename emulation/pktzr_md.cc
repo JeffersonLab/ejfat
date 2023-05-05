@@ -210,9 +210,9 @@ int main (int argc, char *argv[])
 
     // put LB header in network byte order
     *pEntrp     = re_entropy_net = htons(re_entropy); // htons does NOT swap the arg itself
-    lb_tick_net = lb_tick;
 #ifdef __APPLE__
     // HTONLL swaps the arg itself on Mac so beware!
+    lb_tick_net = lb_tick;
     *pTick      = HTONLL(lb_tick_net);
 #else
     *pTick      = lb_tick_net = HTONLL(lb_tick);

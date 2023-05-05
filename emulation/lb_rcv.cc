@@ -197,16 +197,10 @@ int main (int argc, char *argv[])
 
 #ifdef __APPLE__
         uint64_t re_tick = NTOHLL(re_tick_net); // Beware on Mac, NTOHLL swaps actual arg!
-        NTOHLL(re_tick_net);
+        NTOHLL(re_tick_net); // Swap it back
 #else
         uint64_t re_tick = NTOHLL(re_tick_net);
 #endif
-
-        uint64_t test_pre_swap = 1, test_post_swap = 1;
-        NTOHLL(test_post_swap);
-        if (test_pre_swap != test_post_swap) {
-            fprintf ( stdout, "NOTHLL(x) is a problem, pre swap i = 1, post swap i = %d\n", test_post_swap);
-        }
 
         //uint8_t vrsn  = (pBufRe[0] >> 4) & 0xf;
 
