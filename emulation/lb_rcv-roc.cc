@@ -273,7 +273,7 @@ int main (int argc, char *argv[])
             veryFirstId = data_id;
         }
         else if (data_id != veryFirstId) {
-            // Dump packet
+            // Dump packet from different source
             if(passedV) fprintf (stderr, "Dump packet from src %hu\n", data_id);
             continue;
         }
