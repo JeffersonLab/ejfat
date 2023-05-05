@@ -51,7 +51,7 @@ void   Usage()
         -6 Use IPV6 \n\
         -i listen address (default INADDR_ANY)  \n\
         -p listen port (default 17750)  \n\
-        -n num events  \n\
+        -n num events (default 1) \n\
         -l simulated extra latency (loop count)  \n\
         -v verbose mode (default is quiet)  \n\
         -x omit event size prefix  \n\
@@ -267,6 +267,11 @@ int main (int argc, char *argv[])
 
         // At this point we dump packets from other sources
         if (veryFirstRead) {
+            if (off != 0) {
+                // we need to start with the first packet, so keep dumping pkts until we get 0 offset
+                if(passedV) fprintf (stderr, "Dump packet from src %hu, with off %u\n", data_id, off);
+                continue;
+            }
             veryFirstId = data_id;
         }
         else if (data_id != veryFirstId) {
