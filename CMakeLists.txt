@@ -101,7 +101,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 set(EMU_EXEC_FILES
         emulation/lb_emu.cc
         emulation/lb_rcv.cc
-        #emulation/lb_rcv-roc.cc
+        emulation/lb_rcv-roc.cc
         emulation/pktzr_md.cc
         emulation/lb_send.cc
         )
