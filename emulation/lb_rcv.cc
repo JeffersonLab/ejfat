@@ -193,13 +193,21 @@ int main (int argc, char *argv[])
         uint32_t off     = ntohl(*pOff);  // seq --> off
         uint32_t len     = ntohl(*pLen);
         uint16_t data_id = ntohs(*pDid);
-        uint64_t re_tick_net = *pReTick;  // Beware on Mac, NTOHLL swaps actual arg!
-        uint64_t re_tick = NTOHLL(re_tick_net);
+        uint64_t re_tick_net = *pReTick;
+
+#ifdef __APPLE__
+        uint64_t re_tick = NTOHLL(re_tick_net); // Beware on Mac, NTOHLL swaps actual arg!
+        NTOHLL(re_tick_net);
+#else
+        uint64_t re_tick = ntohll(re_tick_net);
+#endif
+
         int test_pre_swap = 1, test_post_swap = 1;
         NTOHLL(test_post_swap);
         if (test_pre_swap != test_post_swap) {
             fprintf ( stdout, "NOTHLL(x) is a problem, pre swap i = 1, post swap i = %d\n", test_post_swap);
         }
+
         //uint8_t vrsn  = (pBufRe[0] >> 4) & 0xf;
 
         // At this point we dump packets from other sources
