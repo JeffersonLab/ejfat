@@ -209,10 +209,10 @@ int main (int argc, char *argv[])
     }
 
     // put LB header in network byte order
-    *pEntrp     = re_entropy_net = htons(re_entropy); // htons does NOT swap the arg iteself!
+    *pEntrp     = re_entropy_net = htons(re_entropy); // htons does NOT swap the arg itself
     lb_tick_net = lb_tick;
-    *pTick      = HTONLL(lb_tick_net);                // HTONLL swaps the arg itself!
-    
+    *pTick      = HTONLL(lb_tick_net);                // HTONLL swaps the arg itself on Mac!! So beware.
+
 
     // RE metadata
     uint8_t*  pBufRe = &buffer_net[lblen];
@@ -238,9 +238,9 @@ int main (int argc, char *argv[])
     }
 
     // put in network byte order
-    *pDid          = re_data_id_net = htons(re_data_id); // does NOT swap arg itself
-    *pOff          = re_off_net = htonl(re_off);
-    *pReTick       = *pTick; // already swapped above
+    *pDid    = re_data_id_net = htons(re_data_id);
+    *pOff    = re_off_net = htonl(re_off);
+    *pReTick = *pTick; // already swapped above
 
     // Find out how many bytes we'll be sending.
     // Go to end of input
@@ -304,7 +304,7 @@ int main (int argc, char *argv[])
                 exit(4);
             }
         }
-        if(passedV) fprintf ( stdout, "\nSending %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
+        if(passedV) fprintf ( stdout, "\nSent %d bytes to %s : %u\n", uint16_t(rtCd), dst_ip, dst_prt);
         re_frst = 0;
 
         re_off += nr;
