@@ -28,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
+#include <vector>
 
 #include "ejfat_assemble_ersap.hpp"
 #include "ejfat_network.hpp"
@@ -85,12 +86,13 @@ X pid(          // Proportional, Integrative, Derivative Controller
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]",
             "        [-p <data receiving port>]",
             "        [-a <data receiving address>]",
+            "        [-statfile <base file name for 3 stat files>]",
             "        [-range <data receiving port range, entropy of sender>]",
             "        [-gaddr <grpc server IP address>]",
             "        [-gport <grpc server port>]",
@@ -103,6 +105,10 @@ static void printHelp(char *programName) {
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with clasBlaster and send data to an ET system.\n");
+    fprintf(stderr, "        Specifying a statfile name will create 3 files: 1) <name>_fifo which will have the\n");
+    fprintf(stderr, "        fifo-fill-level (when it changes) vs time recorded over 100 sec,\n");
+    fprintf(stderr, "        2) <name>_avg which will have the running avg vs time for once each sec for 100 sec,\n");
+    fprintf(stderr, "        and 3) <name>_report which will have the instantaneous fill level vs time once a sec for 100 sec.\n");
 }
 
 
@@ -126,13 +132,15 @@ static void printHelp(char *programName) {
  * @param grpcAddr      filled with grpc server IP address to send control plane info to.
  * @param etFilename    filled with name of ET file in which to write data.
  * @param grpcName      filled with name of this grpc client (backend) to send to control plane.
+ * @param statBaseName  filled with base name of files used to store 100 sec of ET fill level data.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
                       int *cores, int *grpcId, float *setPt,
                       uint16_t* port, uint16_t* grpcPort, int *range,
                       bool *debug, bool *useIPv6,
-                      char *listenAddr, char *grpcAddr, char *etFilename, char *grpcName) {
+                      char *listenAddr, char *grpcAddr,
+                      char *etFilename, char *grpcName, std::string &statBaseName) {
 
     int c, i_tmp;
     bool help = false;
@@ -148,6 +156,7 @@ static void parseArgs(int argc, char **argv,
                           {"gname",  1, NULL, 6},
                           {"gid",  1, NULL, 7},
                           {"range",  1, NULL, 8},
+                          {"statfile",  1, NULL, 9},
                           {0,       0, 0,    0}
             };
 
@@ -298,6 +307,16 @@ static void parseArgs(int argc, char **argv,
                 strcpy(etFilename, optarg);
                 break;
 
+            case 9:
+                // statistics base file name
+                if (strlen(optarg) > 100 || strlen(optarg) < 1) {
+                    fprintf(stderr, "stat file name too long/short, %s\n\n", optarg);
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                statBaseName = optarg;
+                break;
+
             case 1:
                 // Tick prescale
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -395,11 +414,20 @@ static void parseArgs(int argc, char **argv,
 }
 
 
+/**
+ * Convert timespec to unsigned long in microseconds.
+ * @param time time to convert.
+ * @return microseconds.
+ */
+uint64_t timespecToMicroSec(timespec *time) {
+    return 1000000UL * time->tv_sec + time->tv_nsec/1000UL;
+}
 
 
 // structure for passing args to thread
 typedef struct threadStruct_t {
     et_sys_id etId;
+    et_fifo_id fid;
 
     uint16_t grpcServerPort;
     std::string grpcServerIpAddr;
@@ -412,6 +440,13 @@ typedef struct threadStruct_t {
     int32_t myId;
     float setPoint;
     bool report;
+
+    // fill stats
+    bool keepFillStats;
+    std::string statFileFifo;
+    std::string statFileAvg;
+    std::string statFileReport;
+
 } threadStruct;
 
 
@@ -421,12 +456,19 @@ static void *pidThread(void *arg) {
     threadStruct *targ = static_cast<threadStruct *>(arg);
 
     et_sys_id etId = targ->etId;
+    et_fifo_id fid = targ->fid;
     bool reportToCp = targ->report;
-    int status, numEvents, inputListCount = 0;
-    float fillPercent = 0.;
+
+    int status, numEvents, usedFifoEntries = 0;
+    int fillPercent = 0;  // 0 - 100
     size_t eventSize;
     status = et_system_getnumevents(etId, &numEvents);
     status = et_system_geteventsize(etId, &eventSize);
+    // Max # of fifo entries available to consumer
+    int totalEntryCount = et_fifo_getEntryCount(fid);
+    if (totalEntryCount < 0) {
+        // error
+    }
 
     float pidError;
     float pidSetPoint = targ->setPoint;
@@ -437,6 +479,36 @@ static void *pidThread(void *arg) {
 
     int loopMax   = 1000;
     int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
+    int waitMicroSecs = 1000; // By default, loop every millisec
+
+    bool keepFillStats = targ->keepFillStats;
+    if (keepFillStats) {
+        // If keeping fill stats ...
+        // We're writing files filled with data about fifo fill levels.
+        // This will, of course, depend on the application that is taking
+        // events out of the ET system.
+        //
+        // For 1GB/s incoming, events of 62.3kB actual data (with headers -> 62.75kB)
+        // fit nicely into 7 jumbo packets, which means 15937 buffers/sec.
+        // To try and capture what is going on, try for 32k samples/sec =>
+        // delay of 31 microsec.
+        // To take 100 seconds of data this means 32,258 samples, say 32500, * 100 = 3.25 M data points.
+        // We'll be using 2 ints * (4 bytes/int) * 3.25M = 26MB.
+        // At the same time we'll store, once per sec, the running avg and the
+        // instantaneous fill level (plus time) - each in different files.
+        // These will require 100 * 2 * 4 or 800 bytes - not much.
+
+        loopMax = 32500;
+        loopCount = loopMax;
+        waitMicroSecs = 31;
+    }
+
+    // Allocate mem now, even if not writing stat files
+    std::vector<int> fill(3250000); // fifo fill level every 31 usec
+    std::vector<int> time(3250000); // time every ~31 usec
+    std::vector<int> avg(100); // running avg fill level every 1 sec
+    std::vector<int> inst(100); // instantaneous fill level every 1 sec
+    std::vector<int> time2(100); // time every ~1 sec
 
 //    /**
 //     * Constructor.
@@ -474,55 +546,91 @@ static void *pidThread(void *arg) {
         exit(1);
     }
 
-    // Prevent anti-aliasing. If sampling every millisec, an individual reading sent every 1 sec
+    // Prevent anti-aliasing. If, for example, sampling every millisec, an individual reading sent every 1 sec
     // will NOT be an accurate representation. It could include a lot of noise. To prevent this,
-    // keep a running average of the fill %, so its reported value is an accuration portrayal of
+    // keep a running average of the fill %, so its reported value is a more accurate portrayal of
     // what's really going on. In this case a running avg is taken over the reporting time.
-    float runningFillTotal = 0, fillAvg;
-    float fillValues[loopMax];
-    memset(fillValues, 0, loopMax*sizeof(float));
-    // Keep circulating thru array. Earliest index is 0 to start with,
-    // while the highest index is loopMax - 1,which is where we write the first
-    // real value since that's convenient.
-    int earliestIndex = 0, fillIndex = loopMax - 1;
+    int runningFillTotal = 0;
+    float fillAvg;
+    int fillValues[loopMax];
+    memset(fillValues, 0, loopMax*sizeof(int));
 
-    // The first time thru, we don't want to over-weight with (loopMax - 1) zero entries
+    // Keep circulating thru array. Highest index is loopMax - 1.
+    // The first time thru, we don't want to over-weight with (loopMax - 1) zero entries.
+    // So we read loopMax entries first, before we start keeping stats.
+    int prevFill, fillIndex = 0;
     bool startingUp = true;
     int firstLoopCounter = 1;
 
+
+    struct timespec t1, t2, firstT;
+    uint64_t microSec = 0, firstMicroSec = 0;
+    // Get the current time
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    firstT = t1;
+    firstMicroSec = timespecToMicroSec(&t1);
+
+
     while (true) {
 
-        // Delay 1 milliseconds between data points
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // Delay between data points
+        std::this_thread::sleep_for(std::chrono::microseconds(waitMicroSecs));
 
-        // Get the number of available events (# sitting in Grandcentral's input list)
-        status = et_station_getinputcount_rt(etId, ET_GRANDCENTRAL, &inputListCount);
-        fillPercent = (numEvents-inputListCount)/numEvents;
+        // Get the number of occupied fifo entries (# sitting in User station's input list)
+        usedFifoEntries = et_fifo_getFillLevel(fid);
+        if (usedFifoEntries < 0) {
+            // error
+        }
 
+        fillPercent = 100*usedFifoEntries/totalEntryCount;
+        // Previous value at this index
+        prevFill = fillValues[fillIndex];
+        // Store current val at this index
         fillValues[fillIndex++] = fillPercent;
-//        if (earliestIndex >= loopMax || earliestIndex < 0) {
-//            printf("Trouble, exceeding array bounds, earliestIndex = %d\n", earliestIndex);
-//        }
-
-        runningFillTotal += fillPercent - fillValues[earliestIndex++];
-        if (startingUp) {
-            fillAvg = runningFillTotal / firstLoopCounter++;
-            if (firstLoopCounter >= loopMax) {
-                startingUp = false;
-            }
-        }
-        else {
-            fillAvg = runningFillTotal / loopMax;
-        }
-
-        // Find indices for the next round
-        earliestIndex = (earliestIndex == loopMax) ? 0 : earliestIndex;
+        // Add current val and remove previous val at this index from the running total.
+        // That way we have added loopMax number of most recent entries at ony one time.
+        runningFillTotal += fillPercent - prevFill;
+        // Find index for the next round
         fillIndex = (fillIndex == loopMax) ? 0 : fillIndex;
 
-        pidError = pid(pidSetPoint, fillPercent, deltaT, Kp, Ki, Kd);
+        if (keepFillStats) {
+            // Get the current time
+            clock_gettime(CLOCK_MONOTONIC, &t2);
+            microSec = timespecToMicroSec(&t2) - firstMicroSec;
+            // Store time & fill level (0-100)
+            fill.push_back(fillPercent);
+            time.push_back(microSec);
+        }
+
+        if (startingUp) {
+            if (firstLoopCounter++ >= loopMax) {
+                startingUp = false;
+            }
+            else {
+                if (firstLoopCounter == loopMax) {
+                    firstMicroSec = microSec;
+                }
+                // Don't start sending data or recording values to be written
+                // until the startup time (loopMax loops) is over.
+                continue;
+            }
+            fillAvg = runningFillTotal / 100.F / loopMax;
+        }
+        else {
+            fillAvg = runningFillTotal / 100.F / loopMax;
+        }
+
+        pidError = pid(pidSetPoint, fillPercent/100.F, deltaT, Kp, Ki, Kd);
 
         // Every "loopMax" loops
         if (reportToCp && --loopCount <= 0) {
+
+            if (keepFillStats) {
+                time2.push_back(microSec);
+                avg.push_back(fillAvg);
+                inst.push_back(fillPercent);
+            }
+
             // Update the changing variables
             client.update(fillAvg, pidError);
 
@@ -533,11 +641,45 @@ static void *pidThread(void *arg) {
                 exit(1);
             }
 
-            printf("Total cnt %d, GC inlist cnt %d, %f%% filled, fill avg %f, error %f\n",
-                   numEvents, inputListCount, fillPercent, fillAvg, pidError);
+            printf("Total cnt %d, User station inlist cnt %d, %d%% filled, fill avg %f, error %f\n",
+                   numEvents, usedFifoEntries, fillPercent, (fillAvg*100.F), pidError);
 
             loopCount = loopMax;
         }
+
+        // When do we write out the files? 100 seconds
+        if (keepFillStats && microSec >= 1000000000) {
+            // We can stop taking data to write out to files since we have what we need
+            keepFillStats = false;
+
+            // Write out file with all times and levels
+            FILE *fp = fopen (targ->statFileFifo.c_str(), "w");
+            int dataSize = time.size();
+            for (int i=0; i < dataSize; i++) {
+                fprintf(fp, "%d %d\n", time[i], fill[i]);
+            }
+            fclose(fp);
+            printf("Wrote all data to %s\n", targ->statFileFifo.c_str());
+
+            // Write out file with time and running avg of fill level, once per second
+            fp = fopen (targ->statFileAvg.c_str(), "w");
+            dataSize = time2.size();
+            for (int i=0; i < dataSize; i++) {
+                fprintf(fp, "%d %d\n", time2[i], avg[i]);
+            }
+            fclose(fp);
+            printf("Wrote running avg data to %s\n", targ->statFileAvg.c_str());
+
+            // Write out file with time and running avg of fill level, once per second
+            fp = fopen (targ->statFileReport.c_str(), "w");
+            dataSize = time2.size();
+            for (int i=0; i < dataSize; i++) {
+                fprintf(fp, "%d %d\n", time2[i], inst[i]);
+            }
+            fclose(fp);
+            printf("Wrote instantaneous data to %s\n", targ->statFileReport.c_str());
+        }
+
     }
 
     // Unregister this client with the grpc server
@@ -669,11 +811,15 @@ int main(int argc, char **argv) {
     bool debug = false;
     bool useIPv6 = false;
     bool sendToEt = false;
+    bool keepLevelStats = false;
+
+    std::string stat_base_name, statFileFifo, statFileAvg, statFileReport;
+  //  memset(stat_base_name, 0, 101);
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
-    char filename[101];
-    memset(filename, 0, 101);
+    char et_filename[101];
+    memset(et_filename, 0, 101);
     char grpcAddr[16];
     memset(grpcAddr, 0, 16);
     char grpcName[31];
@@ -688,9 +834,16 @@ int main(int argc, char **argv) {
               cores, &grpcId, &grpcSetPoint,
               &port, &grpcPort, &range,
               &debug, &useIPv6,
-              listeningAddr, grpcAddr, filename, grpcName);
+              listeningAddr, grpcAddr,
+              et_filename, grpcName, stat_base_name);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
+
+    // Do we report to control plane?
+    bool reportToCP = true;
+    if (strlen(grpcAddr) < 1) {
+        reportToCP = false;
+    }
 
 #ifdef __linux__
 
@@ -734,8 +887,16 @@ int main(int argc, char **argv) {
 #endif
 
     // Do we connect to a TCP server and send the data there?
-    if (strlen(filename) > 0) {
+    if (strlen(et_filename) > 0) {
         sendToEt = true;
+    }
+
+    // Do we write out ET fifo fill level data files?
+    if (stat_base_name.length() > 0) {
+        keepLevelStats = true;
+        statFileFifo   = stat_base_name + "_fifo";
+        statFileAvg    = stat_base_name + "_avg";
+        statFileReport = stat_base_name + "_report";
     }
 
     if (useIPv6) {
@@ -853,7 +1014,6 @@ int main(int argc, char **argv) {
     ////////////////////////////
     /// Control Plane  Stuff ///
     ////////////////////////////
-    bool reportToCP = true && sendToEt;
     LoadBalancerServiceImpl service;
     LoadBalancerServiceImpl *pGrpcService = &service;
 
@@ -874,7 +1034,7 @@ int main(int argc, char **argv) {
         et_open_config_setdebugdefault(openconfig, debugLevel);
 
         et_open_config_setwait(openconfig, ET_OPEN_WAIT);
-        if (et_open(&id, filename, openconfig) != ET_OK) {
+        if (et_open(&id, et_filename, openconfig) != ET_OK) {
             fprintf(stderr, "et_open problems\n");
             exit(1);
         }
@@ -917,6 +1077,7 @@ int main(int argc, char **argv) {
         }
 
         targ->etId = id;
+        targ->fid = fid;
         targ->grpcServerPort = grpcPort;
         targ->grpcServerIpAddr = grpcAddr;
 
@@ -928,6 +1089,11 @@ int main(int argc, char **argv) {
         targ->myId = grpcId;
         targ->setPoint = grpcSetPoint;
         targ->report = reportToCP;
+
+        targ->keepFillStats  = keepLevelStats;
+        targ->statFileFifo   = statFileFifo;
+        targ->statFileAvg    = statFileAvg;
+        targ->statFileReport = statFileReport;
 
         pthread_t thd1;
         status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
