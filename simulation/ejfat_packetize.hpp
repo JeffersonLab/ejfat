@@ -232,6 +232,7 @@ namespace ejfat {
          * The padding values are ignored and only there to circumvent
          * a bug in the ESNet Load Balancer which otherwise filters out
          * packets with data payload of 0 or 1 byte.
+         * This is the old, version 1, RE header.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32 Padding1:8, Padding2:8'
@@ -281,6 +282,7 @@ namespace ejfat {
         * The first 16 bits go as ordered. The dataId is put in network byte order.
         * The offset, length and tick are also put into network byte order.</p>
         * Implemented <b>without</b> using C++ bit fields.
+        * This is the new, version 2, RE header.
         *
         * <pre>
         *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
@@ -422,6 +424,8 @@ namespace ejfat {
      * writes the new header there, and then sends.
      * <b>Be warned that the original buffer will be changed after calling this routine!</b>
      * In ERSAP, the packetizer is a terminal service, so we can modify the buffer with the data in it.
+     *
+     * This uses the new, version 2, RE header.
      *
      * @param dataBuffer     data to be sent.
      * @param dataLen        number of bytes to be sent.
@@ -589,6 +593,8 @@ namespace ejfat {
       * <b>Be warned that the original buffer will be changed after calling this routine!</b>
       * In ERSAP, the packetizer is a terminal service, so we can modify the buffer with the data in it.
       *
+      * This uses the old, version 1, RE header.
+      *
       * @param dataBuffer     data to be sent.
       * @param dataLen        number of bytes to be sent.
       * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
@@ -752,6 +758,7 @@ namespace ejfat {
      * All data (header and actual data from dataBuffer arg) are copied into a separate
      * buffer and sent. Unlike the {@link #sendPacketizedBufferFastNew} routine, the
      * original data is unchanged.
+     * This uses the new, version 2, RE header.
      *
      * @param dataBuffer     data to be sent.
      * @param dataLen        number of bytes to be sent.
@@ -904,6 +911,7 @@ namespace ejfat {
      * All data (header and actual data from dataBuffer arg) are copied into a separate
      * buffer and sent. Unlike the {@link #sendPacketizedBufferFast} routine, the
      * original data is unchanged.
+     * This uses the old, version 1, RE header.
      *
      * @param dataBuffer     data to be sent.
      * @param dataLen        number of bytes to be sent.
@@ -1046,6 +1054,7 @@ namespace ejfat {
      * of a larger buffer that needs to be sent. This method can then be called
      * in a loop, with the offset arg providing necessary feedback.
      * The receiver is responsible for reassembling these packets back into the original data.
+     * This uses the old, version 1, RE header and the sendto() routine.
      *
      * @param dataBuffer     data to be sent.
      * @param dataLen        number of bytes to be sent.
@@ -1067,7 +1076,7 @@ namespace ejfat {
      *
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
      */
-        static int sendPacketizedBufferSendto(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
+    static int sendPacketizedBufferSendto(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
                                               int clientSocket, struct sockaddr_in* destination,
                                               uint64_t tick, int protocol, int entropy, int version,
                                               uint16_t dataId, uint32_t *offset, uint32_t delay,
@@ -1172,6 +1181,7 @@ namespace ejfat {
      * of a larger buffer that needs to be sent. This method can then be called
      * in a loop, with the offset arg providing necessary feedback.
      * The receiver is responsible for reassembling these packets back into the original data.
+     * This uses the old, version 1, RE header and sendmsg() routine.
      *
      * @param dataBuffer     data to be sent.
      * @param dataLen        number of bytes to be sent.
@@ -1310,12 +1320,14 @@ namespace ejfat {
     }
 
 
-        /**
+     /**
       * Send this entire buffer to the host and port of an FPGA-based load balancer.
       * This is done by breaking it up into smaller size UDP packets - each with 2 headers.
       * The first header is meta data used by the load balancer and stripped off before
       * the data reaches its final destination.
       * The second allows for its reassembly by the receiver.
+      * This method is used in Vardan's ERSAP engine.
+      * Currently this calls methods which use the latest, version 2, RE header.
       *
       * @param buffer     data to be sent.
       * @param bufLen     number of bytes to be sent.
@@ -1458,14 +1470,14 @@ namespace ejfat {
         if (debug) fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
         if (fast) {
-            err = sendPacketizedBufferFast(buffer, bufLen, maxUdpPayload, clientSocket,
-                                             tick, protocol, entropy, version, dataId, &offset,
+            err = sendPacketizedBufferFastNew(buffer, bufLen, maxUdpPayload, clientSocket,
+                                             tick, protocol, entropy, version, dataId, bufLen, &offset,
                                              delay, delayPrescale, &delayCounter,
                                              true, true, debug, &packetsSent);
         }
         else {
-            err = sendPacketizedBufferSend(buffer, bufLen, maxUdpPayload, clientSocket,
-                                           tick, protocol, entropy, version, dataId, &offset,
+            err = sendPacketizedBufferSendNew(buffer, bufLen, maxUdpPayload, clientSocket,
+                                           tick, protocol, entropy, version, dataId, bufLen, &offset,
                                            delay, delayPrescale, &delayCounter,
                                            true, true, debug, &packetsSent);
         }
