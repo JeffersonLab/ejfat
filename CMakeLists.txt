@@ -233,18 +233,24 @@ endif()
 option(BUILD_GRPC "Build grpc-related code" OFF)
 
 if (BUILD_GRPC)
-    # Finding ET libs and includes involve looking at CODA install directory
+    # Finding GRPC libs and includes involve looking at GRPC install directory
     if (DEFINED ENV{GRPC_INSTALL_DIR})
         message(STATUS "GRPC_INSTALL_DIR = " $ENV{GRPC_INSTALL_DIR})
     else()
         message(FATAL_ERROR "Set the \"GRPC_INSTALL_DIR\" env var so that GRPC libs and includes can be found!")
     endif()
 
+    # In addition we need the ERSAP backend code that depends on GRPC
+    if (DEFINED ENV{ERSAP_GRPC_INSTALL_DIR})
+        message(STATUS "ERSAP_GRPC_INSTALL_DIR = " $ENV{ERSAP_GRPC_INSTALL_DIR})
+    else()
+        message(FATAL_ERROR "Set the \"ERSAP_GRPC_INSTALL_DIR\" env var so that ERSAP's backend GRPC-based lib and include can be found!")
+    endif()
+
     find_package(GRPC)
     if (NOT GRPC_FOUND)
         message(STATUS "GRPC cannot be found, compile without it")
     else()
-        message(STATUS "GRPC_INCLUDE_DIRS = " ${GRPC_INCLUDE_DIRS})
         message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
     endif()
 else()
