@@ -9,10 +9,13 @@
 
 
 /**
- * @file Contains routines to receive UDP packets that have been "packetized"
+ * @file
+ * Contains routines to receive UDP packets that have been "packetized"
  * (broken up into smaller UDP packets by an EJFAT packetizer).
  * The receiving program handles sequentially numbered packets that may arrive out-of-order
- * coming from an FPGA-based between this and the sending program.
+ * coming from an FPGA-based between this and the sending program. Note that the routines
+ * to reassemble buffers assume the new, version 2, RE headers. The code to reassemble the
+ * older style RE header is still included but commented out.
  */
 #ifndef EJFAT_ASSEMBLE_ERSAP_H
 #define EJFAT_ASSEMBLE_ERSAP_H
@@ -364,6 +367,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * The padding values are ignored and only there to circumvent
          * a bug in the ESNet Load Balancer which otherwise filters out
          * packets with data payload of 0 or 1 byte.
+         * This is the old, version 1, RE header.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32 Padding1:8, Padding2:8'
@@ -410,6 +414,7 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer args.
+         * This is the new, version 2, RE header.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
@@ -453,6 +458,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * Return parsed values in pointer arg.
          * This header limits transmission of a single buffer to less than
          * 2^32 = 4.29496e9 bytes in size.
+         * This is the new, version 2, RE header.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
@@ -491,6 +497,7 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
         * Parse the reassembly header at the start of the given buffer.
         * Return parsed values in pointer args.
+        * This is the new, version 2, RE header.
         *
         * <pre>
         *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
@@ -526,6 +533,7 @@ static inline uint64_t bswap_64(uint64_t x) {
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer arg and array.
+         * This is the new, version 2, RE header.
          *
          * <pre>
          *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
@@ -566,6 +574,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in array. Used in packetBlasteeFast to
          * return only needed data.
+         * This is the new, version 2, RE header.
          *
          * @param buffer    buffer to parse.
          * @param intArray  array of ints in which offset, length, and tick are returned.
@@ -592,7 +601,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * <p>
          * Routine to read a single UDP packet into a single buffer.
          * The reassembly header will be parsed and its data retrieved.
-         * Uses the new RE header.
+         * This uses the new, version 2, RE header.
          * </p>
          *
          * It's the responsibility of the caller to have at least enough space in the
@@ -654,7 +663,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * <p>
          * Routine to read a single UDP packet into a single buffer.
          * The reassembly header will be parsed and its data retrieved.
-         * Uses the old RE header.
+         * This is for the old, version 1, RE header.
          * </p>
          *
          * It's the responsibility of the caller to have at least enough space in the
@@ -712,6 +721,11 @@ static inline uint64_t bswap_64(uint64_t x) {
         }
 
 
+        /**
+         * For the older code (version 1 RE header), a map is used to deal with
+         * out-fo-order packets. This methods clears that map.
+         * @param outOfOrderPackets map containing out-of-order UDP packets.
+         */
         static void clearMap(std::map<uint32_t, std::tuple<char *, uint32_t, bool, bool>> & outOfOrderPackets) {
             if (outOfOrderPackets.empty()) return;
 
@@ -727,9 +741,9 @@ static inline uint64_t bswap_64(uint64_t x) {
          * <p>
          * Assemble incoming packets into the given buffer.
          * It will read entire buffer or return an error.
-         * Will work best on small / reasonable sized buffers.
+         * Will work best on small / reasonably sized buffers.
          * This routine allows for out-of-order packets if they don't cross tick boundaries.
-         * This routine parses the latest ERSAP-EJFAT reassembly header.
+         * This assumes the new, version 2, RE header.
          * Data can only come from 1 source, which is returned in the dataId value-result arg.
          * Data from a source other than that of the first packet will be ignored.
          * </p>
@@ -1793,7 +1807,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          *
          * <p>
          * This routine allows for out-of-order packets if they don't cross tick boundaries.
-         * This routine parses the latest ERSAP-EJFAT reassembly header.
+         * This assumes the new, version 2, RE header.
          * Data can only come from 1 source, which is returned in the dataId value-result arg.
          * Data from a source other than that of the first packet will be ignored.
          * </p>
@@ -2579,6 +2593,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * It will return when the buffer has &lt; 9000 bytes of free space left,
          * or when the last packet has been read.
          * It allows for multiple calls to read the buffer in stages.
+         * This assumes the new, version 2, RE header.
          * </p>
          *
          * Note, this routine does not attempt any error recovery since it was designed to be called in a
@@ -2970,6 +2985,7 @@ static inline uint64_t bswap_64(uint64_t x) {
          * It will return when the buffer has less space left than it read from the first packet
          * (for caller-given buffer) or when the "last" bit is set in a packet.
          * This routine allows for out-of-order packets.
+         * This assumes the new, version 2, RE header.
          *
          * @param userBuf       address of pointer to data buffer if noCopy is true.
          *                      Otherwise, this must point to nullptr in order
