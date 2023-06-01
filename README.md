@@ -1,41 +1,74 @@
-# ejfat
+## EJFAT
 ESnet-JLab FPGA Accelerated Transport
 
-# Using cmake for emulation & simulation executables
+## Making simple data sender & receiver executables
 
-#### Check out and build ejfat, ersap-branch:
-- mkdir build
-- cd build
-- cmake ..
-- make
+#### Check out and build ejfat, esnet branch:
 
-##### This will place the compiled executables into build/bin directory
+    git clone https://github.com/JeffersonLab/ejfat.git
+            or 
+    gh repo clone JeffersonLab/ejfat
+    git checkout esnet
+    mkdir build
+    cd build
+    cmake ..
+    make
 
-# Using cmake for creating ersap engine/service libraries using ET system
+##### Executables can be installed by:
 
-#### Check out & build the ET master branch library:
+- Defining the ERSAP_HOME environmental variable, and doing a
+   
+        make install
 
-- setenv CODA \<CODA installtion directory\>
-- git clone https://github.com/JeffersonLab/et.git
-- cd et
-- mkdir build
-- cd build
-- cmake ..
-- make install
+- Or doing a
+    
+        cmake -DINSTALL_DIR=<dir> ..
+        make install
 
-###### This will place the libraries into $CODA/\<arch\>/lib
+## Making all the executables
 
-#### Check out and build ejfat, ersap-branch with flags:
+        setenv ERSAP_HOME <ERSAP installation directory>
+        setenv GRPC_INSTALL_DIR <GRPC installation directory>
+        setenv ERSAP_GRPC_INSTALL_DIR <ejfat-grpc installation directory>
+        cmake -DINSTALL_DIR=<dir> -DBUILD_ERSAP=1 -DBUILD_ET=1 -DBUILD_CLAS=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_ZMQ=1 ..
+        make install
 
-- setenv ERSAP_HOME \<ERSAP installtion directory\>
-- mkdir build
-- cd build
-- cmake .. -DBUILD_ERSAP=1 -DBUILD_ET=1 -DBUILD_ZMQ=1
-- make install
+### This requires a number of libraries:
 
-###### This will place the compiled executables into build/bin directory and the engine/services libraries into ERSAP_HOME
+#### From ET
 
-# Using the ET system as a FIFO for ERSAP backend
+- libet.so
+- libet_jni.so
+- libet_remote.so
+
+#### From Disruptor
+
+- libdisruptor-cpp.so
+
+#### From (and for) ersap-cpp 
+
+- libersap.so
+- libxmsg.so
+- libhipo.so
+- liblz4.so
+
+#### From (and for) grpc
+
+- libgrpc++.so
+- libgrpc++_reflection.so
+- libprotobuf.so
+
+#### From ejfat's grpc
+
+- libejfat-grpc.so
+
+#### Other necessary libs
+
+- boost libraries
+
+#### Note: not all executables need all libs. Look into CMakeLists.txt for more details.
+
+## Using the ET system as a FIFO for ERSAP backend
 
 #### Create and run the ET system for ejfat reassembler by calling
 
