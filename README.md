@@ -27,9 +27,8 @@ ESnet-JLab FPGA Accelerated Transport
 
 ## Making all the executables
 
-        setenv ERSAP_HOME <ERSAP installation directory>
-        setenv GRPC_INSTALL_DIR <GRPC installation directory>
-        setenv ERSAP_GRPC_INSTALL_DIR <ejfat-grpc installation directory>
+        setenv ERSAP_HOME <ERSAP installation directory (for engine)>
+        setenv EJFAT_ERSAP_INSTALL_DIR <ejfat-ersap installation directory>
         cmake -DINSTALL_DIR=<dir> -DBUILD_ERSAP=1 -DBUILD_ET=1 -DBUILD_CLAS=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_ZMQ=1 ..
         make install
 
