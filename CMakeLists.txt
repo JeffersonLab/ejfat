@@ -72,22 +72,19 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
             Debug Release MinSizeRel RelWithDebInfo)
 endif()
 
-if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
-    # Provide useful default paths when $ERSAP_HOME is defined
-    message(STATUS "Installing into ERSAP_HOME = " $ENV{ERSAP_HOME})
-    set(CMAKE_INSTALL_PREFIX "$ENV{ERSAP_HOME}" CACHE PATH "" FORCE)
-    set(CMAKE_INSTALL_INCLUDEDIR ${ERSAP_HOME}/include)
-    # look in here when calling find_library, etc.
-    list(APPEND CMAKE_PREFIX_PATH "$ENV{ERSAP_HOME}")
-elseif (DEFINED INSTALL_DIR)
-    message(STATUS "Installing into " ${INSTALL_DIR})
-    set(INSTALL_DIR_DEFINED 1)
-    set(CMAKE_INSTALL_PREFIX ${INSTALL_DIR}/${ARCH})
-    set(CMAKE_INSTALL_INCLUDEDIR ${INSTALL_DIR}/common/include)
-    message(STATUS "CMAKE_INSTALL_PREFIX reset to " ${CMAKE_INSTALL_PREFIX})
-else()
-    message(STATUS "Either set env var ERSAP_HOME or specify -DINSTALL_DIR=<...> on the command line or no installation possible!")
+if (NOT DEFINED INSTALL_DIR)
+    if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
+        message(FATAL_ERROR "Define EJFAT_ERSAP_INSTALL_DIR or specify -DINSTALL_DIR=<...> for installation")
+    else()
+        set(INSTALL_DIR $ENV{EJFAT_ERSAP_INSTALL_DIR})
+    endif()
 endif()
+
+message(STATUS "Installing into " ${INSTALL_DIR})
+set(INSTALL_DIR_DEFINED 1)
+set(CMAKE_INSTALL_PREFIX ${INSTALL_DIR})
+set(CMAKE_INSTALL_INCLUDEDIR ${INSTALL_DIR}/include)
+message(STATUS "CMAKE_INSTALL_PREFIX set to " ${CMAKE_INSTALL_PREFIX})
 
 if (NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
     set(CMAKE_INSTALL_PLUGINDIR plugins CACHE PATH "Ersap plugins directory (plugins)")
@@ -172,17 +169,15 @@ set(CPP_HEADER_FILES
 # ie don't include DIS_EXEC_FILES here
 set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
 
-
-
 # Disruptor build is optional and set it to OFF by default
 option(BUILD_DIS "Build Disruptor-related code" OFF)
 
 if (BUILD_DIS)
-    # Finding ET libs and includes involve looking at CODA install directory
-    if (DEFINED ENV{CODA})
-        message(STATUS "CODA = " $ENV{CODA})
+    # Find where Disruptor libs and includes are installed for ejfat use
+    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
+        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
     else()
-        message(FATAL_ERROR "Set the \"CODA\" env var so that Disruptor libs and includes can be found!")
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so Disruptor libs and includes can be found")
     endif()
 
     find_package(DISRUPTOR)
@@ -211,11 +206,11 @@ endif()
 option(BUILD_ET "Build ET-related code" OFF)
 
 if (BUILD_ET)
-    # Finding ET libs and includes involve looking at CODA install directory
-    if (DEFINED ENV{CODA})
-        message(STATUS "CODA = " $ENV{CODA})
+    # Find where ET libs and includes are installed for ejfat use
+    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
+        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
     else()
-        message(FATAL_ERROR "Set the \"CODA\" env var so that ET libs and includes can be found!")
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so ET libs and includes can be found")
     endif()
 
     find_package(ET)
@@ -233,18 +228,11 @@ endif()
 option(BUILD_GRPC "Build grpc-related code" OFF)
 
 if (BUILD_GRPC)
-    # Finding GRPC libs and includes involve looking at GRPC install directory
-    if (DEFINED ENV{GRPC_INSTALL_DIR})
-        message(STATUS "GRPC_INSTALL_DIR = " $ENV{GRPC_INSTALL_DIR})
+    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
+    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
+        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
     else()
-        message(FATAL_ERROR "Set the \"GRPC_INSTALL_DIR\" env var so that GRPC libs and includes can be found!")
-    endif()
-
-    # In addition we need the ERSAP backend code that depends on GRPC
-    if (DEFINED ENV{ERSAP_GRPC_INSTALL_DIR})
-        message(STATUS "ERSAP_GRPC_INSTALL_DIR = " $ENV{ERSAP_GRPC_INSTALL_DIR})
-    else()
-        message(FATAL_ERROR "Set the \"ERSAP_GRPC_INSTALL_DIR\" env var so that ERSAP's backend GRPC-based lib and include can be found!")
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
     endif()
 
     find_package(GRPC)

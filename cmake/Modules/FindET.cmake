@@ -11,15 +11,15 @@ pkg_check_modules(PC_LIBET QUIET libet)
 set(ET_VERSION ${PC_LIBET_VERSION})
 
 find_path(ET_INCLUDE_DIR et.h
-        PATHS $ENV{CODA}/common/include)
+        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/include)
 
 find_library(ET_LIBRARY
         NAMES et
-        PATHS $ENV{CODA}/*/lib)
+        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib)
 
 find_library(ET_REMOTE_LIBRARY
         NAMES et_remote
-        PATHS $ENV{CODA}/*/lib)
+        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib)
 
 if(ET_LIBRARY)
     set(ET_FOUND ON)
