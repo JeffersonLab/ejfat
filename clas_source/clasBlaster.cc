@@ -16,6 +16,15 @@
  * packetBlasteeEtFifoClient.cc .
  * Try /daqfs/java/clas_005038.1231.hipo on the DAQ group disk.
  * </p>
+ * <p>
+ * This program creates 16 output UDP sockets and rotates between them when
+ * sending each event/buffer. This is to facilitate efficient switch operation.
+ * The variation in port numbers gives the switch more "entropy",
+ * according to ESNET, since each connection is defined by source & host IP and port #s
+ * and the switching algorithm is stateless - always relying on these 4 parameters.
+ * This makes 16 possibilities or 4 bits of entropy in which ports must be different
+ * but not necessarily sequential.
+ * </p>
  */
 
 
@@ -626,83 +635,93 @@ int main(int argc, char **argv) {
     // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
 
-    // Create UDP socket
-    int clientSocket;
+    // Create UDP maxSocks sockets for efficient switch operation
+    const int maxSocks = 16;
+    int portIndex = 0, lastIndex = -1;
+    int clientSockets[maxSocks];
 
-    if (useIPv6) {
-        struct sockaddr_in6 serverAddr6;
+    for (int i = 0; i < maxSocks; i++) {
+        if (useIPv6) {
+            struct sockaddr_in6 serverAddr6;
 
-        /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
-        if ((clientSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv6 client socket");
-            return -1;
-        }
+            /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+            if ((clientSockets[i] = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 client socket");
+                return -1;
+            }
 
-        socklen_t size = sizeof(int);
-        int sendBufBytes = 0;
+            socklen_t size = sizeof(int);
+            int sendBufBytes = 0;
 #ifndef __APPLE__
-        // Try to increase send buf size - by default to 25 MB
+            // Try to increase send buf size - by default to 25 MB
             sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
             setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
 #endif
-        sendBufBytes = 0; // clear it
-        getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
-        fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+            sendBufBytes = 0; // clear it
+            getsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+            fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-        // Configure settings in address struct
-        // Clear it out
-        memset(&serverAddr6, 0, sizeof(serverAddr6));
-        // it is an INET address
-        serverAddr6.sin6_family = AF_INET6;
-        // the port we are going to send to, in network byte order
-        serverAddr6.sin6_port = htons(port);
-        // the server IP address, in network byte order
-        inet_pton(AF_INET6, host, &serverAddr6.sin6_addr);
+            // Configure settings in address struct
+            // Clear it out
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            // it is an INET address
+            serverAddr6.sin6_family = AF_INET6;
+            // the port we are going to send to, in network byte order
+            serverAddr6.sin6_port = htons(port);
+            // the server IP address, in network byte order
+            inet_pton(AF_INET6, host, &serverAddr6.sin6_addr);
 
-        int err = connect(clientSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
-        if (err < 0) {
-            if (debug) perror("Error connecting UDP socket:");
-            close(clientSocket);
-            exit(1);
+            int err = connect(clientSockets[i], (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP socket:");
+                for (int j = 0; j < lastIndex + 1; j++) {
+                    close(clientSockets[j]);
+                }
+                exit(1);
+            }
         }
-    }
-    else {
-        struct sockaddr_in serverAddr;
+        else {
+            struct sockaddr_in serverAddr;
 
-        // Create UDP socket
-        if ((clientSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv4 client socket");
-            return -1;
-        }
+            // Create UDP socket
+            if ((clientSockets[i] = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 client socket");
+                return -1;
+            }
 
-        // Try to increase send buf size to 25 MB
-        socklen_t size = sizeof(int);
-        int sendBufBytes = 0;
+            // Try to increase send buf size to 25 MB
+            socklen_t size = sizeof(int);
+            int sendBufBytes = 0;
 #ifndef __APPLE__
-        // Try to increase send buf size - by default to 25 MB
+            // Try to increase send buf size - by default to 25 MB
             sendBufBytes = sendBufSize <= 0 ? 25000000 : sendBufSize;
             setsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, sizeof(sendBufBytes));
 #endif
-        sendBufBytes = 0; // clear it
-        getsockopt(clientSocket, SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
-        fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
+            sendBufBytes = 0; // clear it
+            getsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
+            fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-        // Configure settings in address struct
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        //if (debug) fprintf(stderr, "Sending on UDP port %hu\n", lbPort);
-        serverAddr.sin_port = htons(port);
-        //if (debug) fprintf(stderr, "Connecting to host %s\n", lbHost);
-        serverAddr.sin_addr.s_addr = inet_addr(host);
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            // Configure settings in address struct
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            //if (debug) fprintf(stderr, "Sending on UDP port %hu\n", lbPort);
+            serverAddr.sin_port = htons(port);
+            //if (debug) fprintf(stderr, "Connecting to host %s\n", lbHost);
+            serverAddr.sin_addr.s_addr = inet_addr(host);
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
-        fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
-        int err = connect(clientSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
-        if (err < 0) {
-            if (debug) perror("Error connecting UDP socket:");
-            close(clientSocket);
-            return err;
+            fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
+            int err = connect(clientSockets[i], (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP socket:");
+                for (int j = 0; j < lastIndex + 1; j++) {
+                    close(clientSockets[j]);
+                }
+                return err;
+            }
         }
+
+        lastIndex = i;
     }
 
     // set the don't fragment bit
@@ -852,7 +871,7 @@ int main(int argc, char **argv) {
         byteSize = event.getSize();
 
         err = sendPacketizedBufferSendNew(buf, byteSize,
-                                       maxUdpPayload, clientSocket,
+                                       maxUdpPayload, clientSockets[portIndex],
                                        tick, protocol, entropy, version, dataId,
                                        (uint32_t) byteSize, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
@@ -882,7 +901,7 @@ int main(int argc, char **argv) {
                 // Send sync message to same destination
 if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
                 setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
-                err = send(clientSocket, syncBuf, 28, 0);
+                err = send(clientSockets[portIndex], syncBuf, 28, 0);
                 if (err == -1) {
                     fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
@@ -892,6 +911,8 @@ if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRat
                 bufsSent = 0;
             }
         }
+
+        portIndex = (portIndex + 1) % 16;
 
         // delay if any
         if (bufDelay) {
