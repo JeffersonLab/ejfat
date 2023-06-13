@@ -61,13 +61,14 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-sync]",
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
+            "        [-sock <# of UDP sockets, 16 max>]",
             "        [-mtu <desired MTU size>]",
             "        [-t <tick>]",
             "        [-ver <version>]",
@@ -86,7 +87,7 @@ static void printHelp(char *programName) {
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
     fprintf(stderr, "        The -sync option will send a UDP message to LB every second with last tick sent.\n");
-    fprintf(stderr, "        This program cycles thru the use of 16 UDP sockets for better switch performance.\n");
+    fprintf(stderr, "        This program cycles thru the use of up to 16 UDP sockets for better switch performance.\n");
 }
 
 
@@ -97,7 +98,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t *bufSize, uint64_t *bufRate,
                       uint64_t *byteRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
-                      int *cores,
+                      uint32_t *sockets, int *cores,
                       bool *debug,
                       bool *useIPv6, bool *bufDelay, bool *sendSync,
                       char* host, char *interface) {
@@ -109,20 +110,21 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {{"mtu",   1, NULL, 1},
-             {"host",  1, NULL, 2},
-             {"ver",   1, NULL, 3},
-             {"id",    1, NULL, 4},
-             {"pro",   1, NULL, 5},
-             {"sync",   0, NULL, 6},
-             {"dpre",  1, NULL, 9},
-             {"tpre",  1, NULL, 10},
-             {"ipv6",  0, NULL, 11},
-             {"bufdelay",  0, NULL, 12},
-             {"cores",  1, NULL, 13},
-             {"bufrate",  1, NULL, 14},
-             {"byterate",  1, NULL, 15},
-             {0,       0, 0,    0}
+            {{"mtu",   1, nullptr, 1},
+             {"host",  1, nullptr, 2},
+             {"ver",   1, nullptr, 3},
+             {"id",    1, nullptr, 4},
+             {"pro",   1, nullptr, 5},
+             {"sync",   0, nullptr, 6},
+             {"dpre",  1, nullptr, 9},
+             {"tpre",  1, nullptr, 10},
+             {"ipv6",  0, nullptr, 11},
+             {"bufdelay",  0, nullptr, 12},
+             {"cores",  1, nullptr, 13},
+             {"bufrate",  1, nullptr, 14},
+             {"byterate",  1, nullptr, 15},
+             {"sock",  1, nullptr, 16},
+             {nullptr,       0, 0,    0}
             };
 
 
@@ -334,6 +336,18 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 break;
 
+            case 16:
+                // # of UDP sockets
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0 && i_tmp < 17) {
+                    *sockets = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -sock, 0 < port < 17\n");
+                    exit(-1);
+                }
+                break;
+
             case 13:
                 // Cores to run on
                 if (strlen(optarg) < 1) {
@@ -518,6 +532,8 @@ int main(int argc, char **argv) {
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
     uint64_t bufRate = 0L, bufSize = 0L, byteRate = 0L;
     uint16_t port = 0x4c42; // FPGA port is default
+    uint32_t sockCount = 1; // only use one outgoing socket by default, 16 max
+
     uint64_t tick = 0;
     int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
@@ -539,7 +555,7 @@ int main(int argc, char **argv) {
 
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
-              &delayPrescale, &tickPrescale, cores, &debug,
+              &delayPrescale, &tickPrescale, &sockCount, cores, &debug,
               &useIPv6, &bufDelay, &sendSync, host, interface);
 
 #ifdef __linux__
@@ -612,11 +628,10 @@ int main(int argc, char **argv) {
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
 
     // Create UDP maxSocks sockets for efficient switch operation
-    const int maxSocks = 16;
     int portIndex = 0, lastIndex = -1;
-    int clientSockets[maxSocks];
+    int clientSockets[sockCount];
 
-    for (int i = 0; i < maxSocks; i++) {
+    for (int i = 0; i < sockCount; i++) {
         if (useIPv6) {
             struct sockaddr_in6 serverAddr6;
 
@@ -704,7 +719,7 @@ int main(int argc, char **argv) {
 #ifdef __linux__
     {
         int val = IP_PMTUDISC_DO;
-        for (int i = 0; i < maxSocks; i++) {
+        for (int i = 0; i < sockCount; i++) {
             setsockopt(clientSockets[i], IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
         }
     }
@@ -712,7 +727,7 @@ int main(int argc, char **argv) {
 
     // Start thread to do rate printout
     pthread_t thd;
-    int status = pthread_create(&thd, NULL, thread, (void *) nullptr);
+    int status = pthread_create(&thd, nullptr, thread, (void *) nullptr);
     if (status != 0) {
         fprintf(stderr, "\n ******* error creating thread\n\n");
         return -1;
@@ -730,7 +745,7 @@ int main(int argc, char **argv) {
     }
 
     char *buf = (char *) malloc(bufSize);
-    if (buf == NULL) {
+    if (buf == nullptr) {
         fprintf(stderr, "cannot allocate internal buffer memory of %" PRIu64 " bytes\n", bufSize);
         return -1;
     }
