@@ -86,6 +86,7 @@ static void printHelp(char *programName) {
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
     fprintf(stderr, "        The -sync option will send a UDP message to LB every second with last tick sent.\n");
+    fprintf(stderr, "        This program cycles thru the use of 16 UDP sockets for better switch performance.\n");
 }
 
 
