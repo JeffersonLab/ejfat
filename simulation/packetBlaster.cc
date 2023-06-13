@@ -15,12 +15,12 @@
  * to the receiving program packetBlastee.cc.
  * </p>
  * <p>
- * This program creates 16 output UDP sockets and rotates between them when
+ * This program creates up to 16 output UDP sockets and rotates between them when
  * sending each event/buffer. This is to facilitate efficient switch operation.
  * The variation in port numbers gives the switch more "entropy",
  * according to ESNET, since each connection is defined by source & host IP and port #s
  * and the switching algorithm is stateless - always relying on these 4 parameters.
- * This makes 16 possibilities or 4 bits of entropy in which ports must be different
+ * This makes a max of 16 possibilities or 4 bits of entropy in which ports must be different
  * but not necessarily sequential.
  * </p>
  * Look on Carl Timmer's Mac at /Users/timmer/DataGraphs/NumaNodes.xlsx in order see results
@@ -911,7 +911,7 @@ if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRat
             }
         }
 
-        portIndex = (portIndex + 1) % 16;
+        portIndex = (portIndex + 1) % sockCount;
 
         // delay if any
         if (bufDelay) {
