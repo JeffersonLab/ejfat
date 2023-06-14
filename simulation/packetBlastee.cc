@@ -480,6 +480,9 @@ int main(int argc, char **argv) {
         getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
         if (debug) fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufSize);
 
+        int optval = 1;
+        setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+
         // Configure settings in address struct
         // Clear it out
         memset(&serverAddr6, 0, sizeof(serverAddr6));
@@ -514,6 +517,9 @@ int main(int argc, char **argv) {
         recvBufSize = 0;
         getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
         fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufSize);
+
+        int optval = 1;
+        setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 
         // Configure settings in address struct
         struct sockaddr_in serverAddr{};
