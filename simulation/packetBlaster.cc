@@ -628,7 +628,8 @@ int main(int argc, char **argv) {
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
 
     // Create UDP maxSocks sockets for efficient switch operation
-    int portIndex = 0, lastIndex = -1;
+    uint32_t portIndex = 0;
+    int lastIndex = -1;
     int clientSockets[sockCount];
 
     for (int i = 0; i < sockCount; i++) {
@@ -829,6 +830,7 @@ int main(int argc, char **argv) {
     }
 
     uint32_t evtRate;
+    uint32_t byteCounterPerSock = 0;
     uint64_t bufsSent = 0UL;
 
     while (true) {
@@ -911,7 +913,15 @@ if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRat
             }
         }
 
-        portIndex = (portIndex + 1) % sockCount;
+        // Switching sockets for each buffer, if the buffer is relatively small,
+        // causes performance problems on the receiving end. So, to mitigate that,
+        // only switch to a new after sending roughly 10MB on a single socket.
+        byteCounterPerSock += bufSize;
+
+        if (byteCounterPerSock > 10000000) {
+            byteCounterPerSock = 0;
+            portIndex = (portIndex + 1) % sockCount;
+        }
 
         // delay if any
         if (bufDelay) {
