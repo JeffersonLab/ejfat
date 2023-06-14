@@ -916,12 +916,12 @@ if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRat
         // Switching sockets for each buffer, if the buffer is relatively small,
         // causes performance problems on the receiving end. So, to mitigate that,
         // only switch to a new after sending roughly 10MB on a single socket.
-        byteCounterPerSock += bufSize;
+//        byteCounterPerSock += bufSize;
 
-        if (byteCounterPerSock > 10000000) {
-            byteCounterPerSock = 0;
+//        if (byteCounterPerSock > 10000000) {
+//            byteCounterPerSock = 0;
             portIndex = (portIndex + 1) % sockCount;
-        }
+//        }
 
         // delay if any
         if (bufDelay) {
