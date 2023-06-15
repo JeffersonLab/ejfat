@@ -456,7 +456,7 @@ void *recvThd(void *arg) {
             int core = 80 + place;
             std::cerr << "Run reassembly thread #" << place << " on core " << core << "\n";
             CPU_SET(core, &cpuset);
-        }
+//        }
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
         if (rc != 0) {
