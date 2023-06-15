@@ -440,22 +440,18 @@ void *recvThd(void *arg) {
 
 #ifdef __linux__
 
-    if (core > -1) {
-        int coreCount = coreIds->size();
+    int coreCount = coreIds->size();
+
+    if (coreCount > 0) {
 
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
         for (int i=0; i < coreCount; i++) {
-            if (cores[i] >= 0) {
-                int core = (*coreIds)[i];
-                std::cerr << "Run reassembly thread #" << place << " on core " << core << "\n";
-                CPU_SET(core, &cpuset);
-            }
-            else {
-                break;
-            }
+            int core = (*coreIds)[i];
+            std::cerr << "Run reassembly thread #" << place << " on core " << core << "\n";
+            CPU_SET(core, &cpuset);
         }
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
