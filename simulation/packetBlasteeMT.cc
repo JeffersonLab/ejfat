@@ -448,8 +448,12 @@ void *recvThd(void *arg) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        for (int i=0; i < coreCount; i++) {
-            int core = (*coreIds)[i];
+//        for (int i=0; i < coreCount; i++) {
+//            int core = (*coreIds)[i];
+//            std::cerr << "Run reassembly thread #" << place << " on core " << core << "\n";
+//            CPU_SET(core, &cpuset);
+//        }
+            int core = 80 + place;
             std::cerr << "Run reassembly thread #" << place << " on core " << core << "\n";
             CPU_SET(core, &cpuset);
         }
