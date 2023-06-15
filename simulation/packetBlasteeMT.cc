@@ -562,7 +562,7 @@ int main(int argc, char **argv) {
             if (cores[i] >= 0) {
                 std::cerr << "Run reassembly threads on core " << cores[i] << "\n";
                 //CPU_SET(cores[i], &cpuset);
-                (*coreIds)[i] = cores[i];
+                coreIds->push_back(cores[i]);
             }
             else {
                 break;
