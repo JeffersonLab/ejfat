@@ -544,11 +544,14 @@ int main(int argc, char **argv) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        if (debug) {
-            for (int i=0; i < 10; i++) {
-                std::cerr << "core[" << i << "] = " << cores[i] << "\n";
-            }
+        int coreCount = 0;
+
+        for (int i=0; i < 10; i++) {
+            if (debug) std::cerr << "core[" << i << "] = " << cores[i] << "\n";
+            if (cores[1] > -1) coreCount++;
         }
+
+        coreIds->reserve(coreCount);
 
         for (int i=0; i < 10; i++) {
             if (cores[i] >= 0) {
