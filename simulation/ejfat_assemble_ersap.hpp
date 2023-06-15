@@ -844,7 +844,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 // To do a complete job of trying to track out-of-order packets, we would need to
                 // simultaneously keep track of packets from multiple ticks. This small routine
                 // would need to keep state - greatly complicating things. So skip that here.
-                // Such work is done in the packetBlasteeNew2.cc program.
+                // Such work is done in the packetBlasteeFull.cc program.
 
                 // If we get packet from new tick ...
                 if (packetTick != prevTick) {
