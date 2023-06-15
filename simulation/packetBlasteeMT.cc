@@ -529,7 +529,7 @@ int main(int argc, char **argv) {
     }
 
     // shared ptr to vector containing cores to run on
-    auto coreIds = std::make_shared<std::vector<int>>(10);
+    auto coreIds = std::make_shared<std::vector<int>>;
 
     parseArgs(argc, argv, &bufSize, &recvBufSize,
               &tickPrescale, &socketCount, cores, &port, &debug,
