@@ -135,6 +135,7 @@ set(SIM_EXEC_FILES
         simulation/udp_rcv_order.cc
         simulation/udp_send_order.cc
         simulation/packetBlastee.cc
+        simulation/packetBlasteeMT.cc
         simulation/packetBlasteeTcp.cc
         simulation/packetBlaster.cc
         simulation/packetBlasterSmall.cc
@@ -263,9 +264,7 @@ option(BUILD_CLAS "Build CLAS 12 source code" OFF)
 # if you tell cmake to have code use USE_CLAS preprocessor macro
 if (BUILD_CLAS)
     find_package(HIPO)
-    if (HIPO_FOUND)
-        set(EXEC_FILES ${EXEC_FILES} ${CLAS_EXEC_FILES})
-    else()
+    if (NOT HIPO_FOUND)
         message(STATUS "Hipo cannot be found, compile without it")
     endif()
 else()
@@ -289,13 +288,12 @@ if (DEFINED MAKE_EXEC)
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
         # Location of include files
-        target_include_directories(${execName} PUBLIC   ${HIPO_INCLUDE_DIRS}
-                                                        ${ZeroMQ_INCLUDE_DIRS}
+        target_include_directories(${execName} PUBLIC   ${ZeroMQ_INCLUDE_DIRS}
                                                         ${ET_INCLUDE_DIRS}
                                                         ${CMAKE_SOURCE_DIR}/simulation
                                                         ${CMAKE_SOURCE_DIR}/util)
         # Needs these libs
-        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY} ${HIPO_LIBRARIES})
+        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)
@@ -304,7 +302,35 @@ if (DEFINED MAKE_EXEC)
         endif()
     endforeach(fileName)
 
-    if (DISRUPTOR_FOUND)
+
+    if (BUILD_CLAS AND HIPO_FOUND)
+        foreach(fileName ${CLAS_EXEC_FILES})
+            # Get file name with no directory or extension as executable name
+            get_filename_component(execName ${fileName} NAME_WE)
+            # Create executable from file
+            message(STATUS "Create normal executable " ${execName})
+            add_executable(${execName} ${fileName})
+            # Put debug extension on if applicable
+            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+            # Location of include files
+            target_include_directories(${execName} PUBLIC   ${HIPO_INCLUDE_DIRS}
+                    ${ZeroMQ_INCLUDE_DIRS}
+                    ${ET_INCLUDE_DIRS}
+                    ${CMAKE_SOURCE_DIR}/simulation
+                    ${CMAKE_SOURCE_DIR}/util)
+            # Needs these libs
+            target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY} ${HIPO_LIBRARIES})
+
+            # Only install if installation directory has been defined
+            if (DEFINED INSTALL_DIR_DEFINED)
+                # Install into bin dir
+                install(TARGETS ${execName} RUNTIME DESTINATION bin)
+            endif()
+        endforeach(fileName)
+    endif()
+
+
+    if (BUILD_DIS AND DISRUPTOR_FOUND)
         message(STATUS "TRY DISRUPTOR CODE:")
 
         # This files need util files added to executable
@@ -334,7 +360,7 @@ if (DEFINED MAKE_EXEC)
         endforeach(fileName)
     endif()
 
-    if (GRPC_FOUND)
+    if (BUILD_GRPC AND GRPC_FOUND)
         message(STATUS "TRY GRPC CODE:")
 
         # This files need util files added to executable
