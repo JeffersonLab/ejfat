@@ -545,13 +545,13 @@ int main(int argc, char **argv) {
 
     if (cores[0] > -1) {
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
+        //cpu_set_t cpuset;
+        //CPU_ZERO(&cpuset);
 
         int coreCount = 0;
 
         for (int i=0; i < 10; i++) {
-            if (debug) std::cerr << "core[" << i << "] = " << cores[i] << "\n";
+            if (debug) std::cerr << "Using core[" << i << "] = " << cores[i] << "\n";
             if (cores[1] > -1) coreCount++;
         }
 
@@ -559,19 +559,19 @@ int main(int argc, char **argv) {
 
         for (int i=0; i < 10; i++) {
             if (cores[i] >= 0) {
-                std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
-                CPU_SET(cores[i], &cpuset);
+                std::cerr << "Run reassembly threads on core " << cores[i] << "\n";
+                //CPU_SET(cores[i], &cpuset);
                 (*coreIds)[i] = cores[i];
             }
             else {
                 break;
             }
         }
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
-        }
+//        pthread_t current_thread = pthread_self();
+//        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+//        if (rc != 0) {
+//            std::cerr << "Error calling pthread_setaffinity_np: " << rc << std::endl;
+//        }
     }
 
 #endif
