@@ -441,6 +441,7 @@ void *recvThd(void *arg) {
 #ifdef __linux__
 
     int coreCount = coreIds->size();
+    std::cerr << "Reassembly thread #" << place << " coreCount = " << coreCount << "\n";
 
     if (coreCount > 0) {
 
