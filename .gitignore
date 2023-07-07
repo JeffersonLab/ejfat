@@ -11,5 +11,6 @@ _*
 cmake-*
 cmake_install.cmake
 build/
+jbuild/
 doxyerrors.log
 config.log
