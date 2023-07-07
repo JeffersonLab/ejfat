@@ -8,6 +8,7 @@ _*
 !.github
 
 # ignore generated files/dirs
+*.class
 cmake-*
 cmake_install.cmake
 build/
