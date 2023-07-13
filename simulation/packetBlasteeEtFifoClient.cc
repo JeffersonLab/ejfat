@@ -1125,9 +1125,11 @@ int main(int argc, char **argv) {
         targ->report = reportToCP;
 
         targ->keepFillStats  = keepLevelStats;
-        targ->statFileFifo   = statFileFifo;
-        targ->statFileAvg    = statFileAvg;
-        targ->statFileReport = statFileReport;
+        if (keepLevelStats) {
+            targ->statFileFifo   = statFileFifo;
+            targ->statFileAvg    = statFileAvg;
+            targ->statFileReport = statFileReport;
+        }
 
         pthread_t thd1;
         status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
