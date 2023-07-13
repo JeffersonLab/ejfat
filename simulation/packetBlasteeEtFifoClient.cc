@@ -9,9 +9,10 @@
 
 
 /**
- * @file Receive generated data sent by clasBlaster.c program.
- * This assumes there is an emulator or FPGA between this and the sending program.
+ * @file
+ * Receive generated data sent by clasBlaster.c program.
  * Take the reassembled buffers and send to an ET system so ERSAP can grab them.
+ * Interact with an EJFAT control plane (register, send info, etc).
  */
 
 #include <cstdlib>
@@ -79,6 +80,9 @@ X pid(          // Proportional, Integrative, Derivative Controller
 }
 
 
+static bool haveRecvAddr = false;
+static bool haveEtName = false;
+
 
 /**
  * Print out help.
@@ -90,25 +94,28 @@ static void printHelp(char *programName) {
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]",
-            "        [-p <data receiving port>]",
+            "        [-p <data receiving port, 17750 default>]",
             "        [-a <data receiving address>]",
+            "        [-token <authentication token (for CP registration, default token_<time>)>]",
             "        [-statfile <base file name for 3 stat files>]",
-            "        [-range <data receiving port range, entropy of sender>]",
-            "        [-gaddr <grpc server IP address>]",
-            "        [-gport <grpc server port>]",
-            "        [-gname <grpc name>]",
-            "        [-gid <grpc id#>]",
-            "        [-s <PID fifo set point>]",
-            "        [-b <internal buffer byte size>]",
-            "        [-r <UDP receive buffer byte size>]",
+            "        [-range <data receiving port range, entropy of sender>]\n",
+
+            "        [-gaddr <CP IP address (default = none & no CP comm)>]",
+            "        [-gport <CP port (default 50051)>]",
+            "        [-gname <name of this backend (default myBackEnd)>]\n",
+
+            "        [-s <PID fifo set point (default 0)>]",
+            "        [-b <internal buffer byte size (default 150kB)>]",
+            "        [-r <UDP receive buffer byte size (default 25MB)>]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with clasBlaster and send data to an ET system.\n");
-    fprintf(stderr, "        Specifying a statfile name will create 3 files: 1) <name>_fifo which will have the\n");
-    fprintf(stderr, "        fifo-fill-level (when it changes) vs time recorded over 100 sec,\n");
-    fprintf(stderr, "        2) <name>_avg which will have the running avg vs time for once each sec for 100 sec,\n");
-    fprintf(stderr, "        and 3) <name>_report which will have the instantaneous fill level vs time once a sec for 100 sec.\n");
+    fprintf(stderr, "        It interacts with either a real or simulated control plane.\n");
+    fprintf(stderr, "        Specifying a statfile name will create 3 files:\n");
+    fprintf(stderr, "          1) <name>_fifo with fifo-fill-level (when it changes) vs time recorded over 100 sec,\n");
+    fprintf(stderr, "          2) <name>_avg with the running avg vs time for once each sec for 100 sec, and\n");
+    fprintf(stderr, "          3) <name>_report with the instantaneous fill level vs time once a sec for 100 sec.\n");
 }
 
 
@@ -121,26 +128,25 @@ static void printHelp(char *programName) {
  * @param recvBufSize   filled with UDP receive buffer size.
  * @param tickPrescale  expected increase in tick with each incoming buffer.
  * @param cores         array of core ids on which to run assembly thread.
- * @param grpcId        filled with id# of this grpc client (backend) to send to control plane.
  * @param setPt         filled with the set point of PID loop used with fifo fill level.
  * @param port          filled with UDP receiving data port to listen on.
- * @param grpcPort      filled with grpc server port to send control plane info to.
+ * @param cpPort        filled wit hmain control plane port.
  * @param range         filled with range of ports in powers of 2 (entropy).
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param listenAddr    filled with IP address to listen on for LB data.
- * @param grpcAddr      filled with grpc server IP address to send control plane info to.
+ * @param cpAddr        filled with control plane IP address.
  * @param etFilename    filled with name of ET file in which to write data.
- * @param grpcName      filled with name of this grpc client (backend) to send to control plane.
+ * @param beName        filled with name of this backend CP client.
  * @param statBaseName  filled with base name of files used to store 100 sec of ET fill level data.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *cores, int *grpcId, float *setPt,
-                      uint16_t* port, uint16_t* grpcPort, int *range,
+                      int *cores, float *setPt,
+                      uint16_t* port, uint16_t* cpPort, int *range,
                       bool *debug, bool *useIPv6,
-                      char *listenAddr, char *grpcAddr,
-                      char *etFilename, char *grpcName, std::string &statBaseName) {
+                      char *listenAddr, char *cpAddr, char *cpToken,
+                      char *etFilename, char *beName, std::string &statBaseName) {
 
     int c, i_tmp;
     bool help = false;
@@ -148,13 +154,13 @@ static void parseArgs(int argc, char **argv,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {             {"tpre",  1, NULL, 1},
-                          {"ip6",  0, NULL, 2},
+            {             {"tpre",   1, NULL, 1},
+                          {"ip6",    0, NULL, 2},
                           {"cores",  1, NULL, 3},
                           {"gaddr",  1, NULL, 4},
                           {"gport",  1, NULL, 5},
                           {"gname",  1, NULL, 6},
-                          {"gid",  1, NULL, 7},
+                          {"token",  1, NULL, 7},
                           {"range",  1, NULL, 8},
                           {"statfile",  1, NULL, 9},
                           {0,       0, 0,    0}
@@ -182,10 +188,10 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 5:
-                // grpc server PORT
+                // control plane PORT
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp > 1023 && i_tmp < 65535) {
-                    *grpcPort = i_tmp;
+                    *cpPort = i_tmp;
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
@@ -255,16 +261,13 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 7:
-                // grpc client id
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 0) {
-                    *grpcId = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -gid, grpc client id must be >= 0\n\n");
+                // backend authentication token with control plane
+                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
+                    fprintf(stderr, "authentication token length must be > 1 and < 33\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
+                strcpy(cpToken, optarg);
                 break;
 
             case 'a':
@@ -274,27 +277,28 @@ static void parseArgs(int argc, char **argv,
                     printHelp(argv[0]);
                     exit(-1);
                 }
+                haveRecvAddr = true;
                 strcpy(listenAddr, optarg);
                 break;
 
             case 4:
-                // GRPC server IP ADDRESS
+                // control plane IP ADDRESS
                 if (strlen(optarg) > 15 || strlen(optarg) < 7) {
                     fprintf(stderr, "grpc server IP address is bad\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                strcpy(grpcAddr, optarg);
+                strcpy(cpAddr, optarg);
                 break;
 
             case 6:
-                // grpc client name
-                if (strlen(optarg) > 30 || strlen(optarg) < 1) {
-                    fprintf(stderr, "grpc client name too long/short, %s\n\n", optarg);
+                // this client name to control plane
+                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
+                    fprintf(stderr, "backend client name too long/short, %s\n\n", optarg);
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                strcpy(grpcName, optarg);
+                strcpy(beName, optarg);
                 break;
 
             case 'f':
@@ -304,6 +308,7 @@ static void parseArgs(int argc, char **argv,
                     printHelp(argv[0]);
                     exit(-1);
                 }
+                haveEtName = true;
                 strcpy(etFilename, optarg);
                 break;
 
@@ -411,6 +416,12 @@ static void parseArgs(int argc, char **argv,
         printHelp(argv[0]);
         exit(2);
     }
+
+    if (!haveEtName || !haveRecvAddr) {
+        fprintf(stderr, "Need to define ET system and receiving addr on cmd line\n\n");
+        printHelp(argv[0]);
+        exit(2);
+    }
 }
 
 
@@ -429,15 +440,15 @@ typedef struct threadStruct_t {
     et_sys_id etId;
     et_fifo_id fid;
 
-    uint16_t grpcServerPort;
-    std::string grpcServerIpAddr;
+    uint16_t cpServerPort;
+    std::string cpServerIpAddr;
 
     uint16_t dataPort;
     std::string dataIpAddr;
     int dataPortRange;
 
     std::string myName;
-    int32_t myId;
+    std::string token;
     float setPoint;
     bool report;
 
@@ -533,9 +544,10 @@ static void *pidThread(void *arg) {
     // convert integer range in PortRange enum
     auto range = PortRange(targ->dataPortRange);
 
-    LbControlPlaneClient client(targ->grpcServerIpAddr, targ->grpcServerPort,
+    LbControlPlaneClient client(targ->cpServerIpAddr, targ->cpServerPort,
                                 targ->dataIpAddr, targ->dataPort, range,
-                                targ->myName, (int32_t)eventSize, numEvents, targ->setPoint);
+                                targ->myName, targ->token,
+                                (int32_t)eventSize, numEvents, targ->setPoint);
 
     // Register this client with the grpc server &
     // wait for server to send session token in return.
@@ -797,33 +809,39 @@ int main(int argc, char **argv) {
 
     int udpSocket;
     ssize_t nBytes;
-    // Set this to max expected data size
-    int bufSize = 1020000;
-    int recvBufSize = 0;
-    int tickPrescale = 1;
-    int grpcId = 0;
     int range;
-    float grpcSetPoint = 0;
-    uint16_t grpcPort = 50051;
-    uint16_t port = 7777;
-    uint16_t serverPort = 8888;
     int cores[10];
+
+    // Set some defaults
+    int bufSize = 150000;
+    int recvBufSize = 25000000;
+    int tickPrescale = 1;
+    float cpSetPoint = 0.f;
+    uint16_t cpPort = 50051;
+    uint16_t port = 17750;
+
     bool debug = false;
     bool useIPv6 = false;
     bool sendToEt = false;
     bool keepLevelStats = false;
 
     std::string stat_base_name, statFileFifo, statFileAvg, statFileReport;
-  //  memset(stat_base_name, 0, 101);
+    //  memset(stat_base_name, 0, 101);
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
+
     char et_filename[101];
     memset(et_filename, 0, 101);
-    char grpcAddr[16];
-    memset(grpcAddr, 0, 16);
-    char grpcName[31];
-    memset(grpcName, 0, 31);
+
+    char cpAddr[16];
+    memset(cpAddr, 0, 16);
+
+    char beName[33];
+    memset(beName, 0, 33);
+
+    char cpToken[33];
+    memset(cpToken, 0, 33);
 
     for (int i=0; i < 10; i++) {
         cores[i] = -1;
@@ -831,18 +849,34 @@ int main(int argc, char **argv) {
 
     parseArgs(argc, argv,
               &bufSize, &recvBufSize, &tickPrescale,
-              cores, &grpcId, &grpcSetPoint,
-              &port, &grpcPort, &range,
+              cores, &cpSetPoint,
+              &port, &cpPort, &range,
               &debug, &useIPv6,
-              listeningAddr, grpcAddr,
-              et_filename, grpcName, stat_base_name);
+              listeningAddr, cpAddr, cpToken,
+              et_filename, beName, stat_base_name);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
 
     // Do we report to control plane?
     bool reportToCP = true;
-    if (strlen(grpcAddr) < 1) {
+    if (strlen(cpAddr) < 1) {
         reportToCP = false;
+    }
+
+
+    // Find a few bits of local time to set default names if necessary
+    time_t localT = time(nullptr) & 0xffff;
+
+    // Make sure this backend has a name
+    if (strlen(beName) < 1) {
+        std::string name = "backend_" + std::to_string(localT);
+        std::strcpy(beName, name.c_str());
+    }
+
+    // Make sure we have a token
+    if (strlen(cpToken) < 1) {
+        std::string name = "token_" + std::to_string(localT);
+        std::strcpy(cpToken, name.c_str());
     }
 
 #ifdef __linux__
@@ -1078,16 +1112,16 @@ int main(int argc, char **argv) {
 
         targ->etId = id;
         targ->fid = fid;
-        targ->grpcServerPort = grpcPort;
-        targ->grpcServerIpAddr = grpcAddr;
+        targ->cpServerPort = cpPort;
+        targ->cpServerIpAddr = cpAddr;
 
         targ->dataPort = port;
         targ->dataIpAddr = listeningAddr;
         targ->dataPortRange = range;
 
-        targ->myName = grpcName;
-        targ->myId = grpcId;
-        targ->setPoint = grpcSetPoint;
+        targ->myName = beName;
+        targ->token = cpToken;
+        targ->setPoint = cpSetPoint;
         targ->report = reportToCP;
 
         targ->keepFillStats  = keepLevelStats;
