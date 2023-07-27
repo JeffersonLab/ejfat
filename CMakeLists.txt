@@ -142,6 +142,7 @@ set(SIM_EXEC_FILES
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
         clas_source/clasBlasterIds.cc
+        clas_source/clasBlasterEventFiles.cc
         )
 
 set(TEST_FILES
