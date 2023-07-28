@@ -789,6 +789,8 @@ int main(int argc, char **argv) {
     bool haveNext = reader.next();
     std::cerr << "File haveNext = " <<  haveNext << std::endl;
 
+    int bigEventCnt = 0;
+    uint64_t totalBigEvBytes = 0L;
 
     while(reader.next()) {
         reader.read(event);
@@ -797,12 +799,18 @@ int main(int argc, char **argv) {
         int bytes = event.getSize();
         totalBytes2 += bytes;
 
+        if (bytes >= 30000) {
+            bigEventCnt++;
+            totalBigEvBytes += bytes;
+        }
+
         counter++;
     }
     reader.gotoEvent(0);
 
     avgBufBytes = totalBytes2 / counter;
-    std::cerr << "processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
+    std::cerr << "Data byte total = " << totalBytes2 << ", processed events = " << counter << ", avg buf size = " << avgBufBytes << std::endl;
+    std::cerr << "Big ev data byte total = " << totalBigEvBytes << ", big events = " << bigEventCnt << std::endl;
 
     // Statistics & rate setting
     int64_t packetsSent=0;
@@ -838,6 +846,7 @@ int main(int argc, char **argv) {
 
     uint32_t evtRate;
     uint64_t bufsSent = 0UL;
+//    int end = 10;
 
     while (true) {
 
@@ -883,6 +892,9 @@ int main(int argc, char **argv) {
 //fprintf(stderr, "packetBlaster: read next event\n");
         }
         else {
+            if (writeEventsToFiles) {
+                break;
+            }
 //            fprintf(stderr, "again\n");
             reader.gotoEvent(0);
             reader.read(event);
@@ -897,7 +909,16 @@ int main(int argc, char **argv) {
             FILE *fp = fopen (fileName.c_str(), "w");
             fwrite(buf,byteSize,1,fp);
             fclose(fp);
-            fprintf(stderr, "wrote event %" PRIu64 ", size %d\n", bufsSent, byteSize);
+            err = 0;
+//            if (--end < 0) {
+//                break;
+//            }
+
+            // Do this for the /daqfs/java/clas_005038.1231.hipo  file
+            if (bufsSent > 76739) {
+                break;
+            }
+            fprintf(stderr, "wrote event %" PRIu64 ", size %d to file %s\n", bufsSent, byteSize, fileName.c_str());
         }
         else {
             err = sendPacketizedBufferSendNew(buf, byteSize,
