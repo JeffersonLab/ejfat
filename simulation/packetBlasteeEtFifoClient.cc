@@ -106,9 +106,9 @@ static void printHelp(char *programName) {
             "        [-gport <CP port (default 18347)>]",
             "        [-gname <name of this backend (default myBackEnd)>]\n\n",
 
-            "        [-kp <PID proportional constant>]",
-            "        [-ki <PID integral constant>]",
-            "        [-kd <PID differential constant>]\n\n",
+            "        [-kp <PID proportional constant, default 0.8>]",
+            "        [-ki <PID integral constant, default 0.02>]",
+            "        [-kd <PID differential constant, default 0.001>]\n",
 
             "        [-count <# of most recent fill values averaged, default 1000>]",
             "        [-rtime <millisec for reporting fill to CP, default 1000>]\n\n",
@@ -925,9 +925,9 @@ int main(int argc, char **argv) {
     bool keepLevelStats = false;
 
     // PID loop variables
-    float Kp = 0.5;
-    float Ki = 0.00;
-    float Kd = 0.00;
+    float Kp = 0.8;
+    float Ki = 0.02;
+    float Kd = 0.001;
 
     // # of fill values to average when reporting to grpc
     uint32_t fcount = 1000;
