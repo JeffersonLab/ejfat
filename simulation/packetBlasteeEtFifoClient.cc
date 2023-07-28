@@ -90,19 +90,28 @@ static bool haveEtName = false;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]",
             "        [-p <data receiving port, 17750 default>]",
             "        [-a <data receiving address>]",
             "        [-token <authentication token (for CP registration, default token_<time>)>]",
-            "        [-statfile <base file name for 3 stat files>]",
-            "        [-range <data receiving port range, entropy of sender>]\n",
+            "        [-range <data receiving port range, entropy of sender>]\n\n",
+
+            "        [-sfile <file name for stats>]",
+            "        [-stime <stat sample millisec (t >= 1 msec, default = 1)]\n\n",
 
             "        [-gaddr <CP IP address (default = none & no CP comm)>]",
-            "        [-gport <CP port (default 50051)>]",
-            "        [-gname <name of this backend (default myBackEnd)>]\n",
+            "        [-gport <CP port (default 18347)>]",
+            "        [-gname <name of this backend (default myBackEnd)>]\n\n",
+
+            "        [-kp <PID proportional constant>]",
+            "        [-ki <PID integral constant>]",
+            "        [-kd <PID differential constant>]\n\n",
+
+            "        [-count <# of most recent fill values averaged, default 1000>]",
+            "        [-rtime <millisec for reporting fill to CP, default 1000>]\n\n",
 
             "        [-s <PID fifo set point (default 0)>]",
             "        [-b <internal buffer byte size (default 150kB)>]",
@@ -112,10 +121,9 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with clasBlaster and send data to an ET system.\n");
     fprintf(stderr, "        It interacts with either a real or simulated control plane.\n");
-    fprintf(stderr, "        Specifying a statfile name will create 3 files:\n");
-    fprintf(stderr, "          1) <name>_fifo with fifo-fill-level (when it changes) vs time recorded over 100 sec,\n");
-    fprintf(stderr, "          2) <name>_avg with the running avg vs time for once each sec for 100 sec, and\n");
-    fprintf(stderr, "          3) <name>_report with the instantaneous fill level vs time once a sec for 100 sec.\n");
+    fprintf(stderr, "        Specifying a stat file name will create 1 files with:\n");
+    fprintf(stderr, "          1) String header naming columns,\n");
+    fprintf(stderr, "          2) Each row: time (usec), instant fill, avg fill, avg fill %%, pid err\n");
 }
 
 
@@ -132,6 +140,9 @@ static void printHelp(char *programName) {
  * @param port          filled with UDP receiving data port to listen on.
  * @param cpPort        filled wit hmain control plane port.
  * @param range         filled with range of ports in powers of 2 (entropy).
+ * @param fillCount     filled with # of fill level measurements to average together before sending.
+ * @param reportTime    filled with millisec between reports to CP.
+ * @param stime         filled with time in millisec to sample stats.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param listenAddr    filled with IP address to listen on for LB data.
@@ -139,14 +150,19 @@ static void printHelp(char *programName) {
  * @param etFilename    filled with name of ET file in which to write data.
  * @param beName        filled with name of this backend CP client.
  * @param statBaseName  filled with base name of files used to store 100 sec of ET fill level data.
+ * @param kp            filled with PID proportional constant.
+ * @param ki            filled with PID integral constant.
+ * @param kd            filled with PID differential constant.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
                       int *cores, float *setPt,
                       uint16_t* port, uint16_t* cpPort, int *range,
+                      uint32_t *fillCount, uint32_t *reportTime, uint32_t *stime,
                       bool *debug, bool *useIPv6,
                       char *listenAddr, char *cpAddr, char *cpToken,
-                      char *etFilename, char *beName, std::string &statBaseName) {
+                      char *etFilename, char *beName, std::string &statFileName,
+                      float *kp, float *ki, float *kd) {
 
     int c, i_tmp;
     bool help = false;
@@ -154,15 +170,21 @@ static void parseArgs(int argc, char **argv,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {             {"tpre",   1, NULL, 1},
-                          {"ip6",    0, NULL, 2},
-                          {"cores",  1, NULL, 3},
-                          {"gaddr",  1, NULL, 4},
-                          {"gport",  1, NULL, 5},
-                          {"gname",  1, NULL, 6},
-                          {"token",  1, NULL, 7},
-                          {"range",  1, NULL, 8},
-                          {"statfile",  1, NULL, 9},
+            {             {"tpre",      1, nullptr, 1},
+                          {"ip6",       0, nullptr, 2},
+                          {"cores",     1, nullptr, 3},
+                          {"gaddr",     1, nullptr, 4},
+                          {"gport",     1, nullptr, 5},
+                          {"gname",     1, nullptr, 6},
+                          {"token",     1, nullptr, 7},
+                          {"range",     1, nullptr, 8},
+                          {"sfile",     1, nullptr, 9},
+                          {"stime",     1, nullptr, 10},
+                          {"kp",        1, nullptr, 11},
+                          {"ki",        1, nullptr, 12},
+                          {"kd",        1, nullptr, 13},
+                          {"count",     1, nullptr, 14},
+                          {"rtime",     1, nullptr, 15},
                           {0,       0, 0,    0}
             };
 
@@ -313,13 +335,13 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 9:
-                // statistics base file name
+                // statistics file name
                 if (strlen(optarg) > 100 || strlen(optarg) < 1) {
                     fprintf(stderr, "stat file name too long/short, %s\n\n", optarg);
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                statBaseName = optarg;
+                statFileName = optarg;
                 break;
 
             case 1:
@@ -396,6 +418,78 @@ static void parseArgs(int argc, char **argv,
                 }
                 break;
 
+            case 10:
+                // Set the stat sample time in msec
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                i_tmp =  i_tmp < 1 ? 1 : i_tmp;
+                *stime = i_tmp;
+                break;
+
+            case 11:
+                // Set the Kp PID loop parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -kp\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *kp = sp;
+                break;
+
+            case 12:
+                // Set the Ki PID loop parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -ki\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *ki = sp;
+                break;
+
+            case 13:
+                // Set the Kd PID loop parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -kd\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *kd = sp;
+                break;
+
+            case 14:
+                // count = # of fill level values averaged together before reporting
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *fillCount = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -count, must be > 0\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
+            case 15:
+                // reporting interval in millisec
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0) {
+                    *reportTime = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -rtime, must be >= 1 ms\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -430,7 +524,7 @@ static void parseArgs(int argc, char **argv,
  * @param time time to convert.
  * @return microseconds.
  */
-uint64_t timespecToMicroSec(timespec *time) {
+static uint64_t timespecToMicroSec(timespec *time) {
     return 1000000UL * time->tv_sec + time->tv_nsec/1000UL;
 }
 
@@ -454,9 +548,15 @@ typedef struct threadStruct_t {
 
     // fill stats
     bool keepFillStats;
-    std::string statFileFifo;
-    std::string statFileAvg;
-    std::string statFileReport;
+    std::string statFile;
+
+    float Kp;
+    float Ki;
+    float Kd;
+
+    uint32_t fcount;
+    uint32_t reportTime;
+    uint32_t sampleTime;
 
 } threadStruct;
 
@@ -471,55 +571,51 @@ static void *pidThread(void *arg) {
     bool reportToCp = targ->report;
 
     int status, numEvents, usedFifoEntries = 0;
-    int fillPercent = 0;  // 0 - 100
     size_t eventSize;
     status = et_system_getnumevents(etId, &numEvents);
     status = et_system_geteventsize(etId, &eventSize);
     // Max # of fifo entries available to consumer
-    int totalEntryCount = et_fifo_getEntryCount(fid);
-    if (totalEntryCount < 0) {
+    int fifoCapacity = et_fifo_getEntryCount(fid);
+    if (fifoCapacity < 0) {
         // error
+        // ET system error
+        printf("Bad ET fifo id, exit\n");
+        exit(1);
     }
 
     float pidError;
     float pidSetPoint = targ->setPoint;
-    const float Kp = 0.5;
-    const float Ki = 0.0;
-    const float Kd = 0.00;
-    const float deltaT = 1.0; // 1 millisec
+    const float Kp = targ->Kp;
+    const float Ki = targ->Ki;
+    const float Kd = targ->Kd;
 
-    int loopMax   = 1000;
-    int loopCount = loopMax; // 1000 loops of 1 millisec = 1 sec
-    int waitMicroSecs = 1000; // By default, loop every millisec
+    // # of fill level to average together
+    uint32_t fcount = targ->fcount;
+    // time period in millisec for reporting to CP
+    uint32_t reportTime = targ->reportTime;
 
+    // Vectors to store statistics values until reporting time, then written to file
+    std::vector<uint64_t> timeVec;        // epoch time in millisec
+    std::vector<float> percentVec;     // % of fifo filled (0-1)
+    std::vector<float> avgVec;         // running avg fill level
+    std::vector<float> instVec;        // instantaneous fill level
+    std::vector<float> pidErrVec;      // PID loop error
+
+
+    FILE *fp = nullptr;
     bool keepFillStats = targ->keepFillStats;
     if (keepFillStats) {
-        // If keeping fill stats ...
-        // We're writing files filled with data about fifo fill levels.
-        // This will, of course, depend on the application that is taking
-        // events out of the ET system.
-        //
-        // For 1GB/s incoming, events of 62.3kB actual data (with headers -> 62.75kB)
-        // fit nicely into 7 jumbo packets, which means 15937 buffers/sec.
-        // To try and capture what is going on, try for 32k samples/sec =>
-        // delay of 31 microsec.
-        // To take 100 seconds of data this means 32,258 samples, say 32500, * 100 = 3.25 M data points.
-        // We'll be using 2 ints * (4 bytes/int) * 3.25M = 26MB.
-        // At the same time we'll store, once per sec, the running avg and the
-        // instantaneous fill level (plus time) - each in different files.
-        // These will require 100 * 2 * 4 or 800 bytes - not much.
-
-        loopMax = 32500;
-        loopCount = loopMax;
-        waitMicroSecs = 31;
+        // Open file and write header
+        FILE *fp = fopen (targ->statFile.c_str(), "w");
+        if (fp == nullptr) {
+            printf("Failed to open statistics file %s, so don't keep any\n", targ->statFile.c_str());
+            keepFillStats = false;
+        }
+        else {
+            fprintf(fp, "time(usec), instant_fill, avg_fill, percent_avg_fill, pidErr\n");
+        }
     }
 
-    // Allocate mem now, even if not writing stat files
-    std::vector<int> fill(3250000); // fifo fill level every 31 usec
-    std::vector<int> time(3250000); // time every ~31 usec
-    std::vector<int> avg(100); // running avg fill level every 1 sec
-    std::vector<int> inst(100); // instantaneous fill level every 1 sec
-    std::vector<int> time2(100); // time every ~1 sec
 
 //    /**
 //     * Constructor.
@@ -558,140 +654,143 @@ static void *pidThread(void *arg) {
         exit(1);
     }
 
-    // Prevent anti-aliasing. If, for example, sampling every millisec, an individual reading sent every 1 sec
-    // will NOT be an accurate representation. It could include a lot of noise. To prevent this,
-    // keep a running average of the fill %, so its reported value is a more accurate portrayal of
-    // what's really going on. In this case a running avg is taken over the reporting time.
-    int runningFillTotal = 0;
-    float fillAvg;
-    int fillValues[loopMax];
-    memset(fillValues, 0, loopMax*sizeof(int));
 
-    // Keep circulating thru array. Highest index is loopMax - 1.
-    // The first time thru, we don't want to over-weight with (loopMax - 1) zero entries.
-    // So we read loopMax entries first, before we start keeping stats.
-    int prevFill, fillIndex = 0;
+    // Add stuff to prevent anti-aliasing.
+    // If sampling fifo level every millisec but that level is changing much more quickly,
+    // the sent value will NOT be an accurate representation. It will include a lot of noise.
+    // To prevent this,
+    // keep a running average of the fill %, so its reported value is a more accurate portrayal
+    // of what's really going on. In this case a running avg is taken over the reporting time.
+
+    float deltaT; // sec
+    int sampleMilliSec = targ->sampleTime; // Sample data every x millisec
+    // # of loops (samples) to comprise one reporting period =
+    int loopMax   = reportTime / sampleMilliSec; // remember, report time is also in millisec
+    int loopCount = loopMax;    // use to track # loops made
+
+    float runningFillTotal = 0., fillAvg;
+    int fillValues[fcount];
+    memset(fillValues, 0, fcount*sizeof(float));
+
+    // Keep circulating thru array. Highest index is fcount - 1.
+    // The first time thru, we don't want to over-weight with (fcount - 1) zero entries.
+    // So we read fcount entries first, before we start keeping stats.
+    float prevFill, curFill, fillPercent;
     bool startingUp = true;
-    int firstLoopCounter = 1;
+    int fillIndex = 0, firstLoopCounter = 1;
 
-
-    struct timespec t1, t2, firstT;
-    uint64_t microSec = 0, firstMicroSec = 0;
-    // Get the current time
+    // time stuff
+    struct timespec t1, t2;
+    int64_t timeDiff;
+    uint64_t absTime, prevAbsTime;
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    firstT = t1;
-    firstMicroSec = timespecToMicroSec(&t1);
+    prevAbsTime = 1000L*(t1.tv_sec) + (t1.tv_nsec)/1000000L;
 
 
     while (true) {
 
         // Delay between data points
-        std::this_thread::sleep_for(std::chrono::microseconds(waitMicroSecs));
+        std::this_thread::sleep_for(std::chrono::milliseconds(sampleMilliSec));
 
-        // Get the number of occupied fifo entries (# sitting in User station's input list)
-        usedFifoEntries = et_fifo_getFillLevel(fid);
-        if (usedFifoEntries < 0) {
-            // error
+        // Read current fifo fill level
+        curFill = static_cast<float>(et_fifo_getFillLevel(fid));
+        if (curFill < 0) {
+            // ET system error
+            printf("ET closed or communication error, exit\n");
+            exit(1);
         }
 
-        fillPercent = 100*usedFifoEntries/totalEntryCount;
         // Previous value at this index
         prevFill = fillValues[fillIndex];
         // Store current val at this index
-        fillValues[fillIndex++] = fillPercent;
+        fillValues[fillIndex++] = curFill;
         // Add current val and remove previous val at this index from the running total.
         // That way we have added loopMax number of most recent entries at ony one time.
-        runningFillTotal += fillPercent - prevFill;
+        runningFillTotal += curFill - prevFill;
         // Find index for the next round
-        fillIndex = (fillIndex == loopMax) ? 0 : fillIndex;
-
-        if (keepFillStats) {
-            // Get the current time
-            clock_gettime(CLOCK_MONOTONIC, &t2);
-            microSec = timespecToMicroSec(&t2) - firstMicroSec;
-            // Store time & fill level (0-100)
-            fill.push_back(fillPercent);
-            time.push_back(microSec);
-        }
+        fillIndex = (fillIndex == fcount) ? 0 : fillIndex;
 
         if (startingUp) {
-            if (firstLoopCounter++ >= loopMax) {
+            if (firstLoopCounter++ >= fcount) {
                 startingUp = false;
             }
             else {
-                if (firstLoopCounter == loopMax) {
-                    firstMicroSec = microSec;
+                if (firstLoopCounter == fcount) {
+                    // Start the clock NOW
+                    clock_gettime(CLOCK_MONOTONIC, &t1);
                 }
                 // Don't start sending data or recording values to be written
-                // until the startup time (loopMax loops) is over.
+                // until the startup time (fcount loops) is over.
                 continue;
             }
-            fillAvg = runningFillTotal / 100.F / loopMax;
+            fillAvg = runningFillTotal / static_cast<float>(fcount);
         }
         else {
-            fillAvg = runningFillTotal / 100.F / loopMax;
+            fillAvg = runningFillTotal / static_cast<float>(fcount);
         }
 
-        pidError = pid(pidSetPoint, fillPercent/100.F, deltaT, Kp, Ki, Kd);
+        fillPercent = fillAvg / static_cast<float>(fifoCapacity);
+
+        // Read time
+        clock_gettime(CLOCK_MONOTONIC, &t2);
+        // time diff in microsec
+        timeDiff = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
+        // convert to sec
+        deltaT = static_cast<float>(timeDiff)/1000000.F;
+        // Get the current epoch time in millisec
+        absTime = 1000L*t2.tv_sec + t2.tv_nsec/1000000L;
+        t1 = t2;
+
+
+        // PID error, to make this more accurate make a time measurement for deltaT
+        pidError = pid<float>(pidSetPoint, fillPercent, deltaT, Kp, Ki, Kd);
+
+
+        // Store stats
+        if (keepFillStats) {
+            timeVec.push_back(absTime);
+            percentVec.push_back(fillPercent);
+            avgVec.push_back(fillAvg);
+            instVec.push_back(curFill);
+            pidErrVec.push_back(pidError);
+        }
+
 
         // Every "loopMax" loops
-        if (reportToCp && --loopCount <= 0) {
+        if (--loopCount <= 0) {
 
+            if (reportToCp) {
+                // Update the changing variables
+                client.update(fillPercent, pidError);
+
+                // Send to server
+                err = client.SendState();
+                if (err == 1) {
+                    printf("GRPC client %s communication error with server during sending of data, exit\n",
+                           targ->myName.c_str());
+                    exit(1);
+                }
+            }
+
+
+            // Write out stats
             if (keepFillStats) {
-                time2.push_back(microSec);
-                avg.push_back(fillAvg);
-                inst.push_back(fillPercent);
+                for (int i=0; i < timeVec.size(); i++) {
+                    fprintf(fp, "%" PRIu64 " %f %f %f %f\n", timeVec[i], instVec[i], avgVec[i], percentVec[i], pidErrVec[i]);
+                }
+                fflush(fp);
+
+                timeVec.clear();
+                percentVec.clear();
+                avgVec.clear();
+                instVec.clear();
+                pidErrVec.clear();
             }
 
-            // Update the changing variables
-            client.update(fillAvg, pidError);
-
-            // Send to server
-            err = client.SendState();
-            if (err == 1) {
-                printf("GRPC client %s communication error with server during sending of data, exit\n", targ->myName.c_str());
-                exit(1);
-            }
-
-            printf("Total cnt %d, User station inlist cnt %d, %d%% filled, fill avg %f, error %f\n",
-                   numEvents, usedFifoEntries, fillPercent, (fillAvg*100.F), pidError);
+            printf("Fifo level %f, %f%%, avg %f, pid err %f\n", curFill, fillPercent, fillAvg, pidError);
 
             loopCount = loopMax;
         }
-
-        // When do we write out the files? 100 seconds
-        if (keepFillStats && microSec >= 1000000000) {
-            // We can stop taking data to write out to files since we have what we need
-            keepFillStats = false;
-
-            // Write out file with all times and levels
-            FILE *fp = fopen (targ->statFileFifo.c_str(), "w");
-            int dataSize = time.size();
-            for (int i=0; i < dataSize; i++) {
-                fprintf(fp, "%d %d\n", time[i], fill[i]);
-            }
-            fclose(fp);
-            printf("Wrote all data to %s\n", targ->statFileFifo.c_str());
-
-            // Write out file with time and running avg of fill level, once per second
-            fp = fopen (targ->statFileAvg.c_str(), "w");
-            dataSize = time2.size();
-            for (int i=0; i < dataSize; i++) {
-                fprintf(fp, "%d %d\n", time2[i], avg[i]);
-            }
-            fclose(fp);
-            printf("Wrote running avg data to %s\n", targ->statFileAvg.c_str());
-
-            // Write out file with time and running avg of fill level, once per second
-            fp = fopen (targ->statFileReport.c_str(), "w");
-            dataSize = time2.size();
-            for (int i=0; i < dataSize; i++) {
-                fprintf(fp, "%d %d\n", time2[i], inst[i]);
-            }
-            fclose(fp);
-            printf("Wrote instantaneous data to %s\n", targ->statFileReport.c_str());
-        }
-
     }
 
     // Unregister this client with the grpc server
@@ -817,7 +916,7 @@ int main(int argc, char **argv) {
     int recvBufSize = 25000000;
     int tickPrescale = 1;
     float cpSetPoint = 0.f;
-    uint16_t cpPort = 50051;
+    uint16_t cpPort = 18347;
     uint16_t port = 17750;
 
     bool debug = false;
@@ -825,8 +924,20 @@ int main(int argc, char **argv) {
     bool sendToEt = false;
     bool keepLevelStats = false;
 
-    std::string stat_base_name, statFileFifo, statFileAvg, statFileReport;
-    //  memset(stat_base_name, 0, 101);
+    // PID loop variables
+    float Kp = 0.5;
+    float Ki = 0.00;
+    float Kd = 0.00;
+
+    // # of fill values to average when reporting to grpc
+    uint32_t fcount = 1000;
+    // time period in millisec for reporting to CP
+    uint32_t reportTime = 1000;
+    // stat sampling time in msec
+    uint32_t stime = 1;
+
+
+    std::string stat_file_name;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -851,9 +962,11 @@ int main(int argc, char **argv) {
               &bufSize, &recvBufSize, &tickPrescale,
               cores, &cpSetPoint,
               &port, &cpPort, &range,
+              &fcount, &reportTime, &stime,
               &debug, &useIPv6,
               listeningAddr, cpAddr, cpToken,
-              et_filename, beName, stat_base_name);
+              et_filename, beName, stat_file_name,
+              &Kp, &Ki, &Kd);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
 
@@ -926,11 +1039,8 @@ int main(int argc, char **argv) {
     }
 
     // Do we write out ET fifo fill level data files?
-    if (stat_base_name.length() > 0) {
+    if (stat_file_name.length() > 0) {
         keepLevelStats = true;
-        statFileFifo   = stat_base_name + "_fifo";
-        statFileAvg    = stat_base_name + "_avg";
-        statFileReport = stat_base_name + "_report";
     }
 
     if (useIPv6) {
@@ -1124,11 +1234,17 @@ int main(int argc, char **argv) {
         targ->setPoint = cpSetPoint;
         targ->report = reportToCP;
 
-        targ->keepFillStats  = keepLevelStats;
+        targ->Kp = Kp;
+        targ->Ki = Ki;
+        targ->Kd = Kd;
+
+        targ->fcount = fcount;
+        targ->reportTime = reportTime;
+        targ->sampleTime = stime;
+
+        targ->keepFillStats = keepLevelStats;
         if (keepLevelStats) {
-            targ->statFileFifo   = statFileFifo;
-            targ->statFileAvg    = statFileAvg;
-            targ->statFileReport = statFileReport;
+            targ->statFile = stat_file_name;
         }
 
         pthread_t thd1;
