@@ -76,7 +76,7 @@ static void printHelp(char *programName) {
             "        [-pro <protocol>]",
             "        [-e <entropy>]",
             "        [-b <buffer size, 1MB default>]",
-            "        [-bufrate <buffers sent per sec>]",
+            "        [-bufrate <buffers sent per sec, float > 0>]",
             "        [-byterate <bytes sent per sec>]",
             "        [-s <UDP send buffer size>]",
             "        [-cores <comma-separated list of cores to run on>]",
@@ -95,7 +95,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version, uint16_t *id, uint16_t* port,
                       uint64_t* tick, uint32_t* delay,
-                      uint64_t *bufSize, uint64_t *bufRate,
+                      uint64_t *bufSize, float *bufRate,
                       uint64_t *byteRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       uint32_t *sockets, int *cores,
@@ -106,6 +106,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
     *mtu = 0;
     int c, i_tmp;
     int64_t tmp;
+    float f_tmp;
     bool help = false;
 
     /* 4 multiple character command-line options */
@@ -303,20 +304,21 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 break;
 
             case 14:
-                // Buffers to be sent per second
+                // Buffers to be sent per second, use float since it may be < 1 Hz
                 if (*byteRate > 0) {
                     fprintf(stderr, "Cannot specify bufrate if byterate already specified\n");
                     exit(-1);
                 }
 
-                tmp = strtol(optarg, nullptr, 0);
-                if (tmp > 0) {
-                    *bufRate = tmp;
+                // Set the Ki PID loop parameter
+                try {
+                    f_tmp = (float) std::stof(optarg, nullptr);
                 }
-                else {
-                    fprintf(stderr, "Invalid argument to -bufrate, bufrate > 0\n");
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -bufrate, bufrate > 0\n\n");
                     exit(-1);
                 }
+                *bufRate = f_tmp;
                 break;
 
             case 15:
@@ -530,7 +532,8 @@ int main(int argc, char **argv) {
     uint32_t delayPrescale = 1, delayCounter = 0;
     uint32_t offset = 0, sendBufSize = 0;
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
-    uint64_t bufRate = 0L, bufSize = 0L, byteRate = 0L;
+    float    bufRate = 0.F;
+    uint64_t bufSize = 0L, byteRate = 0L;
     uint16_t port = 0x4c42; // FPGA port is default
     uint32_t sockCount = 1; // only use one outgoing socket by default, 16 max
 
@@ -777,19 +780,16 @@ int main(int argc, char **argv) {
 
         if (setByteRate) {
             // Fixed the BYTE rate when making performance measurements.
-            bufRate = byteRate / bufSize;
-            fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %" PRId64 ", initial buf size = %" PRId64 "\n",
+            bufRate = static_cast<float>(byteRate) / static_cast<float>(bufSize);
+            fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %f, initial buf size = %" PRId64 "\n",
                     byteRate, bufRate, bufSize);
             // In this case we may need to adjust the buffer size to get the exact data rate.
-            bufSize = byteRate / bufRate;
-            fprintf(stderr, "packetBlaster: set byte rate = %" PRIu64 ", buf rate = %" PRId64 ", adjusted buf size = %" PRId64 "\n",
-                    byteRate, bufRate, bufSize);
-
-            fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
+            bufSize = static_cast<uint64_t>(byteRate / bufRate);
+            fprintf(stderr, "packetBlaster: buf rate = %f, buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
                     bufRate, bufSize, byteRate);
 
             buffersAtOnce = 500000 / bufSize;
-            if (buffersAtOnce  < 1) buffersAtOnce = 1;
+            if (buffersAtOnce < 1) buffersAtOnce = 1;
             bytesToWriteAtOnce = buffersAtOnce * bufSize;
 
             free(buf);
@@ -799,7 +799,7 @@ int main(int argc, char **argv) {
                 return -1;
             }
 
-            uint32_t *pp = reinterpret_cast<uint32_t *>(buf);
+            auto *pp = reinterpret_cast<uint32_t *>(buf);
             for (uint32_t i=0; i < bufSize/4; i++) {
                 pp[i] = i;
             }
@@ -807,16 +807,19 @@ int main(int argc, char **argv) {
         else {
             // Fixed the BUFFER rate since data rates may vary between data sources, but
             // the # of buffers sent need to be identical between those sources.
-            byteRate = bufRate * bufSize;
+            byteRate = static_cast<uint64_t>(bufRate * bufSize);
+            // To avoid dividing by 0
+            byteRate = byteRate == 0 ? 1 : byteRate;
             buffersAtOnce = bytesToWriteAtOnce / bufSize;
+            if (buffersAtOnce < 1) buffersAtOnce = 1;
 
-            fprintf(stderr, "packetBlaster: buf rate = %" PRIu64 ", buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
+            fprintf(stderr, "packetBlaster: buf rate = %f, buf size = %" PRIu64 ", data rate = %" PRId64 "\n",
                     bufRate, bufSize, byteRate);
         }
 
         countDown = buffersAtOnce;
 
-        // musec to write data at desired rate
+        // usec to write data at desired rate
         microSecItShouldTake = 1000000L * bytesToWriteAtOnce / byteRate;
         fprintf(stderr,
                 "packetBlaster: bytesToWriteAtOnce = %" PRId64 ", byteRate = %" PRId64 ", buffersAtOnce = %" PRId64 ", microSecItShouldTake = %" PRId64 "\n",
