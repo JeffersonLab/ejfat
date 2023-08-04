@@ -61,14 +61,19 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <filename>",
             "        [-r <# repeat read-file cycles>]",
             "        [-h] [-v] [-ip6] [-sync]",
             "        [-bufdelay] (delay between each buffer, not packet)",
+
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port>]",
+
+            "        [-cp_addr <CP IP address (default = none & no CP comm)>]",
+            "        [-cp_port <CP port (default 18347)>]",
+
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
             "        [-mtu <desired MTU size>]",
             "        [-t <tick>]",
@@ -92,7 +97,8 @@ static void printHelp(char *programName) {
 
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
-                      int *entropy, int *version, uint16_t *id, uint16_t* port,
+                      int *entropy, int *version, uint16_t *id,
+                      uint16_t* port, uint16_t* cp_port,
                       uint64_t* tick, uint32_t* delay,
                       uint64_t *bufRate,
                       uint64_t *avgBufSize, uint32_t *sendBufSize,
@@ -101,7 +107,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *cores,
                       bool *debug,
                       bool *useIPv6, bool *bufDelay, bool *sendSync,
-                      char* host, char *interface, char *filename) {
+                      char* host, char *cp_host,
+                      char *interface, char *filename) {
 
     *mtu = 0;
     int c, i_tmp;
@@ -123,6 +130,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"cores",  1, NULL, 13},
              {"bufrate",  1, NULL, 14},
              {"bufsize",  1, NULL, 15},
+             {"cp_port",  1, NULL, 16},
+             {"cp_addr",  1, NULL, 17},
              {0,       0, 0,    0}
             };
 
@@ -172,7 +181,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 break;
 
             case 'p':
-                // PORT
+                // LB PORT
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp > 1023 && i_tmp < 65535) {
                     *port = i_tmp;
@@ -350,6 +359,29 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     printHelp(argv[0]);
                     exit(-1);
                 }
+                break;
+
+            case 16:
+                // CP PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 1023 && i_tmp < 65535) {
+                    *cp_port = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -cp_port, 1023 < port < 65536\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
+            case 17:
+                // CP HOST for sync messages
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -cp_host, name is too long\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                strcpy(cp_host, optarg);
                 break;
 
             case 13:
@@ -537,7 +569,11 @@ int main(int argc, char **argv) {
     uint32_t offset = 0, sendBufSize = 0, repeats = UINT32_MAX;
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
     uint64_t bufRate = 0L, avgBufSize = 0L;
+
     uint16_t port = 0x4c42; // FPGA port is default
+    uint16_t cp_port = 18347; // default for CP host getting sync messages from BE
+    int syncSocket;
+
     uint64_t tick = 0;
     int cores[10];
     int mtu, version = 2, protocol = 1, entropy = 0;
@@ -549,8 +585,9 @@ int main(int argc, char **argv) {
     bool sendSync = false;
 
     char syncBuf[28];
-    char host[INPUT_LENGTH_MAX], interface[16], filename[256];
+    char host[INPUT_LENGTH_MAX], cp_host[INPUT_LENGTH_MAX], interface[16], filename[256];
     memset(host, 0, INPUT_LENGTH_MAX);
+    memset(cp_host, 0, INPUT_LENGTH_MAX);
     memset(interface, 0, 16);
     memset(filename, 0, 256);
     strcpy(host, "127.0.0.1");
@@ -560,10 +597,12 @@ int main(int argc, char **argv) {
         cores[i] = -1;
     }
 
-    parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
+    parseArgs(argc, argv, &mtu, &protocol, &entropy, &version,
+            &dataId, &port, &cp_port, &tick,
               &delay, &bufRate, &avgBufSize, &sendBufSize,
               &delayPrescale, &tickPrescale,  &repeats, cores, &debug,
-              &useIPv6, &bufDelay, &sendSync, host, interface, filename);
+              &useIPv6, &bufDelay, &sendSync,
+              host, cp_host, interface, filename);
 
 #ifdef __linux__
 
@@ -634,6 +673,51 @@ int main(int argc, char **argv) {
     // 20 bytes = normal IPv4 packet header (60 is max), 8 bytes = max UDP packet header
     // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
+
+
+    // Socket for sending sync message to CP
+    if (useIPv6) {
+        struct sockaddr_in6 serverAddr6;
+
+        if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv6 sync socket");
+            return -1;
+        }
+
+        memset(&serverAddr6, 0, sizeof(serverAddr6));
+        serverAddr6.sin6_family = AF_INET6;
+        serverAddr6.sin6_port = htons(cp_port);
+        inet_pton(AF_INET6, cp_host, &serverAddr6.sin6_addr);
+
+        int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+        if (err < 0) {
+            if (debug) perror("Error connecting UDP sync socket:");
+            close(syncSocket);
+            exit(1);
+        }
+    }
+    else {
+        struct sockaddr_in serverAddr;
+
+        if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv4 sync socket");
+            return -1;
+        }
+
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(cp_port);
+        serverAddr.sin_addr.s_addr = inet_addr(cp_host);
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+        int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+        if (err < 0) {
+            if (debug) perror("Error connecting UDP sync socket:");
+            close(syncSocket);
+            return err;
+        }
+    }
+
 
     // Create UDP maxSocks sockets for efficient switch operation
     const int maxSocks = 16;
@@ -881,7 +965,7 @@ int main(int argc, char **argv) {
 
         if (err < 0) {
             // Should be more info in errno
-            fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
+            fprintf(stderr, "\nclasBlaster: errno = %d, %s\n\n", errno, strerror(errno));
             exit(1);
         }
 
@@ -903,9 +987,9 @@ int main(int argc, char **argv) {
                 // Send sync message to same destination
 if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
                 setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
-                err = send(clientSockets[portIndex], syncBuf, 28, 0);
+                err = send(syncSocket, syncBuf, 28, 0);
                 if (err == -1) {
-                    fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
+                    fprintf(stderr, "\nclasBlaster: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
                 }
 
