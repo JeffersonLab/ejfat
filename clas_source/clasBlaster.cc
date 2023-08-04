@@ -582,7 +582,7 @@ int main(int argc, char **argv) {
     bool debug = false;
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false;
-    bool sendSync = false;
+    bool sendSync = true;
 
     char syncBuf[28];
     char host[INPUT_LENGTH_MAX], cp_host[INPUT_LENGTH_MAX], interface[16], filename[256];
