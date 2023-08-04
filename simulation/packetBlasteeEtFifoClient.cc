@@ -925,9 +925,9 @@ int main(int argc, char **argv) {
     bool keepLevelStats = false;
 
     // PID loop variables
-    float Kp = 0.8;
-    float Ki = 0.02;
-    float Kd = 0.001;
+    float Kp = 0.52;
+    float Ki = 0.005;
+    float Kd = 0.000;
 
     // # of fill values to average when reporting to grpc
     uint32_t fcount = 1000;
