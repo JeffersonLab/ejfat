@@ -69,10 +69,10 @@ static void printHelp(char *programName) {
             "        [-bufdelay] (delay between each buffer, not packet)",
 
             "        [-host <destination host (defaults to 127.0.0.1)>]",
-            "        [-p <destination UDP port>]",
+            "        [-p <destination UDP port (default 19522)>]",
 
             "        [-cp_addr <CP IP address (default = none & no CP comm)>]",
-            "        [-cp_port <CP port (default 18347)>]",
+            "        [-cp_port <CP port for sync msgs (default 19523)>]",
 
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
             "        [-mtu <desired MTU size>]",
@@ -570,8 +570,8 @@ int main(int argc, char **argv) {
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
     uint64_t bufRate = 0L, avgBufSize = 0L;
 
-    uint16_t port = 0x4c42; // FPGA port is default
-    uint16_t cp_port = 18347; // default for CP host getting sync messages from BE
+    uint16_t port = 19522; // FPGA port is default
+    uint16_t cp_port = 19523; // default for CP host getting sync messages from BE
     int syncSocket;
 
     uint64_t tick = 0;
@@ -654,6 +654,10 @@ int main(int argc, char **argv) {
     }
     else {
         fprintf(stderr, "Not trying to regulate buffer output rate\n");
+    }
+
+    if (strlen(cp_host) < 1) {
+        sendSync = false;
     }
 
     // Break data into multiple packets of max MTU size.
