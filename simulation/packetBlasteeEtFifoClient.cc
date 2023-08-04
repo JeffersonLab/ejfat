@@ -1158,8 +1158,8 @@ int main(int argc, char **argv) {
     ////////////////////////////
     /// Control Plane  Stuff ///
     ////////////////////////////
-    LoadBalancerServiceImpl service;
-    LoadBalancerServiceImpl *pGrpcService = &service;
+    //LoadBalancerServiceImpl service;
+    //LoadBalancerServiceImpl *pGrpcService = &service;
 
 
     if (sendToEt) {
