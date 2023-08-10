@@ -1314,8 +1314,9 @@ int main(int argc, char **argv) {
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;
+        totalEvents++;
 
-        // atomic
+        // atomic (ticks = buffers)
         droppedTicks   += stats->droppedBuffers;
         droppedPackets += stats->droppedPackets;
 
