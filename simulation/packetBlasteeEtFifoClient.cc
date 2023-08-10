@@ -806,7 +806,7 @@ static void *pidThread(void *arg) {
 
 
 // Statistics
-static volatile uint64_t totalBytes=0, totalPackets=0;
+static volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 static volatile int cpu=-1;
 static std::atomic<uint32_t> droppedPackets;
 static std::atomic<uint32_t> droppedTicks;
@@ -814,14 +814,15 @@ static std::atomic<uint32_t> droppedTicks;
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
 
-    uint64_t packetCount, byteCount;
-    uint64_t prevTotalPackets, prevTotalBytes;
-    uint64_t currTotalPackets, currTotalBytes;
+    uint64_t packetCount, byteCount, eventCount;
+    uint64_t prevTotalPackets, prevTotalBytes, prevTotalEvents;
+    uint64_t currTotalPackets, currTotalBytes, currTotalEvents;
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
-    double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
+    double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate, evRate, avgEvRate;
     int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
+    uint64_t absTime;
     struct timespec t1, t2, firstT;
 
     // Get the current time
@@ -832,17 +833,22 @@ static void *rateThread(void *arg) {
 
         prevTotalBytes   = totalBytes;
         prevTotalPackets = totalPackets;
+        prevTotalEvents  = totalEvents;
 
         // Delay 4 seconds between printouts
         std::this_thread::sleep_for(std::chrono::seconds(4));
 
         // Read time
         clock_gettime(CLOCK_MONOTONIC, &t2);
+        // Epoch time in milliseconds
+        absTime = 1000L*(t2.tv_sec) + (t2.tv_nsec)/1000000L;
+        // time diff in microseconds
         time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
         totalT = (1000000L * (t2.tv_sec - firstT.tv_sec)) + ((t2.tv_nsec - firstT.tv_nsec)/1000L);
 
         currTotalBytes   = totalBytes;
         currTotalPackets = totalPackets;
+        currTotalEvents  = totalEvents;
 
         if (skipFirst) {
             // Don't calculate rates until data is coming in
@@ -850,17 +856,18 @@ static void *rateThread(void *arg) {
                 skipFirst = false;
             }
             firstT = t1 = t2;
-            totalT = totalBytes = totalPackets = 0;
+            totalT = totalBytes = totalPackets = totalEvents = 0;
             continue;
         }
 
         // Use for instantaneous rates
         byteCount   = currTotalBytes   - prevTotalBytes;
         packetCount = currTotalPackets - prevTotalPackets;
+        eventCount  = currTotalEvents  - prevTotalEvents;
 
         // Reset things if #s rolling over
         if ( (byteCount < 0) || (totalT < 0) )  {
-            totalT = totalBytes = totalPackets = 0;
+            totalT = totalBytes = totalPackets = totalEvents = 0;
             firstT = t1 = t2;
             continue;
         }
@@ -876,23 +883,32 @@ static void *rateThread(void *arg) {
 
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        if (packetCount == 0 && droppedPkts == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = 0?/everything? ", pktRate, pktAvgRate);
+        printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %" PRId64 " usec, abs = %" PRIu64 " epoch msec",
+               pktRate, pktAvgRate, time, absTime);
+        // Tack on cpu info
+        if (cpu > -1) {
+            printf(", cpu = %d\n", cpu);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dropped pkts = %" PRId64 " ", pktRate, pktAvgRate, droppedPkts);
+            printf("\n");
         }
-        printf(": Dropped Ticks = %" PRId64 ", total = %" PRId64 "\n", droppedTiks, totalDroppedTiks);
 
-        // Actual Data rates (no header info)
+        // Data rates (with NO header info)
         dataRate = ((double) byteCount) / time;
         dataAvgRate = ((double) currTotalBytes) / totalT;
-        printf(" Data:     %3.4g MB/s,  %3.4g Avg, cpu %d, dropped pkts %" PRId64 ", total %" PRId64 "\n",
-               dataRate, dataAvgRate, cpu, droppedPkts, totalDroppedPkts);
-
+        // Data rates (with RE header info)
         totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
         totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
-        printf(" Total:    %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
+        printf("Data (+hdrs):  %3.4g (%3.4g) MB/s,  %3.4g (%3.4g) Avg\n", dataRate, totalRate, dataAvgRate, totalAvgRate);
+
+        // Event rates
+        evRate = 1000000.0 * ((double) eventCount) / time;
+        avgEvRate = 1000000.0 * ((double) currTotalEvents) / totalT;
+        printf("Events:        %3.4g Hz,  %3.4g Avg, total %" PRIu64 "\n", evRate, avgEvRate, totalEvents);
+
+        // Drop info
+        printf("Dropped: evts: %" PRId64 ", %" PRId64 " total, pkts: %" PRId64 ", %" PRId64 " total\n\n",
+               droppedTiks, totalDroppedTiks, droppedPkts, totalDroppedPkts);
 
         t1 = t2;
     }

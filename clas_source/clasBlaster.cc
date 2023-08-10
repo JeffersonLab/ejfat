@@ -470,19 +470,20 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
 
 // Statistics
-static volatile uint64_t totalBytes=0, totalPackets=0;
+static volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 
 
 // Thread to send to print out rates
 static void *thread(void *arg) {
 
-    uint64_t packetCount, byteCount;
-    uint64_t prevTotalPackets, prevTotalBytes;
-    uint64_t currTotalPackets, currTotalBytes;
+    uint64_t packetCount, byteCount, eventCount;
+    uint64_t prevTotalPackets, prevTotalBytes, prevTotalEvents;
+    uint64_t currTotalPackets, currTotalBytes, currTotalEvents;
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
-    double rate, avgRate, totalRate, totalAvgRate;
+    double rate, avgRate, totalRate, totalAvgRate, evRate, avgEvRate;
+    uint64_t absTime;
     int64_t totalT = 0, time;
     struct timespec t1, t2, firstT;
 
@@ -494,17 +495,22 @@ static void *thread(void *arg) {
 
         prevTotalBytes   = totalBytes;
         prevTotalPackets = totalPackets;
+        prevTotalEvents  = totalEvents;
 
         // Delay 4 seconds between printouts
         std::this_thread::sleep_for(std::chrono::seconds(4));
 
         // Read time
         clock_gettime(CLOCK_MONOTONIC, &t2);
+        // Epoch time in milliseconds
+        absTime = 1000L*(t2.tv_sec) + (t2.tv_nsec)/1000000L;
+        // time diff in microseconds
         time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec)/1000L);
         totalT = (1000000L * (t2.tv_sec - firstT.tv_sec)) + ((t2.tv_nsec - firstT.tv_nsec)/1000L);
 
         currTotalBytes   = totalBytes;
         currTotalPackets = totalPackets;
+        currTotalEvents  = totalEvents;
 
         if (skipFirst) {
             // Don't calculate rates until data is coming in
@@ -512,17 +518,18 @@ static void *thread(void *arg) {
                 skipFirst = false;
             }
             firstT = t1 = t2;
-            totalT = totalBytes = totalPackets = 0;
+            totalT = totalBytes = totalPackets = totalEvents = 0;
             continue;
         }
 
         // Use for instantaneous rates
         byteCount   = currTotalBytes   - prevTotalBytes;
         packetCount = currTotalPackets - prevTotalPackets;
+        eventCount  = currTotalEvents  - prevTotalEvents;
 
         // Reset things if #s rolling over
         if ( (byteCount < 0) || (totalT < 0) )  {
-            totalT = totalBytes = totalPackets = 0;
+            totalT = totalBytes = totalPackets = totalEvents = 0;
             firstT = t1 = t2;
             continue;
         }
@@ -530,19 +537,21 @@ static void *thread(void *arg) {
         // Packet rates
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        printf(" Packets:  %3.4g Hz,    %3.4g Avg, time = %" PRId64 " microsec\n", rate, avgRate, time);
+        printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %" PRId64 " usec, abs = %" PRIu64 " epoch msec\n",
+               rate, avgRate, time, absTime);
 
-        // Data rates (no header info)
+        // Data rates (with NO header info)
         rate = ((double) byteCount) / time;
         avgRate = ((double) currTotalBytes) / totalT;
-        // Must print out t to keep it from being optimized away
-        printf(" Data:    %3.4g MB/s,  %3.4g Avg\n", rate, avgRate);
-
         // Data rates (with RE header info)
         totalRate = ((double) (byteCount + RE_HEADER_BYTES*packetCount)) / time;
         totalAvgRate = ((double) (currTotalBytes + RE_HEADER_BYTES*currTotalPackets)) / totalT;
-        printf(" Total:    %3.4g MB/s,  %3.4g Avg\n\n", totalRate, totalAvgRate);
+        printf("Data (+hdrs):  %3.4g (%3.4g) MB/s,  %3.4g (%3.4g) Avg\n", rate, totalRate, avgRate, totalAvgRate);
 
+        // Event rates
+        evRate = 1000000.0 * ((double) eventCount) / time;
+        avgEvRate = 1000000.0 * ((double) currTotalEvents) / totalT;
+        printf("Events:        %3.4g Hz,  %3.4g Avg, total %" PRIu64 "\n\n", evRate, avgEvRate, totalEvents);
 
         t1 = t2;
     }
@@ -974,8 +983,9 @@ int main(int argc, char **argv) {
         }
 
         bufsSent++;
-        totalBytes   += byteSize;
+        totalBytes += byteSize;
         totalPackets += packetsSent;
+        totalEvents++;
         offset = 0;
         tick += tickPrescale;
 
