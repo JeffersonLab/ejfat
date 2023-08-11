@@ -787,7 +787,10 @@ static void *pidThread(void *arg) {
                 pidErrVec.clear();
             }
 
-            printf("Fifo level %f, %f%%, avg %f, pid err %f\n", curFill, fillPercent, fillAvg, pidError);
+            if (absTime - prevAbsTime >= 4000) {
+                prevAbsTime = absTime;
+                printf("     Fifo level %f, %f%%, avg %f, pid err %f\n\n", curFill, fillPercent, fillAvg, pidError);
+            }
 
             loopCount = loopMax;
         }
