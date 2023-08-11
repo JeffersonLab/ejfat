@@ -811,8 +811,8 @@ static void *pidThread(void *arg) {
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 static volatile int cpu=-1;
-static std::atomic<uint32_t> droppedPackets;
-static std::atomic<uint32_t> droppedTicks;
+static std::atomic<uint32_t> droppedPackets {0};
+static std::atomic<uint32_t> droppedTicks {0};
 
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
