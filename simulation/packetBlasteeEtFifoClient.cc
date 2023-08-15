@@ -21,7 +21,6 @@
 #include <thread>
 #include <cmath>
 #include <chrono>
-#include <atomic>
 #include <algorithm>
 #include <cstring>
 #include <errno.h>
@@ -811,8 +810,7 @@ static void *pidThread(void *arg) {
 // Statistics
 static volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 static volatile int cpu=-1;
-static std::atomic<uint32_t> droppedPackets {0};
-static std::atomic<uint32_t> droppedTicks {0};
+static uint32_t droppedPackets=0, droppedEvents=0, droppedBytes=0;
 
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
@@ -820,11 +818,16 @@ static void *rateThread(void *arg) {
     uint64_t packetCount, byteCount, eventCount;
     uint64_t prevTotalPackets, prevTotalBytes, prevTotalEvents;
     uint64_t currTotalPackets, currTotalBytes, currTotalEvents;
+
+    uint64_t dropPacketCount, dropByteCount, dropEventCount;
+    uint64_t currDropTotalPackets, currDropTotalBytes, currDropTotalEvents;
+    uint64_t prevDropTotalPackets, prevDropTotalBytes, prevDropTotalEvents;
+
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate, evRate, avgEvRate;
-    int64_t totalT = 0, time, droppedPkts, totalDroppedPkts = 0, droppedTiks, totalDroppedTiks = 0;
+    int64_t totalT = 0, time;
     uint64_t absTime;
     struct timespec t1, t2, firstT;
 
@@ -837,6 +840,10 @@ static void *rateThread(void *arg) {
         prevTotalBytes   = totalBytes;
         prevTotalPackets = totalPackets;
         prevTotalEvents  = totalEvents;
+
+        prevDropTotalBytes   = droppedEvents;
+        prevDropTotalPackets = droppedPackets;
+        prevDropTotalEvents  = droppedEvents;
 
         // Delay 4 seconds between printouts
         std::this_thread::sleep_for(std::chrono::seconds(4));
@@ -853,6 +860,10 @@ static void *rateThread(void *arg) {
         currTotalPackets = totalPackets;
         currTotalEvents  = totalEvents;
 
+        currDropTotalBytes   = droppedEvents;
+        currDropTotalPackets = droppedPackets;
+        currDropTotalEvents  = droppedEvents;
+
         if (skipFirst) {
             // Don't calculate rates until data is coming in
             if (currTotalPackets > 0) {
@@ -860,6 +871,7 @@ static void *rateThread(void *arg) {
             }
             firstT = t1 = t2;
             totalT = totalBytes = totalPackets = totalEvents = 0;
+            droppedBytes = droppedPackets = droppedEvents = 0;
             continue;
         }
 
@@ -868,21 +880,17 @@ static void *rateThread(void *arg) {
         packetCount = currTotalPackets - prevTotalPackets;
         eventCount  = currTotalEvents  - prevTotalEvents;
 
+        dropByteCount   = currDropTotalBytes   - prevDropTotalBytes;
+        dropPacketCount = currDropTotalPackets - prevDropTotalPackets;
+        dropEventCount  = currDropTotalEvents  - prevDropTotalEvents;
+
         // Reset things if #s rolling over
         if ( (byteCount < 0) || (totalT < 0) )  {
             totalT = totalBytes = totalPackets = totalEvents = 0;
+            droppedBytes = droppedPackets = droppedEvents = 0;
             firstT = t1 = t2;
             continue;
         }
-
-        // Dropped stuff rates
-        droppedPkts = droppedPackets;
-        droppedPackets.store(0);
-        totalDroppedPkts += droppedPkts;
-
-        droppedTiks = droppedTicks;
-        droppedTicks.store(0);
-        totalDroppedTiks += droppedTiks;
 
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
@@ -910,8 +918,8 @@ static void *rateThread(void *arg) {
         printf("Events:        %3.4g Hz,  %3.4g Avg, total %" PRIu64 "\n", evRate, avgEvRate, totalEvents);
 
         // Drop info
-        printf("Dropped: evts: %" PRId64 ", %" PRId64 " total, pkts: %" PRId64 ", %" PRId64 " total\n\n",
-               droppedTiks, totalDroppedTiks, droppedPkts, totalDroppedPkts);
+        printf("Dropped: evts: %" PRIu64 ", %" PRIu64 " total, pkts: %" PRIu64 ", %" PRIu64 " total\n\n",
+               dropEventCount, currDropTotalEvents, dropPacketCount, currDropTotalPackets);
 
         t1 = t2;
     }
@@ -1284,6 +1292,11 @@ int main(int argc, char **argv) {
         clearStats(stats);
         uint64_t diff, prevTick = tick;
 
+        // We do NOT know what the expected tick value is to be received since the LB can mix it up.
+        // The following value keeps getReassembledBuffer from calculating dropped events & pkts
+        // based on the expected tick value.
+        tick = 0xffffffffffffffffL;
+
         // Fill with data
         nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
                                              debug, &tick, &dataId, stats,
@@ -1316,12 +1329,15 @@ int main(int argc, char **argv) {
 //        }
 
         totalBytes   += nBytes;
-        totalPackets += stats->acceptedPackets;
+        totalPackets = stats->acceptedPackets;
         totalEvents++;
 
-        // atomic (ticks = buffers)
-        droppedTicks   += stats->droppedBuffers;
-        droppedPackets += stats->droppedPackets;
+        droppedBytes   = stats->discardedBytes;
+        droppedEvents  = stats->discardedBuffers;
+        droppedPackets = stats->discardedPackets;
+
+//        droppedTicks   += stats->droppedBuffers;
+//        droppedPackets += stats->droppedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
