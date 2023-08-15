@@ -1640,7 +1640,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             if (debug) fprintf(stderr, "Read %ld bytes from incoming reassembled packet\n", nBytes);
             return 0;
         }
-        
+
 
     }
 

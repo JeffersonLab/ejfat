@@ -1165,8 +1165,6 @@ int main(int argc, char **argv) {
 
     // Statistics
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
-    droppedTicks.store(0);
-    droppedPackets.store(0);
 
     /////////////////
     /// ET  Stuff ///
@@ -1323,11 +1321,6 @@ int main(int argc, char **argv) {
 
         //fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
 
-//        diff = tick - prevTick;
-//        if (diff != 0) {
-//            fprintf(stderr, "Error in tick increment, %" PRIu64 "\n", diff);
-//        }
-
         totalBytes   += nBytes;
         totalPackets = stats->acceptedPackets;
         totalEvents++;
@@ -1335,9 +1328,6 @@ int main(int argc, char **argv) {
         droppedBytes   = stats->discardedBytes;
         droppedEvents  = stats->discardedBuffers;
         droppedPackets = stats->discardedPackets;
-
-//        droppedTicks   += stats->droppedBuffers;
-//        droppedPackets += stats->droppedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
