@@ -837,7 +837,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // record data id of first packet of buffer
                     srcId = packetDataId;
                     // guess at # of packets
-                    totalPkts += (length + (dataBytes - 1))/dataBytes;
+                    totalPkts = (length + (dataBytes - 1))/dataBytes;
                 }
                 else if (packetDataId != srcId) {
                     // different data source, reject this packet
@@ -1146,7 +1146,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // record data id of first packet of buffer
                     srcId = packetDataId;
                     // guess at # of packets
-                    totalPkts += (length + (dataBytes - 1))/dataBytes;
+                    totalPkts = (length + (dataBytes - 1))/dataBytes;
                 }
                 else if (packetDataId != srcId) {
                     // different data source, reject this packet
