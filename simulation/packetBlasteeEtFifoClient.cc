@@ -810,7 +810,7 @@ static void *pidThread(void *arg) {
 // Statistics
 static volatile int64_t totalBytes=0, totalPackets=0, totalEvents=0;
 static volatile int cpu=-1;
-static int64_t droppedPackets=0, droppedEvents=0, droppedBytes=0;
+static volatile int64_t droppedPackets=0, droppedEvents=0, droppedBytes=0;
 
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
