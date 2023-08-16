@@ -1164,6 +1164,7 @@ int main(int argc, char **argv) {
 
     // Statistics
     std::shared_ptr<packetRecvStats> stats = std::make_shared<packetRecvStats>();
+    clearStats(stats);
 
     /////////////////
     /// ET  Stuff ///
@@ -1286,7 +1287,6 @@ int main(int argc, char **argv) {
 
     while (true) {
 
-        clearStats(stats);
         uint64_t diff, prevTick = tick;
 
         // We do NOT know what the expected tick value is to be received since the LB can mix it up.
@@ -1321,12 +1321,12 @@ int main(int argc, char **argv) {
         //fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
 
         totalBytes   += nBytes;
-        totalPackets += stats->acceptedPackets;
+        totalPackets  = stats->acceptedPackets;
         totalEvents++;
 
-        droppedBytes   += stats->discardedBytes;
-        droppedEvents  += stats->discardedBuffers;
-        droppedPackets += stats->discardedPackets;
+        droppedBytes   = stats->discardedBytes;
+        droppedEvents  = stats->discardedBuffers;
+        droppedPackets = stats->discardedPackets;
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
