@@ -96,14 +96,14 @@ static void printHelp(char *programName) {
             "        [-p <data receiving port, 17750 default>]",
             "        [-a <data receiving address>]",
             "        [-token <authentication token (for CP registration, default token_<time>)>]",
-            "        [-range <data receiving port range, entropy of sender>]\n\n",
+            "        [-range <data receiving port range, entropy of sender, default 0>]\n\n",
 
             "        [-sfile <file name for stats>]",
             "        [-stime <stat sample millisec (t >= 1 msec, default = 1)]\n\n",
 
             "        [-gaddr <CP IP address (default = none & no CP comm)>]",
             "        [-gport <CP port (default 18347)>]",
-            "        [-gname <name of this backend (default myBackEnd)>]\n\n",
+            "        [-gname <name of this backend (default backend_<time>)>]\n\n",
 
             "        [-kp <PID proportional constant, default 0.8>]",
             "        [-ki <PID integral constant, default 0.02>]",
@@ -934,7 +934,7 @@ int main(int argc, char **argv) {
 
     int udpSocket;
     ssize_t nBytes;
-    int range;
+    int range = 0; // translates to PORT_RANGE_1 in proto enum
     int cores[10];
 
     // Set some defaults
@@ -1327,10 +1327,6 @@ int main(int argc, char **argv) {
         droppedBytes   += stats->discardedBytes;
         droppedEvents  += stats->discardedBuffers;
         droppedPackets += stats->discardedPackets;
-
-//        printf("TB %" PRId64 " P %" PRId64 " E %" PRId64 " ", totalBytes, totalPackets, totalEvents);
-//        printf("DB %" PRId64 " P %" PRId64 " E %" PRId64 "\n", droppedBytes, droppedPackets, droppedEvents);
-
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
