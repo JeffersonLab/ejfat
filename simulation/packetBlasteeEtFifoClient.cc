@@ -1328,6 +1328,10 @@ int main(int argc, char **argv) {
         droppedEvents  = stats->discardedBuffers;
         droppedPackets = stats->discardedPackets;
 
+        printf("TB %" PRId64 " P %" PRId64 " E %" PRId64 " ", totalBytes, totalPackets, totalEvents);
+        printf("DB %" PRId64 " P %" PRId64 " E %" PRId64 "\n", droppedBytes, droppedPackets, droppedEvents);
+
+
         // The tick returned is what was just built.
         // Now give it the next expected tick.
         tick += tickPrescale;
