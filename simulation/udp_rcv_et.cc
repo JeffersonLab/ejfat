@@ -446,7 +446,7 @@ static void *rateThread(void *arg) {
             // Actual Data rates (no header info)
             dataRate    = ((double) byteCount) / microSec;
             dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %u, discard(%" PRId64 ", total %" PRId64 ")\n",
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %" PRId64 ", discard(%" PRId64 ", total %" PRId64 ")\n",
                    dataRate, dataAvgRate, mapp[src]->builtBuffers, discardByteCount, currDiscardBytes[i]);
 
             // Buffer rates
