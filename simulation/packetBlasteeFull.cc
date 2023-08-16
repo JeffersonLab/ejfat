@@ -26,7 +26,7 @@
  * threads which read packets from that ring in order to do the
  * reassembly. Each of these reassembles the Nth numbered event with a different offset
  * so that each ends up reassembling different events.
- * There are also threads to do calculate rates and to read/dump reassembled buffers.
+ * There are also threads to calculate rates and to read/dump reassembled buffers.
  * </p>
  * <p>
  * There are maps temporarily containing buffers in which to store reassembled data,
@@ -51,8 +51,8 @@
  * 1) If src1 and src2 are completely independent, use a separate copy of this receiving program for each src.
  * The treatment of data will be completely different for each anyway so this makes the most sense.
  * 2) If the sources need to be combined and processed together, this program can help.
- * Each receiving thread is looking for certain ticks. If there are 2 such threads, one looks for event ticks
- * and the other, odd. So pick the thread looking at even ticks. It knows how many sources are expected and
+ * Each receiving thread is looking for certain ticks. If there are 2 such threads, one looks for even ticks
+ * and the other odd. So pick the thread looking at even ticks. It knows how many sources are expected and
  * their values (given as cmd line args). One buffer is used to construct/contain data for one src and one tick.
  * </p>
  *
@@ -667,7 +667,7 @@ static void *rateThread(void *arg) {
 
             // TODO: look at this to see if it works for multiple sources
 #ifdef __linux__
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %u\n\n",
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %" PRId64 "\n\n",
                    dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
 
            if (writeToFile) {
@@ -678,7 +678,7 @@ static void *rateThread(void *arg) {
                 fflush(fp);
             }
 #else
-            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %u\n\n",
+            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %" PRId64 "\n\n",
                    dataRate, dataAvgRate, mapp[src]->builtBuffers);
 
             if (writeToFile) {

@@ -788,7 +788,7 @@ static void *pidThread(void *arg) {
 
             if (absTime - prevAbsTime >= 4000) {
                 prevAbsTime = absTime;
-                printf("     Fifo level %f, %f%%, avg %f, pid err %f\n\n", curFill, fillPercent, fillAvg, pidError);
+                printf("     Fifo level %f, %f%%, avg %f, pid err %f\n\n", curFill, (100.F*fillPercent), fillAvg, pidError);
             }
 
             loopCount = loopMax;
@@ -808,27 +808,26 @@ static void *pidThread(void *arg) {
 
 
 // Statistics
-static volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
+static volatile int64_t totalBytes=0, totalPackets=0, totalEvents=0;
 static volatile int cpu=-1;
-static uint32_t droppedPackets=0, droppedEvents=0, droppedBytes=0;
+static int64_t droppedPackets=0, droppedEvents=0, droppedBytes=0;
 
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
 
-    uint64_t packetCount, byteCount, eventCount;
-    uint64_t prevTotalPackets, prevTotalBytes, prevTotalEvents;
+    int64_t packetCount, byteCount, eventCount;
+    int64_t prevTotalPackets, prevTotalBytes, prevTotalEvents;
     uint64_t currTotalPackets, currTotalBytes, currTotalEvents;
 
-    uint64_t dropPacketCount, dropByteCount, dropEventCount;
-    uint64_t currDropTotalPackets, currDropTotalBytes, currDropTotalEvents;
-    uint64_t prevDropTotalPackets, prevDropTotalBytes, prevDropTotalEvents;
+    int64_t dropPacketCount, dropByteCount, dropEventCount;
+    int64_t currDropTotalPackets, currDropTotalBytes, currDropTotalEvents;
+    int64_t prevDropTotalPackets, prevDropTotalBytes, prevDropTotalEvents;
 
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
     double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate, evRate, avgEvRate;
-    int64_t totalT = 0, time;
-    uint64_t absTime;
+    int64_t totalT = 0, time, absTime;
     struct timespec t1, t2, firstT;
 
     // Get the current time
@@ -894,7 +893,7 @@ static void *rateThread(void *arg) {
 
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %" PRId64 " usec, abs = %" PRIu64 " epoch msec",
+        printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %" PRId64 " usec, abs = %" PRId64 " epoch msec",
                pktRate, pktAvgRate, time, absTime);
         // Tack on cpu info
         if (cpu > -1) {
@@ -918,7 +917,7 @@ static void *rateThread(void *arg) {
         printf("Events:        %3.4g Hz,  %3.4g Avg, total %" PRIu64 "\n", evRate, avgEvRate, totalEvents);
 
         // Drop info
-        printf("Dropped: evts: %" PRIu64 ", %" PRIu64 " total, pkts: %" PRIu64 ", %" PRIu64 " total\n\n",
+        printf("Dropped: evts: %" PRId64 ", %" PRId64 " total, pkts: %" PRId64 ", %" PRId64 " total\n\n",
                dropEventCount, currDropTotalEvents, dropPacketCount, currDropTotalPackets);
 
         t1 = t2;
