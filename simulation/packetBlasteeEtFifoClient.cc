@@ -788,7 +788,7 @@ static void *pidThread(void *arg) {
 
             if (absTime - prevAbsTime >= 4000) {
                 prevAbsTime = absTime;
-                printf("     Fifo level %f, %f%%, avg %f, pid err %f\n\n", curFill, (100.F*fillPercent), fillAvg, pidError);
+                printf("     Fifo level %d, %f%%, avg %.2f, pid err %f\n\n", ((int)curFill), (100.F*fillPercent), fillAvg, pidError);
             }
 
             loopCount = loopMax;
