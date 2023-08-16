@@ -1321,12 +1321,12 @@ int main(int argc, char **argv) {
         //fprintf(stderr, "Received buffer of %d bytes, tpre %d\n", (int)nBytes, tickPrescale);
 
         totalBytes   += nBytes;
-        totalPackets = stats->acceptedPackets;
+        totalPackets += stats->acceptedPackets;
         totalEvents++;
 
-        droppedBytes   = stats->discardedBytes;
-        droppedEvents  = stats->discardedBuffers;
-        droppedPackets = stats->discardedPackets;
+        droppedBytes   += stats->discardedBytes;
+        droppedEvents  += stats->discardedBuffers;
+        droppedPackets += stats->discardedPackets;
 
         printf("TB %" PRId64 " P %" PRId64 " E %" PRId64 " ", totalBytes, totalPackets, totalEvents);
         printf("DB %" PRId64 " P %" PRId64 " E %" PRId64 "\n", droppedBytes, droppedPackets, droppedEvents);
