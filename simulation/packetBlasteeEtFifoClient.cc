@@ -841,7 +841,7 @@ static void *rateThread(void *arg) {
         prevTotalPackets = totalPackets;
         prevTotalEvents  = totalEvents;
 
-        prevDropTotalBytes   = droppedEvents;
+        prevDropTotalBytes   = droppedBytes;
         prevDropTotalPackets = droppedPackets;
         prevDropTotalEvents  = droppedEvents;
 
@@ -860,7 +860,7 @@ static void *rateThread(void *arg) {
         currTotalPackets = totalPackets;
         currTotalEvents  = totalEvents;
 
-        currDropTotalBytes   = droppedEvents;
+        currDropTotalBytes   = droppedBytes;
         currDropTotalPackets = droppedPackets;
         currDropTotalEvents  = droppedEvents;
 
