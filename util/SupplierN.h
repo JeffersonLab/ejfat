@@ -304,7 +304,7 @@ namespace ejfat {
             long getSequence = ringBuffer->next();
 
             // Get object in that position (sequence) of ring buffer
-            std::shared_ptr<T> & bufItem = (*ringBuffer.get())[getSequence];
+            std::shared_ptr<T> bufItem = (*ringBuffer.get())[getSequence];
 
             // Get item ready for use
             bufItem->reset();
@@ -333,7 +333,7 @@ namespace ejfat {
 
             for (long seq = lo; seq <= hi; seq++) {
                 // Get object in that position (sequence) of ring buffer
-                std::shared_ptr<T> &bufItem = (*ringBuffer.get())[seq];
+                std::shared_ptr<T> bufItem = (*ringBuffer.get())[seq];
                 bufItem->reset();
                 items[seq - lo] = bufItem;
                 bufItem->setProducerSequence(seq);
@@ -357,7 +357,7 @@ namespace ejfat {
             long getSequence = ringBuffer->next();
 
             // Get object in that position (sequence) of ring buffer
-            std::shared_ptr<T> & bufItem = (*ringBuffer.get())[getSequence];
+            std::shared_ptr<T> bufItem = (*ringBuffer.get())[getSequence];
             bufItem->setFromConsumerGet(false);
 
             // Store sequence for later releasing of the buffer

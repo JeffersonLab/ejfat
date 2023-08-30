@@ -80,6 +80,11 @@ namespace ejfat {
             userInt          = item.userInt;
             userLong         = item.userLong;
             userBoolean      = item.userBoolean;
+
+            eventNum         = item.eventNum;
+            dataLen          = item.dataLen;
+            offsets          = item.offsets;
+
             header           = item.header;
         }
     }
@@ -97,6 +102,11 @@ namespace ejfat {
         userLong = 0L;
         force = false;
         userBoolean = false;
+
+        eventNum = 0;
+        dataLen = 0;
+        offsets.clear();
+
         clearHeader(&header);
     }
 
@@ -107,6 +117,13 @@ namespace ejfat {
      */
     ByteOrder BufferItem::getOrder() const {return order;}
 
+    /**
+      * Get a reference to the set storing the offsets in reassembly headers of UDP packets
+      * used to contruct the data in this buffer, if any.
+      * @return reference to the set storing the offsets in reassembly headers of UDP packets
+      * used to contruct the data in this buffer.
+      */
+    std::unordered_set<uint32_t> & BufferItem::getOffsets() {return offsets;}
 
     /**
      * Get a reference to stored reassembly header associated with data if any.
@@ -124,6 +141,11 @@ namespace ejfat {
         header = *hdr;
     }
 
+    uint64_t BufferItem::getEventNum() {return eventNum;}
+    void BufferItem::setEventNum(uint64_t num) {eventNum = num;}
+
+    uint32_t BufferItem::getDataLen() {return dataLen;}
+    void BufferItem::setDataLen(uint32_t len) {dataLen = len;}
 
     /**
      * Get the flag used to suggest a forced write to a consumer.

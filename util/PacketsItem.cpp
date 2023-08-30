@@ -33,7 +33,7 @@ namespace ejfat {
     }
 
 
-    /** Function to create BufferSupplyItems by RingBuffer. */
+    /** Function to create PacketsItems by RingBuffer. */
     const std::function< std::shared_ptr<PacketsItem> () >& PacketsItem::eventFactory() {
         static std::function< std::shared_ptr<PacketsItem> () > result([]  {
             return std::make_shared<PacketsItem>();
@@ -43,7 +43,8 @@ namespace ejfat {
 
 
     /**
-     * Print a couple things from the given packet in a PacketItem.
+     * Print a couple things from the given packet in a PacketsItem.
+     * @param item shared pointer to PacketsItem to be printed.
      * @param index index of specific packet in PacketItem.
      */
     void PacketsItem::printPacketItem(std::shared_ptr<PacketsItem> item, int index) {

@@ -45,6 +45,8 @@ namespace ejfat {
      * passing the consumerCount on to its base class, SupplyItem.
      * In reality, consumers are programmed to look at different items even tho they have
      * access to all.
+     * These classes are designed to work with the linux routine, recvmmsg, which gets many
+     * packets in one call. Will compile but not work on MAC.
      *
      * @date 03/27/2023
      * @author timmer

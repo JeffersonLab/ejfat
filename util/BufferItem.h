@@ -16,6 +16,7 @@
 #include <atomic>
 #include <functional>
 #include <cstring>
+#include <unordered_set>
 
 
 #include "ByteOrder.h"
@@ -51,6 +52,17 @@ namespace ejfat {
 
         /** Byte order of buffer. */
         ByteOrder order {ByteOrder::ENDIAN_LOCAL};
+
+        // TODO: Full header does not make sense. Maybe tick & data length
+        uint64_t eventNum; // (tick)
+        uint32_t dataLen;  // bytes
+
+        /**
+         * If UDP packets are used to contruct this buffer,
+         * track the packet header offsets to ensure there
+         * are no duplicate packets included.
+         */
+        std::unordered_set<uint32_t> offsets;
 
         /** Reassembly header associated with this data, if any. */
         reHeader header;
@@ -94,8 +106,17 @@ namespace ejfat {
 
         ByteOrder getOrder() const;
 
+        std::unordered_set<uint32_t> & getOffsets();
+
+        // TODO: get rid of these 2???
         reHeader & getHeader();
         void setHeader(reHeader *hdr);
+
+        uint64_t getEventNum();
+        void setEventNum(uint64_t num);
+
+        uint32_t getDataLen();
+        void setDataLen(uint32_t len);
 
         bool getForce() const;
         void setForce(bool force);

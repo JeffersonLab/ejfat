@@ -115,6 +115,7 @@ set(ET_EXEC_FILES
 
 set(DIS_EXEC_FILES
         simulation/packetBlasteeFull.cc
+        simulation/packetBlasteeFullNew.cc
         simulation/packetBlasteeTcpMT.cc
         )
 
@@ -127,6 +128,8 @@ set(UTIL_FILES
         util/PacketsItem.cpp
         util/PacketsItemN.cpp
         util/SupplyItem.cpp
+        util/PacketStoreItem.cpp
+        util/PacketRefItem.cpp
         )
 
 set(SIM_EXEC_FILES
@@ -162,6 +165,8 @@ set(CPP_HEADER_FILES
         util/BufferItem.h
         util/PacketsItem.h
         util/PacketsItemN.h
+        util/PacketStoreItem.h
+        util/PacketRefItem.h
         )
 
 

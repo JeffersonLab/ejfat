@@ -12,7 +12,7 @@
 #define UTIL_PACKETSITEM_H
 
 
-#include <memory>
+#include  <memory>
 #include <atomic>
 #include <functional>
 #include <cstring>
@@ -39,6 +39,8 @@ namespace ejfat {
     /**
      * This class defines the UDP packet containing items which are supplied by the Supplier class.
      * If using the SupplierN class use PacketsItemN instead of this class.
+     * These classes are designed to work with the linux routine, recvmmsg, which gets many
+     * packets in one call. Will compile but not work on MAC.
      *
      * @date 03/13/2023
      * @author timmer
