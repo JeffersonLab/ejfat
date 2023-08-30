@@ -115,9 +115,9 @@ static void printHelp(char *programName) {
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
-            "        [-p <starting listening UDP port (increment for each source)>]",
-            "        [-b <internal buffer byte size>]",
-            "        [-r <UDP receive buffer byte size>]",
+            "        [-p <starting listening UDP port (increment for each source, 17750 default)>]",
+            "        [-b <internal buffer byte size, 100kB default>]",
+            "        [-r <UDP receive buffer byte size, system default>]",
             "        [-f <file for stats>]",
             "        [-dump (no thd to get & merge buffers)]",
             "        [-stats (keep stats)]",
@@ -1211,7 +1211,6 @@ int main(int argc, char **argv) {
         setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
         recvBufSize = 0;
         getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-        if (debug) fprintf(stderr, "UDP socket for all sources, recv buffer = %d bytes\n", recvBufSize);
 
         // Configure settings in address struct
         // Clear it out
@@ -1266,12 +1265,10 @@ int main(int argc, char **argv) {
             fprintf(stderr, "bind socket error\n");
             return -1;
         }
-
-        fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes\n", startingPort, recvBufSize);
-
     }
 
-    std::cout << ", source count = " << sourceCount << std::endl;
+    fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes, source count = %d",
+            startingPort, recvBufSize, sourceCount);
 
     // Arrays for holding threads & their args
     pthread_t thds[sourceCount];
