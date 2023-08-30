@@ -1267,7 +1267,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes, source count = %d",
+    fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes, source count = %d\n",
             startingPort, recvBufSize, sourceCount);
 
     // Arrays for holding threads & their args
