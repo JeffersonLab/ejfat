@@ -46,26 +46,14 @@
 #endif
 
 
-// Is this going to an FPGA or FPGA simulator?
-// i.e. will the LB header need to added?
-#define ADD_LB_HEADER 1
 
-#ifdef ADD_LB_HEADER
-    #define LB_HEADER_BYTES_OLD 16
-    #define HEADER_BYTES_OLD    34
-    #define RE_HEADER_BYTES_OLD 18
+#define LB_HEADER_BYTES_OLD 16
+#define HEADER_BYTES_OLD    34
+#define RE_HEADER_BYTES_OLD 18
 
-    #define LB_HEADER_BYTES  16
-    #define HEADER_BYTES     36
-    #define RE_HEADER_BYTES  20
-#else
-    #define LB_HEADER_BYTES_OLD  0
-    #define HEADER_BYTES_OLD    18
-
-    #define LB_HEADER_BYTES   0
-    #define HEADER_BYTES     20
-    #define RE_HEADER_BYTES  20
-#endif
+#define LB_HEADER_BYTES  16
+#define HEADER_BYTES     36
+#define RE_HEADER_BYTES  20
 
 
 #ifdef __linux__
@@ -778,6 +766,7 @@ namespace ejfat {
      * @param firstBuffer    if true, this is the first buffer to send in a sequence.
      * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
      * @param debug          turn debug printout on & off.
+     * @param direct         don't include LB header since packets are going directly to receiver.
      * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
      *
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
@@ -787,10 +776,11 @@ namespace ejfat {
                                            int version, uint16_t dataId, uint32_t fullLen,
                                            uint32_t *offset, uint32_t delay,
                                            uint32_t delayPrescale, uint32_t *delayCounter,
-                                           bool firstBuffer, bool lastBuffer, bool debug,
+                                           bool firstBuffer, bool lastBuffer,
+                                           bool debug, bool direct,
                                            int64_t *packetsSent) {
 
-        int err;
+        ssize_t err;
         int64_t sentPackets=0;
         // Offset for the packet currently being sent (into full buffer)
         uint32_t localOffset = *offset;
@@ -804,6 +794,15 @@ namespace ejfat {
         bool veryFirstPacket = false;
         // If this packet is the very last packet sent in this series of data buffers
         bool veryLastPacket  = false;
+
+        int lbHeaderSize   = LB_HEADER_BYTES;
+        int allHeadersSize = HEADER_BYTES;
+        // If we bypass LB, don't include that header
+        if (direct) {
+            lbHeaderSize   = 0;
+            allHeadersSize = RE_HEADER_BYTES;
+        }
+
 
         if (firstBuffer) {
             veryFirstPacket = true;
@@ -829,16 +828,18 @@ namespace ejfat {
             if (debug) fprintf(stderr, "Send %lu bytes, last buf = %s, very first = %s, very last = %s\n",
                                bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
 
-            // Write LB meta data into buffer
-            setLbMetadata(buffer, tick, version, protocol, entropy);
+            if (!direct) {
+                // Write LB meta data into buffer
+                setLbMetadata(buffer, tick, version, protocol, entropy);
+            }
 
             // Write RE meta data into buffer
-            setReMetadata(buffer + LB_HEADER_BYTES,
+            setReMetadata(buffer + lbHeaderSize,
                           localOffset, fullLen,
                              tick, version, dataId);
 
             // This is where and how many bytes to write for data
-            memcpy(buffer + HEADER_BYTES, (const void *)getDataFrom, bytesToWrite);
+            memcpy(buffer + allHeadersSize, (const void *)getDataFrom, bytesToWrite);
 
             // "UNIX Network Programming" points out that a connect call made on a UDP client side socket
             // figures out and stores all the state about the destination socket address in advance
@@ -848,7 +849,7 @@ namespace ejfat {
             // In our case, the calling function connected the socket, so we call "send".
 
             // Send message to receiver
-            err = send(clientSocket, buffer, bytesToWrite + HEADER_BYTES, 0);
+            err = send(clientSocket, buffer, bytesToWrite + allHeadersSize, 0);
             if (err == -1) {
                 if ((errno == EMSGSIZE) && (veryFirstPacket)) {
                     // The UDP packet is too big, so we need to reduce it.
@@ -866,9 +867,9 @@ namespace ejfat {
                 }
             }
 
-            if (err != (bytesToWrite + HEADER_BYTES)) {
+            if (err != (bytesToWrite + allHeadersSize)) {
                 fprintf(stderr, "sendPacketizedBufferSend: wanted to send %d, but only sent %d\n",
-                        (int)(bytesToWrite + HEADER_BYTES), err);
+                        (int)(bytesToWrite + allHeadersSize), (int)err);
             }
 
             sentPackets++;

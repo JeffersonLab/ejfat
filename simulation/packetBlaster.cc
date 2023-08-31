@@ -63,7 +63,7 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ipv6] [-sync]",
+            "        [-h] [-v] [-ipv6] [-sync] [direct]",
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port, default 19522>]",
@@ -99,8 +99,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t *byteRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       uint32_t *sockets, int *cores,
-                      bool *debug,
-                      bool *useIPv6, bool *bufDelay, bool *sendSync,
+                      bool *debug, bool *useIPv6, bool *bufDelay,
+                      bool *sendSync, bool *direct,
                       char* host, char *interface) {
 
     int c, i_tmp;
@@ -124,6 +124,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"bufrate",  1, nullptr, 14},
              {"byterate",  1, nullptr, 15},
              {"sock",  1, nullptr, 16},
+             {"direct",  0, nullptr, 17},
              {nullptr,       0, 0,    0}
             };
 
@@ -350,6 +351,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 break;
 
+            case 17:
+                // do we bypass the LB and go directly to backend?
+                *direct = true;
+                break;
+
             case 13:
                 // Cores to run on
                 if (strlen(optarg) < 1) {
@@ -554,6 +560,7 @@ int main(int argc, char **argv) {
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false, setByteRate = false;
     bool sendSync = false;
+    bool direct = false;
 
     char syncBuf[28];
     char host[INPUT_LENGTH_MAX], interface[16];
@@ -568,7 +575,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale, &sockCount, cores, &debug,
-              &useIPv6, &bufDelay, &sendSync, host, interface);
+              &useIPv6, &bufDelay, &sendSync, &direct, host, interface);
 
 #ifdef __linux__
 
@@ -759,7 +766,7 @@ int main(int argc, char **argv) {
     }
 
     // write successive ints so we can check transmission on receiving end
-    uint32_t *p = reinterpret_cast<uint32_t *>(buf);
+    auto *p = reinterpret_cast<uint32_t *>(buf);
     for (uint32_t i=0; i < bufSize/4; i++) {
         p[i] = htonl(i);
     }
@@ -884,7 +891,7 @@ int main(int argc, char **argv) {
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) bufSize, &offset,
                                               packetDelay, delayPrescale, &delayCounter,
-                                              firstBuffer, lastBuffer, debug, &packetsSent);
+                                              firstBuffer, lastBuffer, debug, direct, &packetsSent);
         if (err < 0) {
             // Should be more info in errno
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
@@ -910,7 +917,7 @@ int main(int argc, char **argv) {
                 // Send sync message to same destination
 if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
                 setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
-                err = send(clientSockets[portIndex], syncBuf, 28, 0);
+                err = (int)send(clientSockets[portIndex], syncBuf, 28, 0);
                 if (err == -1) {
                     fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
