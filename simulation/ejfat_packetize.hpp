@@ -1480,7 +1480,7 @@ namespace ejfat {
             err = sendPacketizedBufferSendNew(buffer, bufLen, maxUdpPayload, clientSocket,
                                            tick, protocol, entropy, version, dataId, bufLen, &offset,
                                            delay, delayPrescale, &delayCounter,
-                                           true, true, debug, &packetsSent);
+                                           true, true, debug, false, &packetsSent);
         }
          close(clientSocket);
          return err;
