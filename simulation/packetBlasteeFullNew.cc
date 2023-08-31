@@ -852,6 +852,8 @@ static void *threadAssemble(void *arg) {
         offset = hdr->offset;
         length = hdr->length;
 
+        std::cout << "header data id = " << hdr->dataId << ", but should be " << sourceId << std::endl;
+
         assert(hdr->dataId == sourceId);
 
         // If NOT the same tick as previous ...
@@ -1380,6 +1382,7 @@ int main(int argc, char **argv) {
         threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
         if (targ == nullptr) {
             fprintf(stderr, "out of mem\n");
+
             return -1;
         }
 
@@ -1408,7 +1411,10 @@ int main(int argc, char **argv) {
 
         // Read UDP packet
         char* pkt = item->getPacket();
-        ssize_t bytesRead = recvfrom(udpSocket, pkt, PacketStoreItem::size, 0, nullptr, nullptr);
+
+        //ssize_t bytesRead = recvfrom(udpSocket, pkt, PacketStoreItem::size, 0, nullptr, nullptr);
+        // We can use this with packetBlaster and is faster than recvfrom()
+        ssize_t bytesRead = recv(udpSocket, pkt, PacketStoreItem::size, 0);
         if (bytesRead < 0) {
             if (debug) fprintf(stderr, "recvmsg failed: %s\n", strerror(errno));
             return (RECV_MSG);
@@ -1421,6 +1427,8 @@ int main(int argc, char **argv) {
         // Parse header & store in item
         reHeader *hdr = item->getHeader();
         parseReHeader(pkt, hdr);
+//        printReHeader(hdr);
+//        printBytes(pkt, 200, "header");
 
         // Pkt is from this source
         uint16_t srcId = hdr->dataId;

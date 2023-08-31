@@ -48,11 +48,7 @@ option(BUILD_TEST "Build test code" OFF)
 
 # uncomment to put in debug symbols or do on command line with:
 # cmake -DCMAKE_BUILD_TYPE=Debug ..
-set(CMAKE_BUILD_TYPE Debug)
-
-#add_compile_options(-Wall)
-#add_compile_options(-O3)
-
+#set(CMAKE_BUILD_TYPE Debug)
 
 # Place libs & binaries in build/lib and bin (this is not for installation)
 set(LIBRARY_OUTPUT_PATH    ${CMAKE_BINARY_DIR}/lib)
@@ -72,24 +68,31 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
             Debug Release MinSizeRel RelWithDebInfo)
 endif()
 
-if (NOT DEFINED INSTALL_DIR)
-    if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(FATAL_ERROR "Define EJFAT_ERSAP_INSTALL_DIR or specify -DINSTALL_DIR=<...> for installation")
-    else()
-        set(INSTALL_DIR $ENV{EJFAT_ERSAP_INSTALL_DIR})
-    endif()
+if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
+    # Provide useful default paths when $ERSAP_HOME is defined
+    message(STATUS "Installing into ERSAP_HOME = " $ENV{ERSAP_HOME})
+    set(CMAKE_INSTALL_PREFIX "$ENV{ERSAP_HOME}" CACHE PATH "" FORCE)
+    set(CMAKE_INSTALL_INCLUDEDIR ${ERSAP_HOME}/include)
+    # look in here when calling find_library, etc.
+    list(APPEND CMAKE_PREFIX_PATH "$ENV{ERSAP_HOME}")
+elseif (DEFINED INSTALL_DIR)
+    message(STATUS "Installing into " ${INSTALL_DIR})
+    set(INSTALL_DIR_DEFINED 1)
+    set(CMAKE_INSTALL_PREFIX ${INSTALL_DIR}/${ARCH})
+    set(CMAKE_INSTALL_INCLUDEDIR ${INSTALL_DIR}/common/include)
+    message(STATUS "CMAKE_INSTALL_PREFIX reset to " ${CMAKE_INSTALL_PREFIX})
+else()
+    message(STATUS "Either set env var ERSAP_HOME or specify -DINSTALL_DIR=<...> on the command line or no installation possible!")
 endif()
-
-message(STATUS "Installing into " ${INSTALL_DIR})
-set(INSTALL_DIR_DEFINED 1)
-set(CMAKE_INSTALL_PREFIX ${INSTALL_DIR})
-set(CMAKE_INSTALL_INCLUDEDIR ${INSTALL_DIR}/include)
-message(STATUS "CMAKE_INSTALL_PREFIX set to " ${CMAKE_INSTALL_PREFIX})
 
 if (NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
     set(CMAKE_INSTALL_PLUGINDIR plugins CACHE PATH "Ersap plugins directory (plugins)")
 endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
+
+
+#add_compile_options(-Wall -Wextra)
+add_compile_options(-O3)
 
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
@@ -100,22 +103,24 @@ set(EMU_EXEC_FILES
         emulation/lb_rcv.cc
         emulation/lb_rcv-roc.cc
         emulation/pktzr_md.cc
-        emulation/lb_send.cc
-        )
-
-set(GRPC_EXEC_FILES
-        simulation/packetBlasteeEtFifoClient.cc
         )
 
 set(ET_EXEC_FILES
+        simulation/et_fifoProducer.c
+        simulation/packetBlasteeEtFifo.cc
         simulation/udp_rcv_et.cc
         simulation/ersap_et_consumer.cc
         ersap_engine/ejfat/legacy/src/main/cpp/ejfat_assemble_et_engine.cpp
         )
 
 set(DIS_EXEC_FILES
-        simulation/packetBlasteeFull.cc
-        simulation/packetBlasteeFullNew.cc
+        simulation/scatter.cc
+        simulation/gather.cc
+        simulation/testBufSupply.cc
+        simulation/packetBlasteeBuf.cc
+        simulation/packetBlasteeFast.cc
+        simulation/packetBlasterFat.cc
+        simulation/packetBlasteeFat.cc
         simulation/packetBlasteeTcpMT.cc
         )
 
@@ -124,28 +129,27 @@ set(UTIL_FILES
         util/ByteBuffer.cpp
         util/BufferSupplyItem.cpp
         util/BufferSupply.cpp
-        util/BufferItem.cpp
-        util/PacketsItem.cpp
-        util/PacketsItemN.cpp
-        util/SupplyItem.cpp
-        util/PacketStoreItem.cpp
-        util/PacketRefItem.cpp
         )
 
 set(SIM_EXEC_FILES
         simulation/udp_rcv_order.cc
         simulation/udp_send_order.cc
         simulation/packetBlastee.cc
-        simulation/packetBlasteeMT.cc
         simulation/packetBlasteeTcp.cc
         simulation/packetBlaster.cc
         simulation/packetBlasterSmall.cc
+        simulation/packetBlastee2.cc
+        simulation/packetBlaster2.cc
+        simulation/packetBlasterFat2.cc
+        )
+
+set(ZMQ_EXEC_FILES
+        simulation/packetBlasteeZmq.cc
+        simulation/bufferReceiverZmq.cc
         )
 
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
-        clas_source/clasBlasterIds.cc
-        clas_source/clasBlasterEventFiles.cc
         )
 
 set(TEST_FILES
@@ -159,14 +163,6 @@ set(CPP_HEADER_FILES
         util/ByteBuffer.h
         util/BufferSupplyItem.h
         util/BufferSupply.h
-        util/SupplierN.h
-        util/Supplier.h
-        util/SupplyItem.h
-        util/BufferItem.h
-        util/PacketsItem.h
-        util/PacketsItemN.h
-        util/PacketStoreItem.h
-        util/PacketRefItem.h
         )
 
 
@@ -174,15 +170,17 @@ set(CPP_HEADER_FILES
 # ie don't include DIS_EXEC_FILES here
 set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
 
+
+
 # Disruptor build is optional and set it to OFF by default
 option(BUILD_DIS "Build Disruptor-related code" OFF)
 
 if (BUILD_DIS)
-    # Find where Disruptor libs and includes are installed for ejfat use
-    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
+    # Finding ET libs and includes involve looking at CODA install directory
+    if (DEFINED ENV{CODA})
+        message(STATUS "CODA = " $ENV{CODA})
     else()
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so Disruptor libs and includes can be found")
+        message(FATAL_ERROR "Set the \"CODA\" env var so that Disruptor libs and includes can be found!")
     endif()
 
     find_package(DISRUPTOR)
@@ -211,11 +209,11 @@ endif()
 option(BUILD_ET "Build ET-related code" OFF)
 
 if (BUILD_ET)
-    # Find where ET libs and includes are installed for ejfat use
-    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
+    # Finding ET libs and includes involve looking at CODA install directory
+    if (DEFINED ENV{CODA})
+        message(STATUS "CODA = " $ENV{CODA})
     else()
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so ET libs and includes can be found")
+        message(FATAL_ERROR "Set the \"CODA\" env var so that ET libs and includes can be found!")
     endif()
 
     find_package(ET)
@@ -225,29 +223,7 @@ if (BUILD_ET)
         message(STATUS "Et cannot be found, compile without it")
     endif()
 else()
-    message(STATUS "Compile without ET")
-endif()
-
-
-# GRPC build is optional and set it to OFF by default
-option(BUILD_GRPC "Build grpc-related code" OFF)
-
-if (BUILD_GRPC)
-    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
-    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
-    else()
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
-    endif()
-
-    find_package(GRPC)
-    if (NOT GRPC_FOUND)
-        message(STATUS "GRPC cannot be found, compile without it")
-    else()
-        message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
-    endif()
-else()
-    message(STATUS "Compile without GRPC")
+    message(STATUS "Compile without zeromq")
 endif()
 
 
@@ -262,13 +238,32 @@ if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
 endif()
 
 
+# Zeromq build is optional and set it to OFF by default
+option(BUILD_ZMQ "Build ZMQ-related code" OFF)
+
+# if you tell cmake to have code use USE_ZMQ preprocessor macro
+if (BUILD_ZMQ)
+    find_package(ZeroMQ)
+    if (ZeroMQ_FOUND)
+        #add_compile_definitions(BUILD_ZMQ)
+        set(EXEC_FILES ${EXEC_FILES} ${ZMQ_EXEC_FILES})
+    else()
+        message(STATUS "Zeromq cannot be found, compile without it")
+    endif()
+else()
+    message(STATUS "Compile without zeromq")
+endif()
+
+
 # CLAS12 source build is optional and set it to OFF by default
 option(BUILD_CLAS "Build CLAS 12 source code" OFF)
 
 # if you tell cmake to have code use USE_CLAS preprocessor macro
 if (BUILD_CLAS)
     find_package(HIPO)
-    if (NOT HIPO_FOUND)
+    if (HIPO_FOUND)
+        set(EXEC_FILES ${EXEC_FILES} ${CLAS_EXEC_FILES})
+    else()
         message(STATUS "Hipo cannot be found, compile without it")
     endif()
 else()
@@ -279,6 +274,78 @@ endif()
 if (BUILD_TEST)
     set(EXEC_FILES ${EXEC_FILES} ${TEST_FILES})
 endif()
+
+
+#include(FindPackageHandleStandardArgs)
+#
+#find_package(Doxygen)
+#
+#if( DOXYGEN_FOUND )
+#    message(STATUS "Doxygen found")
+#
+#    # Change these values from cmake defaults in the Doxyfile
+#    set(DOXYGEN_GENERATE_TREEVIEW YES)
+#    set(DOXYGEN_REFERENCED_BY_RELATION YES)
+#    set(DOXYGEN_EXCLUDE_PATTERNS */.* */CMakeFiles/* */_CPack_Packages/* CMakeLists.txt CMakeCache.txt)
+#    #set(DOXYGEN_EXCLUDE src/libsrc++/pugixml.cpp src/libsrc++/pugixml.hpp)
+#    set(DOXYGEN_FILE_PATTERNS *.c *.cpp *.h)
+#    #set(DOXYGEN_WARN_LOGFILE doxyerrors.log)
+#    set(DOXYGEN_SORT_MEMBERS_CTORS_1ST YES)
+#    set(DOXYGEN_SHOW_GROUPED_MEMB_INC YES)
+#    set(DOXYGEN_INLINE_IHERITED_MEMB YES)
+#    set(DOXYGEN_JAVADOC_AUTOBRIEF YES)
+#
+#    # Add target of "docCC"
+#    #set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc/doxygen/CC)
+#    #doxygen_add_docs(docCC src/libsrc++)
+#
+#    # Change these values from cmake defaults in the Doxyfile
+#    set(DOXYGEN_OPTIMIZE_OUTPUT_FOR_C YES)
+#    set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc/doxygen/C)
+#
+#    # Add target of "docC"
+#    doxygen_add_docs(docC src/libsrc src/execsrc)
+#
+#elseif(NOT DEFINED C_ONLY)
+#    message(FATAL_ERROR "Doxygen NOT found, cmake will exit." )
+#endif()
+
+
+# Shared evio C library
+#add_library(evio SHARED ${C_LIB_FILES})
+#set_target_properties(evio PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+#include_directories(evio PUBLIC src/libsrc /usr/local/include)
+
+
+#if (NOT DEFINED C_ONLY)
+#    # Shared evio C++ library
+#    add_library(eviocc SHARED ${CPP_LIB_FILES})
+#    set_target_properties(eviocc PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+#    target_link_libraries(eviocc ${LZ4_LIBRARY} ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY})
+#    include_directories(eviocc PUBLIC src/libsrc++ /usr/local/include
+#            ${Boost_INCLUDE_DIRS} ${LZ4_INCLUDE_DIRS} ${DISRUPTOR_INCLUDE_DIR})
+#
+#    if (DEFINED MAKE_EXAMPLES)
+#        foreach(fileName ${TEST})
+#            # Get file name with no directory or extension as executable name
+#            get_filename_component(execName ${fileName} NAME_WE)
+#            # Create executable from file
+#            add_executable(${execName} ${fileName})
+#            # Put debug extension on if applicable
+#            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+#            # Needs these libs
+#            target_link_libraries(${execName} eviocc pthread ${Boost_LIBRARIES} ${LZ4_LIBRARY} expat dl z m )
+#
+#            # Only install if installation directory has been defined
+#            if (DEFINED INSTALL_DIR_DEFINED)
+#                # Install into bin/testC dir
+#                install(TARGETS ${execName} RUNTIME DESTINATION bin/test)
+#            endif()
+#        endforeach(fileName)
+#    endif()
+#else()
+#    message(STATUS "NOT compiling C++ evio library!!!" )
+#endif()
 
 
 # Test programs
@@ -292,12 +359,13 @@ if (DEFINED MAKE_EXEC)
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
         # Location of include files
-        target_include_directories(${execName} PUBLIC   ${ZeroMQ_INCLUDE_DIRS}
+        target_include_directories(${execName} PUBLIC   ${HIPO_INCLUDE_DIRS}
+                                                        ${ZeroMQ_INCLUDE_DIRS}
                                                         ${ET_INCLUDE_DIRS}
                                                         ${CMAKE_SOURCE_DIR}/simulation
                                                         ${CMAKE_SOURCE_DIR}/util)
         # Needs these libs
-        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
+        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY} ${HIPO_LIBRARIES})
 
         # Only install if installation directory has been defined
         if (DEFINED INSTALL_DIR_DEFINED)
@@ -306,35 +374,7 @@ if (DEFINED MAKE_EXEC)
         endif()
     endforeach(fileName)
 
-
-    if (BUILD_CLAS AND HIPO_FOUND)
-        foreach(fileName ${CLAS_EXEC_FILES})
-            # Get file name with no directory or extension as executable name
-            get_filename_component(execName ${fileName} NAME_WE)
-            # Create executable from file
-            message(STATUS "Create normal executable " ${execName})
-            add_executable(${execName} ${fileName})
-            # Put debug extension on if applicable
-            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-            # Location of include files
-            target_include_directories(${execName} PUBLIC   ${HIPO_INCLUDE_DIRS}
-                    ${ZeroMQ_INCLUDE_DIRS}
-                    ${ET_INCLUDE_DIRS}
-                    ${CMAKE_SOURCE_DIR}/simulation
-                    ${CMAKE_SOURCE_DIR}/util)
-            # Needs these libs
-            target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY} ${HIPO_LIBRARIES})
-
-            # Only install if installation directory has been defined
-            if (DEFINED INSTALL_DIR_DEFINED)
-                # Install into bin dir
-                install(TARGETS ${execName} RUNTIME DESTINATION bin)
-            endif()
-        endforeach(fileName)
-    endif()
-
-
-    if (BUILD_DIS AND DISRUPTOR_FOUND)
+    if (DISRUPTOR_FOUND)
         message(STATUS "TRY DISRUPTOR CODE:")
 
         # This files need util files added to executable
@@ -355,34 +395,6 @@ if (DEFINED MAKE_EXEC)
                     ${ET_INCLUDE_DIRS})
             # Needs these libs
             target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
-
-            # Only install if installation directory has been defined
-            if (DEFINED INSTALL_DIR_DEFINED)
-                # Install into bin dir
-                install(TARGETS ${execName} RUNTIME DESTINATION bin)
-            endif()
-        endforeach(fileName)
-    endif()
-
-    if (BUILD_GRPC AND GRPC_FOUND)
-        message(STATUS "TRY GRPC CODE:")
-
-        # This files need util files added to executable
-        foreach(fileName ${GRPC_EXEC_FILES})
-            # Get file name with no directory or extension as executable name
-            get_filename_component(execName ${fileName} NAME_WE)
-            # Create executable from file
-            message(STATUS "Create grpc-related executable " ${execName})
-            add_executable(${execName} ${fileName})
-            # Put debug extension on if applicable
-            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-            # Location of include files
-            target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
-                    ${CMAKE_SOURCE_DIR}/util
-                    ${GRPC_INCLUDE_DIRS}
-                    ${ET_INCLUDE_DIRS})
-            # Needs these libs
-            target_link_libraries(${execName} pthread ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)

@@ -66,16 +66,16 @@ static void printHelp(char *programName) {
             "        [-h] [-v] [-ipv6] [-sync]",
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
-            "        [-p <destination UDP port>]",
+            "        [-p <destination UDP port, default 19522>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
             "        [-sock <# of UDP sockets, 16 max>]",
-            "        [-mtu <desired MTU size>]",
-            "        [-t <tick>]",
-            "        [-ver <version>]",
-            "        [-id <data id>]",
-            "        [-pro <protocol>]",
-            "        [-e <entropy>]",
-            "        [-b <buffer size, 1MB default>]",
+            "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
+            "        [-t <tick, default 0>]",
+            "        [-ver <version, default 2>]",
+            "        [-id <data id, default 1>]",
+            "        [-pro <protocol, default 1>]",
+            "        [-e <entropy, default 0>]",
+            "        [-b <buffer size, ~100kB default>]",
             "        [-bufrate <buffers sent per sec, float > 0>]",
             "        [-byterate <bytes sent per sec>]",
             "        [-s <UDP send buffer size>]",
@@ -103,7 +103,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       bool *useIPv6, bool *bufDelay, bool *sendSync,
                       char* host, char *interface) {
 
-    *mtu = 0;
     int c, i_tmp;
     int64_t tmp;
     float f_tmp;
@@ -141,8 +140,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 tmp = strtoll(optarg, nullptr, 0);
                 if (tmp > -1) {
                     *tick = tmp;
-                }
-                else {
+                } else {
                     fprintf(stderr, "Invalid argument to -t, tick > 0\n");
                     exit(-1);
                 }
@@ -153,8 +151,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp > 1023 && i_tmp < 65535) {
                     *port = i_tmp;
-                }
-                else {
+                } else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
                     exit(-1);
                 }
@@ -165,8 +162,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 tmp = strtol(optarg, nullptr, 0);
                 if (tmp >= 500) {
                     *bufSize = tmp;
-                }
-                else {
+                } else {
                     fprintf(stderr, "Invalid argument to -b, buf size >= 500\n");
                     exit(-1);
                 }
@@ -177,8 +173,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp >= 100000) {
                     *sendBufSize = i_tmp;
-                }
-                else {
+                } else {
                     fprintf(stderr, "Invalid argument to -s, UDP send buf size >= 100kB\n");
                     exit(-1);
                 }
@@ -199,8 +194,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 i_tmp = (int) strtol(optarg, nullptr, 0);
                 if (i_tmp > 0) {
                     *delay = i_tmp;
-                }
-                else {
+                } else {
                     fprintf(stderr, "Invalid argument to -d, packet delay > 0\n");
                     exit(-1);
                 }
@@ -218,11 +212,17 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 1:
                 // MTU
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp < 100) {
-                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be > 100\n");
+                if (i_tmp == 0) {
+                    // setting this to zero means use system default
+                    *mtu = 0;
+                }
+                else if (i_tmp < 1200 || i_tmp > 9000) {
+                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be >= 1200 and <= 9000\n");
                     exit(-1);
                 }
-                *mtu = i_tmp;
+                else {
+                    *mtu = i_tmp;
+                }
                 break;
 
             case 2:
@@ -548,7 +548,7 @@ int main(int argc, char **argv) {
 
     uint64_t tick = 0;
     int cores[10];
-    int mtu, version = 2, protocol = 1, entropy = 0;
+    int mtu = 9000, version = 2, protocol = 1, entropy = 0;
     uint16_t dataId = 1;
     bool debug = false;
     bool useIPv6 = false, bufDelay = false;
@@ -572,7 +572,7 @@ int main(int argc, char **argv) {
 
 #ifdef __linux__
 
-    if (cores[0] > -1) {
+      if (cores[0] > -1) {
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
@@ -627,11 +627,6 @@ int main(int argc, char **argv) {
         mtu = getMTU(interface, true);
     }
 
-    // Jumbo (> 1500) ethernet frames are 9000 bytes max.
-    // Don't exceed this limit.
-    if (mtu > 9000) {
-        mtu = 9000;
-    }
 
     fprintf(stderr, "Using MTU = %d\n", mtu);
 
@@ -751,9 +746,9 @@ int main(int argc, char **argv) {
     // To avoid having file reads contaminate our performance measurements,
     // place some data into a buffer and repeatedly read it.
     // For most efficient use of UDP packets, make our buffer a multiple of maxUdpPayload,
-    // roughly around 1MB.
+    // roughly around 100kB.
     if (bufSize == 0) {
-        bufSize = (1000000 / maxUdpPayload + 1) * maxUdpPayload;
+        bufSize = (100000 / maxUdpPayload + 1) * maxUdpPayload;
         fprintf(stderr, "internally setting buffer to %" PRIu64 " bytes\n", bufSize);
     }
 
@@ -766,7 +761,7 @@ int main(int argc, char **argv) {
     // write successive ints so we can check transmission on receiving end
     uint32_t *p = reinterpret_cast<uint32_t *>(buf);
     for (uint32_t i=0; i < bufSize/4; i++) {
-        p[i] = i;
+        p[i] = htonl(i);
     }
 
     int err;
