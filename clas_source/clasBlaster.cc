@@ -974,7 +974,7 @@ int main(int argc, char **argv) {
                                        tick, protocol, entropy, version, dataId,
                                        (uint32_t) byteSize, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
-                                       firstBuffer, lastBuffer, debug, &packetsSent);
+                                       firstBuffer, lastBuffer, debug, false, &packetsSent);
 
         if (err < 0) {
             // Should be more info in errno
