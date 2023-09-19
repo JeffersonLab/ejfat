@@ -292,8 +292,7 @@ if (DEFINED MAKE_EXEC)
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
         # Location of include files
-        target_include_directories(${execName} PUBLIC   ${ZeroMQ_INCLUDE_DIRS}
-                                                        ${ET_INCLUDE_DIRS}
+        target_include_directories(${execName} PUBLIC   ${ET_INCLUDE_DIRS}
                                                         ${CMAKE_SOURCE_DIR}/simulation
                                                         ${CMAKE_SOURCE_DIR}/util)
         # Needs these libs
@@ -349,12 +348,11 @@ if (DEFINED MAKE_EXEC)
             # Location of include files
             target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
                     ${CMAKE_SOURCE_DIR}/util
-                    ${ZeroMQ_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
                     ${DISRUPTOR_INCLUDE_DIRS}
                     ${ET_INCLUDE_DIRS})
             # Needs these libs
-            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${ZeroMQ_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
+            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)
