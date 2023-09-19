@@ -8,13 +8,15 @@ set(ZeroMQ_VERSION ${PC_LIBZMQ_VERSION})
 
 find_path(ZeroMQ_INCLUDE_DIR zmq.h
         PATHS ${ZeroMQ_DIR}/include
-        ${PC_LIBZMQ_INCLUDE_DIRS})
+        ${PC_LIBZMQ_INCLUDE_DIRS}
+        /usr/include)
 
 find_library(ZeroMQ_LIBRARY
-        NAMES zmq
+        NAMES zmq libzmq
         PATHS ${ZeroMQ_DIR}/lib
         ${PC_LIBZMQ_LIBDIR}
-        ${PC_LIBZMQ_LIBRARY_DIRS})
+        ${PC_LIBZMQ_LIBRARY_DIRS}
+        /usr/lib/x86_64-linux-gnu)
 
 if(ZeroMQ_LIBRARY)
     set(ZeroMQ_FOUND ON)
