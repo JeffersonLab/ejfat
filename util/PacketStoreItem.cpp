@@ -66,6 +66,7 @@ namespace ejfat {
         SupplyItem::reset();
         offset = 0;
         length = 0;
+        eventLength = 0;
         ejfat::clearHeader(&header);
     }
 
@@ -88,12 +89,28 @@ namespace ejfat {
      * Get the byte offset into packet of the valid data.
      * @return byte offset into packet of the valid data.
      */
-    uint32_t PacketStoreItem::getOffset() {return offset;}
+    uint32_t PacketStoreItem::getPacketOffset() {return offset;}
 
 
     /**
-     * Get the byte length of the valid data.
-     * @return byte length of the valid data.
+     * Get the byte length of the event this packet is a part of.
+     * @return byte length of the event this packet is a part of.
      */
-    uint32_t PacketStoreItem::getLength() {return length;}
+    uint32_t PacketStoreItem::getEventLength() {return eventLength;}
+
+
+
+    /**
+     * Get the byte length of the valid data in packet.
+     * @return byte length of the valid data in packet.
+     */
+    uint32_t PacketStoreItem::getPacketDataLength() {return length;}
+
+    /**
+     * Set the byte length of the valid data in the packet.
+     * @return byte length of the valid data in the packet.
+     */
+    void PacketStoreItem::setPacketDataLength(uint32_t len) {length = len;}
+
+
 }

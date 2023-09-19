@@ -48,10 +48,13 @@ namespace ejfat {
         /** Place to store UDP packet data. */
         char packet[size];
 
-        /** Length of valide data in packet[]. */
+        /** Length of the event this packet is a part of in bytes. */
+        uint32_t eventLength {0};
+
+        /** Length of valid data in this packet in bytes. */
         uint32_t length {0};
 
-        /** Offset in packet[] to data. */
+        /** Offset of this packet in event data. */
         uint32_t offset {0};
 
         /** Place to store parsed reassembly header info. */
@@ -70,8 +73,11 @@ namespace ejfat {
 
         char* getPacket();
         reHeader* getHeader();
-        uint32_t getOffset();
-        uint32_t getLength();
+        uint32_t getPacketOffset();
+        uint32_t getEventLength();
+
+        uint32_t getPacketDataLength();
+        void setPacketDataLength(uint32_t len);
 
         void reset();
     };
