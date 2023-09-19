@@ -63,22 +63,26 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ipv6] [-sync] [direct]",
+            "        [-h] [-v] [-ipv6] [-sync] [-direct]\n",
+
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port, default 19522>]",
-            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
+            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]\n",
+
             "        [-sock <# of UDP sockets, 16 max>]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
             "        [-t <tick, default 0>]",
             "        [-ver <version, default 2>]",
             "        [-id <data id, default 1>]",
             "        [-pro <protocol, default 1>]",
-            "        [-e <entropy, default 0>]",
+            "        [-e <entropy, default 0>]\n",
+
             "        [-b <buffer size, ~100kB default>]",
             "        [-bufrate <buffers sent per sec, float > 0>]",
             "        [-byterate <bytes sent per sec>]",
-            "        [-s <UDP send buffer size>]",
+            "        [-s <UDP send buffer size>]\n",
+
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
@@ -87,6 +91,7 @@ static void printHelp(char *programName) {
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
     fprintf(stderr, "        The -sync option will send a UDP message to LB every second with last tick sent.\n");
+    fprintf(stderr, "        The -direct option will NOT put in LB headers and allows sending events directly to receiver.\n");
     fprintf(stderr, "        This program cycles thru the use of up to 16 UDP sockets for better switch performance.\n");
 }
 
