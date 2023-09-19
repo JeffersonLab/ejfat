@@ -102,7 +102,7 @@ using namespace ejfat;
 
 // Max number of milliseconds that incomplete buffers are kept,
 // hoping for late packets to arrive.
-#define MILLISEC_STORED 10
+#define MILLISEC_STORED 200
 
 
 /**
@@ -113,15 +113,18 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ip6]",
+            "        [-h] [-v] [-ip6] [-norestart]\n",
+
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <starting listening UDP port (increment for each source, 17750 default)>]",
             "        [-b <internal buffer byte size, 100kB default>]",
-            "        [-r <UDP receive buffer byte size, system default>]",
+            "        [-r <UDP receive buffer byte size, system default>]\n",
+
             "        [-f <file for stats>]",
             "        [-dump (no thd to get & merge buffers)]",
             "        [-stats (keep stats)]",
-            "        [-ids <comma-separated list of incoming source ids>]",
+            "        [-ids <comma-separated list of incoming source ids>]\n",
+
             "        [-pinRead <starting core # for read thd>]",
             "        [-pinCnt <# of cores for read thd>]",
             "        [-pinBuf <starting core #, 1 for each buf assembly thd>]",
@@ -129,6 +132,8 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
     fprintf(stderr, "        It can receive from multiple data sources simultaneously.\n");
+    fprintf(stderr, "        The -norestart flag means sources that restart and have new, lower event numbers,\n");
+    fprintf(stderr, "        out of sync with other sources, will NOT be allowed\n");
 }
 
 
@@ -156,7 +161,8 @@ static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
                       int *core, int *coreCnt, int *coreBuf, int *sourceIds,
                       uint16_t* port,
-                      bool *debug, bool *useIPv6, bool *keepStats, bool *dump,
+                      bool *debug, bool *useIPv6, bool *keepStats,
+                      bool *dump, bool *noRestart,
                       char *listenAddr, char *filename) {
 
     int c, i_tmp;
@@ -167,11 +173,12 @@ static void parseArgs(int argc, char **argv,
             {             {"tpre",  1, NULL, 1},
                           {"ip6",  0, NULL, 2},
                           {"pinRead",  1, NULL, 3},
-                          {"pinCnt",  1, NULL, 8},
                           {"pinBuf",  1, NULL, 4},
                           {"ids",  1, NULL, 5},
                           {"stats",  0, NULL, 6},
                           {"dump",  0, NULL, 7},
+                          {"pinCnt",  1, NULL, 8},
+                          {"norestart",  0, NULL, 9},
                           {0,       0, 0,    0}
             };
 
@@ -364,6 +371,11 @@ static void parseArgs(int argc, char **argv,
                 *dump = true;
                 break;
 
+            case 9:
+                // do NOT allow senders to restart their event number sequence
+                *noRestart = true;
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -392,9 +404,15 @@ static void parseArgs(int argc, char **argv,
 // Statistics
 
 
+// If a source dies and restarts, get a handle on when it actually restarted
+// so the stats/rates
+static volatile struct timespec restartTime;
+
+
 typedef struct threadStruct_t {
     int sourceCount;
-    int *sourceIds;
+    int sourceIds[MAX_SOURCES];
+    // key = source id, val = stats for src
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
     char filename[101];
 } threadStruct;
@@ -404,15 +422,21 @@ typedef struct threadStruct_t {
 static void *rateThread(void *arg) {
 
     int64_t byteCount, pktCount, bufCount;
-    int64_t missingByteCount; // discarded + dropped
+    int64_t discardByteCount, discardPktCount, discardBufCount;
 
     // Parse arg
     threadStruct *targ = static_cast<threadStruct *>(arg);
     int sourceCount = targ->sourceCount;
-    int *sourceIds  = targ->sourceIds;
+    int sourceIds[MAX_SOURCES];
+    memcpy(sourceIds, targ->sourceIds, sizeof(sourceIds));
 
+    // key = source id, val = stats
+    // std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
     auto stats = targ->stats;
+    // std::unordered_map<int, std::shared_ptr<packetRecvStats>> mapp;
     auto & mapp = (*(stats.get()));
+
+    std::shared_ptr<packetRecvStats> pstats;
 
 
     int64_t prevTotalPkts[sourceCount];
@@ -472,7 +496,7 @@ static void *rateThread(void *arg) {
         }
 
         // Write column headers
-        fprintf(fp, "Sec,Source,PacketRate(kHz),DataRate(MB/s),Missing(bytes),TotalMissing(bytes),PktCpu,BufCpu\n");
+        fprintf(fp, "Sec,Source,PacketRate(kHz),DataRate(MB/s),Missing(bytes),TotalMissing(bytes)\n");
     }
 
 
@@ -484,6 +508,8 @@ static void *rateThread(void *arg) {
 
     // Get the current time
     clock_gettime(CLOCK_MONOTONIC, &t1);
+    restartTime.tv_sec  = t1.tv_sec;
+    restartTime.tv_nsec = t1.tv_nsec;
 
     // We've got to handle "sourceCount" number of data sources - each with their own stats
     while (true) {
@@ -493,15 +519,17 @@ static void *rateThread(void *arg) {
             if (dataArrived[i] && skippedFirst[i] == 1) {
                 // Data is now coming in. To get an accurate rate, start w/ all stats = 0
                 int src = sourceIds[i];
-                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
-                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
-                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
+fprintf(stderr, "rateThd: data now coming in for src %d\n", src);
+                pstats = mapp[src];
+                currTotalBytes[i]   = pstats->acceptedBytes    = 0;
+                currTotalPkts[i]    = pstats->acceptedPackets  = 0;
+                currBuiltBufs[i]    = pstats->builtBuffers     = 0;
 
-                currDiscardPkts[i]  = mapp[src]->discardedPackets = 0;
-                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
-                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
+                currDiscardPkts[i]  = pstats->discardedPackets = 0;
+                currDiscardBytes[i] = pstats->discardedBytes   = 0;
+                currDiscardBufs[i]  = pstats->discardedBuffers = 0;
 
-                currDropBytes[i]    = mapp[src]->droppedBytes     = 0;
+                currDropBytes[i]    = pstats->droppedBytes     = 0;
 
                 // Start the clock for this source
                 clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
@@ -521,7 +549,7 @@ static void *rateThread(void *arg) {
             prevDiscardBytes[i] = currDiscardBytes[i];
             prevDiscardBufs[i]  = currDiscardBufs[i];
 
-            prevDropBytes[i]  = currDropBytes[i];
+//            prevDropBytes[i]  = currDropBytes[i];
 //            prevDropPkts[i]   = currDropPkts[i];
 //            prevDropBufs[i]   = currDropBufs[i];
         }
@@ -540,15 +568,37 @@ static void *rateThread(void *arg) {
             totalMicroSecs[i] = (1000000L * (tEnd.tv_sec - tStart[i].tv_sec)) + ((tEnd.tv_nsec - tStart[i].tv_nsec)/1000L);
 
             int src = sourceIds[i];
-            currTotalPkts[i]    = mapp[src]->acceptedPackets;
-            currTotalBytes[i]   = mapp[src]->acceptedBytes;
-            currBuiltBufs[i]    = mapp[src]->builtBuffers;
+            pstats = mapp[src];
 
-            currDiscardPkts[i]  = mapp[src]->discardedPackets;
-            currDiscardBytes[i] = mapp[src]->discardedBytes;
-            currDiscardBufs[i]  = mapp[src]->discardedBuffers;
+            // If the total # of built bufs goes down, it's only because the reassembly thread
+            // believes the source was restarted and zeroed out the stats. So, in that case,
+            // clear everything for that source and start over.
+            bool restarted = currBuiltBufs[i] > pstats->builtBuffers;
+            if (restarted) {
+                fprintf(stderr, "\nLooks like data source %d restarted, so clear stuff\n", src);
+                prevTotalPkts[i]    = 0;
+                prevTotalBytes[i]   = 0;
+                prevBuiltBufs[i]    = 0;
 
-            currDropBytes[i]    = mapp[src]->droppedBytes;
+                prevDiscardPkts[i]  = 0;
+                prevDiscardBytes[i] = 0;
+                prevDiscardBufs[i]  = 0;
+
+                // The reassembly thread records when a source is restarted, use that time!
+                totalMicroSecs[i] = (1000000L * (tEnd.tv_sec - restartTime.tv_sec)) + ((tEnd.tv_nsec - restartTime.tv_nsec)/1000L);
+                tStart[i].tv_sec  = restartTime.tv_sec;
+                tStart[i].tv_nsec = restartTime.tv_nsec;
+            }
+
+            currTotalBytes[i]   = pstats->acceptedBytes;
+            currBuiltBufs[i]    = pstats->builtBuffers;
+            currTotalPkts[i]    = pstats->acceptedPackets;
+
+            currDiscardPkts[i]  = pstats->discardedPackets;
+            currDiscardBytes[i] = pstats->discardedBytes;
+            currDiscardBufs[i]  = pstats->discardedBuffers;
+
+//            currDropBytes[i]    = pstats->droppedBytes;
 
             if (currTotalBytes[i] < 0) {
                 rollOver = true;
@@ -575,16 +625,27 @@ static void *rateThread(void *arg) {
         if (rollOver) {
             for (int i=0; i < sourceCount; i++) {
                 int src = sourceIds[i];
+                pstats = mapp[src];
 
-                currTotalBytes[i]   = mapp[src]->acceptedBytes    = 0;
-                currTotalPkts[i]    = mapp[src]->acceptedPackets  = 0;
-                currBuiltBufs[i]    = mapp[src]->builtBuffers     = 0;
+                currTotalBytes[i]   = pstats->acceptedBytes    = 0;
+                currTotalPkts[i]    = pstats->acceptedPackets  = 0;
+                currBuiltBufs[i]    = pstats->builtBuffers     = 0;
 
-                currDiscardPkts[i]  = mapp[src]->discardedPackets = 0;
-                currDiscardBytes[i] = mapp[src]->discardedBytes   = 0;
-                currDiscardBufs[i]  = mapp[src]->discardedBuffers = 0;
+                currDiscardPkts[i]  = pstats->discardedPackets = 0;
+                currDiscardBytes[i] = pstats->discardedBytes   = 0;
+                currDiscardBufs[i]  = pstats->discardedBuffers = 0;
 
-                currDropBytes[i]    = mapp[src]->droppedBytes     = 0;
+                prevTotalPkts[i]    = 0;
+                prevTotalBytes[i]   = 0;
+                prevBuiltBufs[i]    = 0;
+
+                prevDiscardPkts[i]  = 0;
+                prevDiscardBytes[i] = 0;
+                prevDiscardBufs[i]  = 0;
+
+                totalMicroSecs[i]   = microSec;
+
+//                currDropBytes[i]    = pstats->droppedBytes     = 0;
             }
             t1 = tEnd;
             rollOver = false;
@@ -603,64 +664,47 @@ static void *rateThread(void *arg) {
             }
 
             int src = sourceIds[i];
+            pstats = mapp[src];
 
             // Use for instantaneous rates/values
             byteCount = currTotalBytes[i] - prevTotalBytes[i];
             pktCount  = currTotalPkts[i]  - prevTotalPkts[i];
             bufCount  = currBuiltBufs[i]  - prevBuiltBufs[i];
 
-            missingByteCount = (currDiscardBytes[i] + currDropBytes[i]) - (prevDiscardBytes[i] + prevDropBytes[i]);
-//            printf("  Packets:  currDiscardBytes = %" PRId64 ", currDropBytes = %" PRId64 ", prevDiscardBytes = %" PRId64 ", prevDropBytes = %" PRId64 "\n",
-//                   currDiscardBytes[i], currDropBytes[i], prevDiscardBytes[i], prevDropBytes[i]);
 
-//            // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
-//            discardByteCount = currDiscardBytes[i] - prevDiscardBytes[i];
-//            discardPktCount  = currDiscardPkts[i]  - prevDiscardPkts[i];
-//            discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
+            // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
+            discardByteCount = currDiscardBytes[i] - prevDiscardBytes[i];
+            discardPktCount  = currDiscardPkts[i]  - prevDiscardPkts[i];
+            discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
 
             pktRate    = 1000000.0 * ((double) pktCount) / microSec;
             pktAvgRate = 1000000.0 * ((double) currTotalPkts[i]) / totalMicroSecs[i];
-            if (pktCount == 0 && missingByteCount == 0) {
-                printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
-            }
-            else {
-                printf("%d Packets:  %3.4g Hz,  %3.4g Avg, missing bytes = %" PRId64 "\n",
-                       src, pktRate, pktAvgRate, missingByteCount);
-            }
+
+            printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
 
             // Actual Data rates (no header info)
             dataRate    = ((double) byteCount) / microSec;
             dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
 
-            // TODO: currently cpuPkt holds nothing, set in main thread - one value
+            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %" PRId64 "\n",
+                   dataRate, dataAvgRate, pstats->builtBuffers);
 
-            // TODO: look at this to see if it works for multiple sources
-#ifdef __linux__
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, pkt cpu %d, buf cpu %d, bufs %" PRId64 "\n\n",
-                   dataRate, dataAvgRate, mapp[src]->cpuPkt, mapp[src]->cpuBuf, mapp[src]->builtBuffers);
+            printf("  Discard:  %" PRId64 ", (%" PRId64 " total) evts,   pkts: %" PRId64 ", %" PRId64 " total\n\n",
+                    discardBufCount, currDiscardBufs[i], discardPktCount, currDiscardPkts[i]);
 
-           if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 ",%d,%d\n\n", totalMicroSecs[i]/1000000, src,
-                        (int)(pktRate/1000), (int)(dataRate),
-                        missingByteCount, (currDiscardBytes[i] + currDropBytes[i]),
-                        mapp[src]->cpuPkt, mapp[src]->cpuBuf);
-                fflush(fp);
-            }
-#else
-            printf("     Data:    %3.4g MB/s,  %3.4g Avg, bufs %" PRId64 "\n\n",
-                   dataRate, dataAvgRate, mapp[src]->builtBuffers);
-
+            // Sec,Source,PacketRate(kHz),DataRate(MB/s),Missing(bytes),TotalMissing(bytes)
             if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n\n", totalMicroSecs[i]/1000000, src,
+                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n\n",
+                        totalMicroSecs[i]/1000000, src,
                         (int)(pktRate/1000), (int)(dataRate),
-                        missingByteCount, (currDiscardBytes[i] + currDropBytes[i]));
+                        discardByteCount, currDiscardBytes[i]);
                 fflush(fp);
             }
-#endif
-
         }
 
         t1 = tEnd;
+        restartTime.tv_sec  = t1.tv_sec;
+        restartTime.tv_nsec = t1.tv_nsec;
     }
 
     fclose(fp);
@@ -717,6 +761,7 @@ typedef struct threadArg_t {
 
     bool debug;
     bool dump;
+    bool noRestart;
 
     // shared ptr of stats
     std::shared_ptr<packetRecvStats> stats;
@@ -777,10 +822,11 @@ static void *threadAssemble(void *arg) {
 
     /** Byte size of buffers contained in supply. */
 
-    bool dumpBufs = tArg->dump;
-    bool debug    = tArg->debug;
+    bool dumpBufs  = tArg->dump;
+    bool debug     = tArg->debug;
+    bool noRestart = tArg->noRestart;
 
-    auto stats    = tArg->stats;
+    auto stats     = tArg->stats;
     bool takeStats = (stats != nullptr);
 
     // expected max size of packets
@@ -792,9 +838,10 @@ static void *threadAssemble(void *arg) {
         mtu = 1400;
     }
 
-    std::shared_ptr<BufferItem>    bufItem;
-    std::shared_ptr<PacketRefItem> refItem;
-    std::shared_ptr<ByteBuffer>    buf;
+    std::shared_ptr<BufferItem>      bufItem;
+    std::shared_ptr<PacketRefItem>   refItem;
+    std::shared_ptr<PacketStoreItem> pktItem;
+    std::shared_ptr<ByteBuffer>      buf;
 
 #ifdef __linux__
 
@@ -827,7 +874,7 @@ static void *threadAssemble(void *arg) {
     size_t tickMapSize = 0;
 
     // Keep a corresponding map of time - when each tick started being assembled.
-    // key = tick, val = epoch in millisec
+    // key = tick, val = start time in millisec
     // This will allow us to dump old, partially assembled bufs/pkts
     std::map<uint64_t, int64_t> timeMap;
     // For reading time
@@ -836,9 +883,9 @@ static void *threadAssemble(void *arg) {
 
     // Need to figure out if source was killed and restarted.
     // If this is the case, then the tick # will be much smaller than the previous value.
-    uint64_t largestTick = 0;
+    int64_t tick, prevTick = -1, largestTick = -1;
     uint32_t offset, length;
-    uint64_t tick, prevTick = UINT64_MAX;
+    bool restarted = false;
 
 
     while (true) {
@@ -846,65 +893,132 @@ static void *threadAssemble(void *arg) {
         //-------------------------------------------------------------
         // Get item containing packet previously read in by main thd
         //-------------------------------------------------------------
+//std::cout << "get new ref" << std::endl;
         refItem = refSupply->consumerGet();
-        reHeader *hdr = refItem->getPacket()->getHeader();
-        tick   = hdr->tick;
-        offset = hdr->offset;
-        length = hdr->length;
-
-        std::cout << "header data id = " << hdr->dataId << ", but should be " << sourceId << std::endl;
+//std::cout << "  GOT ref" << std::endl;
+        // recover the original packet item from the reference item
+        pktItem = refItem->getPacket();
+        reHeader *hdr = pktItem->getHeader();
+        tick    = (int64_t)hdr->tick;
+        offset  = hdr->offset;
+        length  = hdr->length;
 
         assert(hdr->dataId == sourceId);
 
         // If NOT the same tick as previous ...
         if (tick != prevTick) {
-            if (tick > largestTick) {
-                // With the load balancer, ticks can only increase. This new, largest tick
-                // will not have an associated buffer yet, so create it, store it, etc.
 
-                //std::cout << "\get new buf for tick " << tick << std::endl;
-
-                // store bufItem in map
-                tickMap[tick] = bufItem = bufSupply->get();
-                bufItem->setEventNum(tick);
-                bufItem->setDataLen(length);
-
-                bufItem->setHeader(hdr); // TODO: remove?
-
-                // store current time in msec
-                clock_gettime(CLOCK_MONOTONIC, &now);
-                milliSec = ((1000L * now.tv_sec) + (now.tv_nsec/1000000L));
-                timeMap.insert({tick, milliSec});
-
-                largestTick = tick;
-
-                // Are we at limit of # of buffers being worked on? If so, discard oldest
-                if (tickMap.size() > 4) {
-                    auto oldestEntry = *(tickMap.begin());
-                    uint64_t oldestTick = oldestEntry.first;
-                    std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
-                    tickMap.erase(oldestTick);
-                    timeMap.erase(oldestTick);
-
-                    // Do something with the buffer about to be discarded
-                    if (dumpBufs) {
-                        bufSupply->release(oldestBufItem);
-                    }
-                    else {
-                        oldestBufItem->setValidData(false);
-                        bufSupply->publish(oldestBufItem);
-                    }
-                }
-            }
-            else {
+            if (tick < largestTick) {
                 bufItem = tickMap[tick];
                 if (bufItem == nullptr) {
                     // If there is no buffer associated with this tick available,
-                    //    1) it may have been reassembled and this is a late, duplicate packet, or
-                    //    2) it is a very late packet and the incomplete buffer was deleted/released.
-                    // In both of those cases, it can be released and ignored. So go to the next packet.
-                    refItem->releasePacket();
-                    continue;
+                    //    1) tick may have been reassembled and this is a late, duplicate packet, or
+                    //    2) it is a very late packet and the incomplete buffer was deleted/released, or
+                    //    3) data source was restarted with new, lower starting event number.
+                    // In the first 2 cases, it can be released and ignored. So go to the next packet.
+                    // In the last case, it's ok only if noRestart is false.
+
+                    // How do we tell if a data source has been restarted?
+                    // Hopefully this is good enough.
+                    bool restarted = (largestTick - tick > 1000);
+
+                    if (restarted) {
+                        if (noRestart) {
+                            fprintf(stderr, "\nRestarted data source %d so exit\n", sourceId);
+                            fflush(stderr);
+                            exit(1);
+                        }
+
+                        // Tell stat thread when restart happened so that rates can be calculated within reason
+                        struct timespec now;
+                        clock_gettime(CLOCK_MONOTONIC, &now);
+                        restartTime.tv_sec  = now.tv_sec;
+                        restartTime.tv_nsec = now.tv_nsec;
+
+                        fprintf(stderr, "\nRestarted data source %d so clear stats\n", sourceId);
+
+                        // If source restarted, remove old stuff and start over. Release anything in maps.
+                        if (timeMap.size() > 0) {
+                            // Iterate through the map
+                            auto it = timeMap.begin();
+                            while (it != timeMap.end()) {
+                                // Release buffer resources
+                                uint64_t tik = it->first;
+                                auto bItem = tickMap[tik];
+
+                                if (dumpBufs) {
+                                    bufSupply->release(bItem);
+                                } else {
+                                    bItem->setValidData(false);
+                                    bufSupply->publish(bItem);
+                                }
+
+                                // Erase the entry in tickMap associated with this tick
+                                tickMap.erase(tik);
+
+                                // Erase the current element, erase() will return the
+                                // next iterator. So, don't need to increment.
+                                it = timeMap.erase(it);
+                            }
+                        }
+
+                        if (takeStats) {
+                            clearStats(stats);
+                        }
+                    }
+                    else  {
+                        refItem->releasePacket();
+                        refSupply->release(refItem);
+                        std::cout << "  ignore old pkt from tick " << tick << std::endl;
+                        continue;
+                    }
+                }
+            }
+
+            // With the load balancer, ticks can only increase. This new, largest tick
+            // (or restarted tick) will not have an associated buffer yet, so create it,
+            // store it, etc.
+
+//std::cout << "get new buf for tick " << tick << std::endl;
+
+            // store bufItem in map
+            tickMap[tick] = bufItem = bufSupply->get();
+//std::cout << "  GOT IT 4 tick " << tick << std::endl;
+            bufItem->setEventNum(tick);
+            bufItem->setDataLen(length);
+
+            bufItem->setHeader(hdr); // TODO: remove?
+
+            // store current time in msec
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            milliSec = ((1000L * now.tv_sec) + (now.tv_nsec/1000000L));
+            timeMap.insert({tick, milliSec});
+
+            largestTick = tick;
+
+            // Are we at limit of # of buffers being worked on? If so, discard oldest
+            if (tickMap.size() > 4) {
+                auto oldestEntry = *(tickMap.begin());
+                uint64_t oldestTick = oldestEntry.first;
+                std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
+                tickMap.erase(oldestTick);
+                timeMap.erase(oldestTick);
+                std::cout << "  remove partial tick " << oldestTick << std::endl;
+
+                if (takeStats) {
+                    stats->discardedBuffers++;
+                    stats->discardedBytes += oldestBufItem->getHeader().length;
+                    // This will under count pkts discarded since not all have arrived yet
+                    stats->discardedPackets  += oldestBufItem->getUserInt();
+                }
+
+                // Do something with the buffer about to be discarded
+                if (dumpBufs) {
+                    bufSupply->release(oldestBufItem);
+                }
+                else {
+                    oldestBufItem->setValidData(false);
+                    bufSupply->publish(oldestBufItem);
                 }
             }
         }
@@ -914,7 +1028,9 @@ static void *threadAssemble(void *arg) {
         if (offsets.find(offset) != offsets.end()) {
             // There was already a packet with this offset, so ignore this duplicate packet!!
             refItem->releasePacket();
-            std::cout << "Got duplicate packet for event " << tick << ", offset " << offset << std::endl;
+            refSupply->release(refItem);
+
+std::cout << "Got duplicate packet for event " << tick << ", offset " << offset << std::endl;
             continue;
         }
         else {
@@ -931,12 +1047,12 @@ static void *threadAssemble(void *arg) {
         // Likewise, store # packets copied in user int.
         int64_t bytesSoFar = bufItem->getUserLong();
         int32_t pktsSoFar  = bufItem->getUserInt();
-        int64_t dataLen    = length - HEADER_BYTES;
+        int64_t dataLen    = pktItem->getPacketDataLength() - HEADER_BYTES;
         //std::cout << "pkt len = " << dataLen << std::endl;
 
         // Do we have memory to store entire buf? If not, expand.
         if (length > bufItem->getBuffer()->capacity()) {
-            std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
+std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
             // Preserves all existing data while increasing underlying array
             bufItem->expandBuffer(length + 27000); // also fit in 3 extra jumbo packets
         }
@@ -948,6 +1064,7 @@ static void *threadAssemble(void *arg) {
 
         // Release packet since we've copied its data
         refItem->releasePacket();
+        refSupply->release(refItem);
 
         // Keep track of how much we've written so far
         bytesSoFar += dataLen;
@@ -965,7 +1082,7 @@ static void *threadAssemble(void *arg) {
             // Clear buffer from local map
             tickMap.erase(tick);
             timeMap.erase(tick);
-            //std::cout << "Remove tck " << tick << " src " << sourceId << " from map, bytes = " << bytesSoFar << std::endl;
+//std::cout << "Built tick " << tick << ", src " << sourceId << ", remove, bytes = " << bytesSoFar << std::endl;
 
             if (takeStats) {
                 stats->acceptedBytes += bytesSoFar;
@@ -975,11 +1092,11 @@ static void *threadAssemble(void *arg) {
 
             // Pass buffer to waiting consumer or just dump it
             if (dumpBufs) {
-                //std::cout << "   " << id << ": dump tck " << ick << " src " << sourceId << std::endl;
+//std::cout << "   " << id << ": dump tck " << tick << " src " << sourceId << std::endl;
                 bufSupply->release(bufItem);
             }
             else {
-                //std::cout << "   " << id << ": pub tck " << tick << " src " << sourceId << std::endl;
+//std::cout << "   " << id << ": pub tck " << tick << " src " << sourceId << std::endl;
                 bufSupply->publish(bufItem);
             }
         }
@@ -995,9 +1112,18 @@ static void *threadAssemble(void *arg) {
             while (it != timeMap.end()) {
                 // Check if "now" is more than MILLISEC_STORED millisec ahead of this entry
                 if ((milliSec - it->second) >= MILLISEC_STORED) {
+ std::cout << " tick is TOO OLD" << std::endl;
                     // It's too old, so release buffer resources
                     uint64_t tik = it->first;
                     auto bItem = tickMap[tik];
+
+                    if (takeStats) {
+                        stats->discardedBuffers++;
+                        stats->discardedBytes += bItem->getHeader().length;
+                        // This will under count pkts discarded since not all have arrived yet
+                        stats->discardedPackets  += bItem->getUserInt();
+                    }
+
                     if (dumpBufs) {
                         bufSupply->release(bItem);
                     }
@@ -1095,6 +1221,7 @@ int main(int argc, char **argv) {
     bool pinCores = false;
     bool pinBufCores = false;
     bool dumpBufs = false;
+    bool noRestart = false;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -1109,10 +1236,11 @@ int main(int argc, char **argv) {
               &tickPrescale, &startingCore, &coreCount,
               &startingBufCore, sourceIds,
               &startingPort, &debug, &useIPv6,
-              &keepStats, &dumpBufs, listeningAddr, filename);
+              &keepStats, &dumpBufs, &noRestart,
+              listeningAddr, filename);
 
-    pinCores = startingCore >= 0 ? true : false;
-    pinBufCores = startingBufCore >= 0 ? true : false;
+    pinCores = startingCore >= 0;
+    pinBufCores = startingBufCore >= 0;
 
 #ifdef __linux__
 
@@ -1149,9 +1277,9 @@ int main(int argc, char **argv) {
     }
 
     if (sourceCount < 1) {
-        sourceIds[0] = 0;
+        sourceIds[0] = 1;
         sourceCount = 1;
-        std::cerr << "Defaulting to (single) source id = 0" << std::endl;
+        std::cerr << "Defaulting to (single) source id = 1" << std::endl;
     }
 
     //---------------------------------------------------
@@ -1160,6 +1288,7 @@ int main(int argc, char **argv) {
     std::unordered_map<int, int> srcMap;
     for (int i=0; i < sourceCount; i++) {
         srcMap[sourceIds[i]] = i;
+        //fprintf(stderr, "mainThd: srcMap[%d] = %d\n", sourceIds[i], i);
     }
 
 
@@ -1175,21 +1304,17 @@ int main(int argc, char **argv) {
     int TIMEOUT = 1;
 
     // Have one stats object for each reassembly thread and one for the UDP reading thread
-    std::shared_ptr<packetRecvStats> readStats = nullptr;
     std::shared_ptr<packetRecvStats> buildStats[sourceCount];
     // key = source id, val = stats
-    std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> allBuildStats;
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> allBuildStats = nullptr;
 
     if (keepStats) {
-        readStats = std::make_shared<packetRecvStats>();
-        clearStats(readStats);
-
         allBuildStats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
 
         for (int i = 0; i < sourceCount; i++) {
             buildStats[i] = std::make_shared<packetRecvStats>();
             clearStats(buildStats[i]);
-            allBuildStats->insert({srcMap[i], buildStats[i]});
+            allBuildStats->insert({sourceIds[i], buildStats[i]});
         }
     }
 
@@ -1311,15 +1436,15 @@ int main(int argc, char **argv) {
     // Map of buffer supplies. Each map --> key = src id, value = supply.
     std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
     for (int j=0; j < sourceCount; j++) {
-        auto bufSupply = std::make_shared<Supplier<BufferItem>>(ringSize, false);
-        supplyMap[sourceIds[j]] = bufSupply;
+        //auto bufSupply = std::make_shared<Supplier<BufferItem>>(ringSize, false);
+        supplyMap[sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
     }
 
     // For each data source ...
     for (int i=0; i < sourceCount; i++) {
         // Start thread to reassemble buffers of packets from all sources
         auto arg = tArg[i] = (threadArg *) calloc(1, sizeof(threadArg));
-        if ( arg == nullptr) {
+        if (arg == nullptr) {
             fprintf(stderr, "\n ******* ran out of memory\n\n");
             exit(1);
         }
@@ -1333,6 +1458,7 @@ int main(int argc, char **argv) {
         arg->debug = debug;
         arg->sourceCount = sourceCount;
         arg->pktConsumerId = i;
+        arg->sourceId = sourceIds[i];
 
         if (pinBufCores) {
             arg->core = startingBufCore + 2*i;
@@ -1361,10 +1487,10 @@ int main(int argc, char **argv) {
 
             // Supply of buffers for holding reassembled data from a single source.
             // One from each reassembly thread.
-            int source = sourceIds[j];
             targ->supplyMap = supplyMap;
+            targ->noRestart = noRestart;
             targ->debug = debug;
-            targ->sourceId = source;
+            targ->sourceId = sourceIds[j];
 
             pthread_t thd;
             status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
@@ -1388,7 +1514,7 @@ int main(int argc, char **argv) {
 
         targ->sourceCount = sourceCount;
         targ->stats = allBuildStats;
-        targ->sourceIds = sourceIds;
+        memcpy(targ->sourceIds, sourceIds, sizeof(sourceIds));
 
         pthread_t thd2;
         status = pthread_create(&thd2, NULL, rateThread, (void *) targ);
@@ -1407,6 +1533,7 @@ int main(int argc, char **argv) {
 
     while (true) {
         // Get object from supply in which to store packet
+        // (std::shared_ptr<PacketStoreItem> item)
         auto item = pktSupply->get();
 
         // Read UDP packet
@@ -1427,8 +1554,9 @@ int main(int argc, char **argv) {
         // Parse header & store in item
         reHeader *hdr = item->getHeader();
         parseReHeader(pkt, hdr);
+        item->setPacketDataLength(bytesRead);
 //        printReHeader(hdr);
-//        printBytes(pkt, 200, "header");
+//        printBytes(pkt, 20, "header");
 
         // Pkt is from this source
         uint16_t srcId = hdr->dataId;
