@@ -512,8 +512,9 @@ static void *thread(void *arg) {
         // Packet rates
         rate = 1000000.0 * ((double) packetCount) / time;
         avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
-        printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %" PRId64 " usec, abs = %" PRIu64 " epoch msec\n",
-               rate, avgRate, time, absTime);
+//        printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %" PRId64 " usec, abs = %" PRIu64 " epoch msec\n",
+//                rate, avgRate, time, absTime);
+        printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %" PRId64 " usec\n", rate, avgRate, time);
 
         // Data rates (with NO header info)
         rate = ((double) byteCount) / time;
