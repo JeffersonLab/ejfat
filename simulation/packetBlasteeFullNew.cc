@@ -15,7 +15,7 @@
  * This assumes there is a load balancing emulator or FPGA between this and the sending program.
  * Note that this program uses fast, non-locking ring buffers.
  * This program is intended to be a full-blown implementation of how to handle multiple
- * data sources coming into 1 socket and having it all sorted and assembled into separate
+ * data sources coming into 1 socket and 1 port and having it all sorted and assembled into separate
  * buffers which can then be accessed by the user.
  * </p>
  * <p>
@@ -39,18 +39,20 @@
  * Each reassembly thread accounts for out-of-order and duplicated packets.
  * It will only keep up to a max of 5 partially constructed events in an effort to wait for
  * straggling packets with the oldest event being discarded if more storage is needed.
- * Also, old events will have their memory released if not fully constructed before 10 milliseconds.
+ * Also, old events will have their memory released if not fully constructed before 5 milliseconds.
  * </p>
  * <p>
  * Use packetBlaster.cc to produce events.
- * To produce events at roughly 3 GB/s, use arg "-cores 60" where 60 can just as
- * easily be 0-63. To produce at roughly 3.4 GB/s, use cores 64-79, 88-127.
- * To produce at 4.7 GB/s, use cores 80-87. (Notices cores # start at 0).
- * This receiver will be able to receive all data sent at about
- * 3 GB/s, any more than that and it starts dropping packets.
- * To receive at that rate, the args "-pinRead 80 -pinCnt 5" must be used to specify the fastest
- * network cores for reading packets, and needs at least 5 of them to distribute the work.
- * Even then packets are occasionally dropped.
+ * To produce events at a max of 3 GB/s, use arg "-cores 60" where 60 can just as
+ * easily be 0-63. To produce at a max of 3.4 GB/s, use cores 64-79, 88-127.
+ * To produce at a max of 4.7 GB/s, use cores 80-87. (Notice cores # start at 0).
+ *
+ * However, this receiver is only able to receive about 2.3 GB/s without dropping packets.
+ * To receive at that rate, the args "-pinRead 80 -pinCnt 2" must be used to specify the fastest
+ * network cores for reading packets. Can use -pinCnt 3 or 4 as well. It's also necessary to
+ * specify "-pinBuf 70" which will pin each reassembly thread to 3 different cores
+ * starting at the given core.
+ * For a much faster/better model of receiving data see the packetBlasteeFullNewMP.cc program.
  * </p>
  */
 
@@ -63,6 +65,7 @@
 #include <atomic>
 #include <cstring>
 #include <utility>
+#include <limits>
 #include <unordered_map>
 #include <errno.h>
 
@@ -101,8 +104,16 @@ using namespace ejfat;
 #define MAX_SOURCES 16
 
 // Max number of milliseconds that incomplete buffers are kept,
-// hoping for late packets to arrive.
-#define MILLISEC_STORED 200
+// hoping for late packets to arrive. If this time is too large and the incoming
+// data rate is high, then this program will run out of available buffers in which
+// to construct events.
+// This is due to the nature of the fast-ring-buffer-based buffer supply.
+// It is set to account for non-sequential return of buffers to the supply.
+// In practical terms, if a buffer is incomplete and therefore not returned back to
+// the supply, the supply will not return all buffers which were obtained from the supply
+// after the one being held back. So holding onto it for too long will mean running out
+// of buffers. Solution: decrease the following time. Don't go above 3 for high rates.
+#define MILLISEC_STORED 2
 
 
 /**
@@ -113,7 +124,7 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ip6] [-norestart]\n",
+            "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
 
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <starting listening UDP port (increment for each source, 17750 default)>]",
@@ -127,7 +138,7 @@ static void printHelp(char *programName) {
 
             "        [-pinRead <starting core # for read thd>]",
             "        [-pinCnt <# of cores for read thd>]",
-            "        [-pinBuf <starting core #, 1 for each buf assembly thd>]",
+            "        [-pinBuf <starting core #, 3 cores for each buf assembly thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
@@ -154,6 +165,8 @@ static void printHelp(char *programName) {
  * @param useIPv6       filled with use IP version 6 flag.
  * @param keepStats     keep and printout stats.
  * @param dump          don't have a thd which gets all buffers (for possible merging).
+ * @param noRestart     exit program if sender restarts.
+ * @param jointStats    display stats of all sources joined together.
  * @param listenAddr    filled with IP address to listen on.
  * @param filename      filled with name of file in which to write stats.
  */
@@ -162,7 +175,7 @@ static void parseArgs(int argc, char **argv,
                       int *core, int *coreCnt, int *coreBuf, int *sourceIds,
                       uint16_t* port,
                       bool *debug, bool *useIPv6, bool *keepStats,
-                      bool *dump, bool *noRestart,
+                      bool *dump, bool *noRestart, bool *jointStats,
                       char *listenAddr, char *filename) {
 
     int c, i_tmp;
@@ -179,6 +192,7 @@ static void parseArgs(int argc, char **argv,
                           {"dump",  0, NULL, 7},
                           {"pinCnt",  1, NULL, 8},
                           {"norestart",  0, NULL, 9},
+                          {"jointstats",  0, NULL, 10},
                           {0,       0, 0,    0}
             };
 
@@ -376,6 +390,11 @@ static void parseArgs(int argc, char **argv,
                 *noRestart = true;
                 break;
 
+            case 10:
+                // print stats of all sources joined together
+                *jointStats = true;
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -410,8 +429,9 @@ static volatile struct timespec restartTime;
 
 
 typedef struct threadStruct_t {
-    int sourceCount;
-    int sourceIds[MAX_SOURCES];
+    bool jointStats;
+    int  sourceCount;
+    int  sourceIds[MAX_SOURCES];
     // key = source id, val = stats for src
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
     char filename[101];
@@ -426,6 +446,7 @@ static void *rateThread(void *arg) {
 
     // Parse arg
     threadStruct *targ = static_cast<threadStruct *>(arg);
+    bool jointStats = targ->jointStats;
     int sourceCount = targ->sourceCount;
     int sourceIds[MAX_SOURCES];
     memcpy(sourceIds, targ->sourceIds, sizeof(sourceIds));
@@ -500,7 +521,7 @@ static void *rateThread(void *arg) {
     }
 
 
-    double pktRate, pktAvgRate, dataRate, dataAvgRate;
+    double pktRate, pktAvgRate, dataRate, dataAvgRate, evRate, evAvgRate;
     int64_t microSec;
     struct timespec tEnd, t1;
     bool rollOver = false, allSrcsSending = false;
@@ -516,7 +537,7 @@ static void *rateThread(void *arg) {
 
         // Loop for zeroing stats when first starting - for accurate rate calc
         for (int i=0; i < sourceCount; i++) {
-            if (dataArrived[i] && skippedFirst[i] == 1) {
+            if (dataArrived[i] && (skippedFirst[i] == 1)) {
                 // Data is now coming in. To get an accurate rate, start w/ all stats = 0
                 int src = sourceIds[i];
 fprintf(stderr, "rateThd: data now coming in for src %d\n", src);
@@ -644,6 +665,8 @@ fprintf(stderr, "rateThd: data now coming in for src %d\n", src);
                 prevDiscardBufs[i]  = 0;
 
                 totalMicroSecs[i]   = microSec;
+printf("Stats ROLLING OVER\n");
+
 
 //                currDropBytes[i]    = pstats->droppedBytes     = 0;
             }
@@ -652,53 +675,133 @@ fprintf(stderr, "rateThd: data now coming in for src %d\n", src);
             continue;
         }
 
-        for (int i=0; i < sourceCount; i++) {
-            // Dota not coming in yet from this source so do NO calcs
-            if (!dataArrived[i]) continue;
+        // Do all stats together?
+        if (jointStats && sourceCount > 1) {
 
-            // Skip first stat cycle as the rate calculations will be off
-            if (skippedFirst[i] < 1) {
-//printf("%d skip %d\n", sourceIds[i], skippedFirst[i]);
-                skippedFirst[i]++;
-                continue;
+            int activeSources = 0;
+            byteCount = pktCount = bufCount = 0;
+            discardByteCount = discardPktCount = discardBufCount = 0;
+            long totalDiscardBufs = 0L, totalDiscardPkts = 0L, totalDiscardBytes = 0L;
+            long totalBytes = 0L, totalBuilt = 0L, totalMicro = 0L, totalPkts = 0L, avgMicroSec;
+
+            for (int i = 0; i < sourceCount; i++) {
+                // Data not coming in yet from this source so do NO calcs
+                if (!dataArrived[i]) continue;
+
+                // Skip first stat cycle as the rate calculations will be off
+                if (skippedFirst[i] < 1) {
+                    skippedFirst[i]++;
+                    continue;
+                }
+
+                activeSources++;
+
+                // Use for instantaneous rates/values
+                byteCount += currTotalBytes[i] - prevTotalBytes[i];
+                pktCount  += currTotalPkts[i]  - prevTotalPkts[i];
+                bufCount  += currBuiltBufs[i]  - prevBuiltBufs[i];
+
+                // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
+                discardByteCount += currDiscardBytes[i] - prevDiscardBytes[i];
+                discardPktCount  += currDiscardPkts[i]  - prevDiscardPkts[i];
+                discardBufCount  += currDiscardBufs[i]  - prevDiscardBufs[i];
+
+                totalBytes += currTotalBytes[i];
+                totalBuilt += currBuiltBufs[i];
+                totalMicro += totalMicroSecs[i];
+                totalPkts  += currTotalPkts[i];
+                totalDiscardBufs  += currDiscardBufs[i];
+                totalDiscardPkts  += currDiscardPkts[i];
+                totalDiscardBytes += currDiscardBytes[i];
             }
 
-            int src = sourceIds[i];
-            pstats = mapp[src];
+            if (activeSources > 0) {
+                avgMicroSec = totalMicro/activeSources;
 
-            // Use for instantaneous rates/values
-            byteCount = currTotalBytes[i] - prevTotalBytes[i];
-            pktCount  = currTotalPkts[i]  - prevTotalPkts[i];
-            bufCount  = currBuiltBufs[i]  - prevBuiltBufs[i];
+                pktRate    = 1000000.0 * ((double) pktCount) / microSec;
+                pktAvgRate = 1000000.0 * ((double) totalPkts) / avgMicroSec;
 
+                printf("Packets:  %3.4g Hz,    %3.4g Avg\n", pktRate, pktAvgRate);
 
-            // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
-            discardByteCount = currDiscardBytes[i] - prevDiscardBytes[i];
-            discardPktCount  = currDiscardPkts[i]  - prevDiscardPkts[i];
-            discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
+                // Actual Data rates (no header info)
+                dataRate    = ((double) byteCount) / microSec;
+                dataAvgRate = ((double) totalBytes) / avgMicroSec;
 
-            pktRate    = 1000000.0 * ((double) pktCount) / microSec;
-            pktAvgRate = 1000000.0 * ((double) currTotalPkts[i]) / totalMicroSecs[i];
+                printf("   Data:  %3.4g MB/s,  %3.4g Avg\n", dataRate, dataAvgRate);
 
-            printf("%d Packets:  %3.4g Hz,  %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
+                // Event rates
+                evRate    = 1000000.0 * ((double) bufCount) / microSec;
+                evAvgRate = 1000000.0 * ((double) totalBuilt) / avgMicroSec;
+                printf(" Events:  %3.4g Hz,    %3.4g Avg\n", evRate, evAvgRate);
 
-            // Actual Data rates (no header info)
-            dataRate    = ((double) byteCount) / microSec;
-            dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
+                printf("Discard:  %" PRId64 ", (%" PRId64 " total) evts,   pkts: %" PRId64 ", %" PRId64 " total\n\n",
+                        discardBufCount, totalDiscardBufs, discardPktCount, totalDiscardPkts);
 
-            printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %" PRId64 "\n",
-                   dataRate, dataAvgRate, pstats->builtBuffers);
+                // Sec,Source,PacketRate(kHz),DataRate(MB/s),Missing(bytes),TotalMissing(bytes)
+                if (writeToFile) {
+                    fprintf(fp, "%" PRId64 ",all,%d,%d,%" PRId64 ",%" PRId64 "\n\n",
+                            avgMicroSec / 1000000,
+                            (int) (pktRate / 1000), (int) (dataRate),
+                            discardByteCount, totalDiscardBytes);
+                    fflush(fp);
+                }
+            }
+        }
+        else {
 
-            printf("  Discard:  %" PRId64 ", (%" PRId64 " total) evts,   pkts: %" PRId64 ", %" PRId64 " total\n\n",
-                    discardBufCount, currDiscardBufs[i], discardPktCount, currDiscardPkts[i]);
+            // Do individual stat printouts for each source
+            for (int i = 0; i < sourceCount; i++) {
+                // Data not coming in yet from this source so do NO calcs
+                if (!dataArrived[i]) continue;
 
-            // Sec,Source,PacketRate(kHz),DataRate(MB/s),Missing(bytes),TotalMissing(bytes)
-            if (writeToFile) {
-                fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n\n",
-                        totalMicroSecs[i]/1000000, src,
-                        (int)(pktRate/1000), (int)(dataRate),
-                        discardByteCount, currDiscardBytes[i]);
-                fflush(fp);
+                // Skip first stat cycle as the rate calculations will be off
+                if (skippedFirst[i] < 1) {
+                    skippedFirst[i]++;
+                    continue;
+                }
+
+                int src = sourceIds[i];
+                pstats = mapp[src];
+
+                // Use for instantaneous rates/values
+                byteCount = currTotalBytes[i] - prevTotalBytes[i];
+                pktCount  = currTotalPkts[i]  - prevTotalPkts[i];
+                bufCount  = currBuiltBufs[i]  - prevBuiltBufs[i];
+
+                // Can't tell how many bufs & packets are completely dropped unless we know exactly what's coming in
+                discardByteCount = currDiscardBytes[i] - prevDiscardBytes[i];
+                discardPktCount  = currDiscardPkts[i]  - prevDiscardPkts[i];
+                discardBufCount  = currDiscardBufs[i]  - prevDiscardBufs[i];
+
+                pktRate = 1000000.0 * ((double) pktCount) / microSec;
+                pktAvgRate = 1000000.0 * ((double) currTotalPkts[i]) / totalMicroSecs[i];
+
+                printf("%d Packets:  %3.4g Hz,    %3.4g Avg\n", sourceIds[i], pktRate, pktAvgRate);
+
+                // Actual Data rates (no header info)
+                dataRate = ((double) byteCount) / microSec;
+                dataAvgRate = ((double) currTotalBytes[i]) / totalMicroSecs[i];
+
+                printf("     Data:  %3.4g MB/s,  %3.4g Avg, bufs %" PRId64 "\n",
+                        dataRate, dataAvgRate, pstats->builtBuffers);
+
+                // Event rates
+                evRate = 1000000.0 * ((double) bufCount) / microSec;
+                evAvgRate = 1000000.0 * ((double) currBuiltBufs[i]) / totalMicroSecs[i];
+                printf("   Events:  %3.4g Hz,    %3.4g Avg, total %" PRIu64 "\n",
+                        evRate, evAvgRate, currBuiltBufs[i]);
+
+                printf("  Discard:    %" PRId64 ", (%" PRId64 " total) evts,   pkts: %" PRId64 ", %" PRId64 " total\n\n",
+                        discardBufCount, currDiscardBufs[i], discardPktCount, currDiscardPkts[i]);
+
+                // Sec,Source,PacketRate(kHz),DataRate(MB/s),Missing(bytes),TotalMissing(bytes)
+                if (writeToFile) {
+                    fprintf(fp, "%" PRId64 ",%d,%d,%d,%" PRId64 ",%" PRId64 "\n\n",
+                            totalMicroSecs[i] / 1000000, src,
+                            (int) (pktRate / 1000), (int) (dataRate),
+                            discardByteCount, currDiscardBytes[i]);
+                    fflush(fp);
+                }
             }
         }
 
@@ -741,7 +844,7 @@ void printPktData(char *buf, size_t bytes, std::string const & label) {
 // Arg to pass to buffer reassembly thread
 typedef struct threadArg_t {
     /** One buffer supply for each reassembly thread. Used in threadReadBuffers thread. */
-    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
+    std::shared_ptr<Supplier<BufferItem>> supplyMap;
 
     /** Supply with full UDP packets. */
     std::shared_ptr<Supplier<PacketStoreItem>> pktSupply;
@@ -818,7 +921,7 @@ static void *threadAssemble(void *arg) {
 
     auto pktSupply = tArg->pktSupply;
     auto refSupply = tArg->refSupply;
-    auto bufSupply = tArg->supplyMap[sourceId];
+    auto bufSupply = tArg->supplyMap;
 
     /** Byte size of buffers contained in supply. */
 
@@ -851,10 +954,12 @@ static void *threadAssemble(void *arg) {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        std::cerr << "Run assemble thd for all sources on core " << core << "\n";
+        std::cerr << "Run assemble thd for src " << sourceId << " on core " << core << "\n";
         CPU_SET(core, &cpuset);
-        std::cerr << "Run assemble thd for all sources on core " << (core + 1) << "\n";
+        std::cerr << "Run assemble thd for src " << sourceId << " on core " << (core + 1) << "\n";
         CPU_SET(core+1, &cpuset);
+        std::cerr << "Run assemble thd for src " << sourceId << " on core " << (core + 2) << "\n";
+        CPU_SET(core+2, &cpuset);
 
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
@@ -893,9 +998,7 @@ static void *threadAssemble(void *arg) {
         //-------------------------------------------------------------
         // Get item containing packet previously read in by main thd
         //-------------------------------------------------------------
-//std::cout << "get new ref" << std::endl;
         refItem = refSupply->consumerGet();
-//std::cout << "  GOT ref" << std::endl;
         // recover the original packet item from the reference item
         pktItem = refItem->getPacket();
         reHeader *hdr = pktItem->getHeader();
@@ -921,6 +1024,7 @@ static void *threadAssemble(void *arg) {
                     // How do we tell if a data source has been restarted?
                     // Hopefully this is good enough.
                     bool restarted = (largestTick - tick > 1000);
+//fprintf(stderr, "Smaller tick %" PRId64 "\n", tick);
 
                     if (restarted) {
                         if (noRestart) {
@@ -935,8 +1039,6 @@ static void *threadAssemble(void *arg) {
                         restartTime.tv_sec  = now.tv_sec;
                         restartTime.tv_nsec = now.tv_nsec;
 
-                        fprintf(stderr, "\nRestarted data source %d so clear stats\n", sourceId);
-
                         // If source restarted, remove old stuff and start over. Release anything in maps.
                         if (timeMap.size() > 0) {
                             // Iterate through the map
@@ -948,6 +1050,7 @@ static void *threadAssemble(void *arg) {
 
                                 if (dumpBufs) {
                                     bufSupply->release(bItem);
+
                                 } else {
                                     bItem->setValidData(false);
                                     bufSupply->publish(bItem);
@@ -979,15 +1082,9 @@ static void *threadAssemble(void *arg) {
             // (or restarted tick) will not have an associated buffer yet, so create it,
             // store it, etc.
 
-//std::cout << "get new buf for tick " << tick << std::endl;
-
-            // store bufItem in map
             tickMap[tick] = bufItem = bufSupply->get();
-//std::cout << "  GOT IT 4 tick " << tick << std::endl;
             bufItem->setEventNum(tick);
             bufItem->setDataLen(length);
-
-            bufItem->setHeader(hdr); // TODO: remove?
 
             // store current time in msec
             clock_gettime(CLOCK_MONOTONIC, &now);
@@ -1003,11 +1100,11 @@ static void *threadAssemble(void *arg) {
                 std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
                 tickMap.erase(oldestTick);
                 timeMap.erase(oldestTick);
-                std::cout << "  remove partial tick " << oldestTick << std::endl;
+//std::cout << "  remove partial tick " << oldestTick << ", tickMap size = " << tickMap.size() << std::endl;
 
                 if (takeStats) {
                     stats->discardedBuffers++;
-                    stats->discardedBytes += oldestBufItem->getHeader().length;
+                    stats->discardedBytes += oldestBufItem->getDataLen();
                     // This will under count pkts discarded since not all have arrived yet
                     stats->discardedPackets  += oldestBufItem->getUserInt();
                 }
@@ -1029,7 +1126,6 @@ static void *threadAssemble(void *arg) {
             // There was already a packet with this offset, so ignore this duplicate packet!!
             refItem->releasePacket();
             refSupply->release(refItem);
-
 std::cout << "Got duplicate packet for event " << tick << ", offset " << offset << std::endl;
             continue;
         }
@@ -1048,6 +1144,7 @@ std::cout << "Got duplicate packet for event " << tick << ", offset " << offset 
         int64_t bytesSoFar = bufItem->getUserLong();
         int32_t pktsSoFar  = bufItem->getUserInt();
         int64_t dataLen    = pktItem->getPacketDataLength() - HEADER_BYTES;
+
         //std::cout << "pkt len = " << dataLen << std::endl;
 
         // Do we have memory to store entire buf? If not, expand.
@@ -1059,7 +1156,7 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
 
         // The neat thing about doing things this way is we don't have to track out-of-order packets.
         // Copy things into the buffer into its final spot.
-        auto data = (uint8_t *) (refItem->getPacket()->getPacket()) + HEADER_BYTES;
+        auto data = (uint8_t *) (pktItem->getPacket()) + HEADER_BYTES;
         memcpy(bufItem->getBuffer()->array() + offset, data, dataLen);
 
         // Release packet since we've copied its data
@@ -1082,6 +1179,7 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
             // Clear buffer from local map
             tickMap.erase(tick);
             timeMap.erase(tick);
+
 //std::cout << "Built tick " << tick << ", src " << sourceId << ", remove, bytes = " << bytesSoFar << std::endl;
 
             if (takeStats) {
@@ -1092,11 +1190,9 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
 
             // Pass buffer to waiting consumer or just dump it
             if (dumpBufs) {
-//std::cout << "   " << id << ": dump tck " << tick << " src " << sourceId << std::endl;
                 bufSupply->release(bufItem);
             }
             else {
-//std::cout << "   " << id << ": pub tck " << tick << " src " << sourceId << std::endl;
                 bufSupply->publish(bufItem);
             }
         }
@@ -1104,22 +1200,19 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
         // See if items in tickMap/timeMap have stayed over the limit (MILLISEC_STORED)
         if (timeMap.size() > 0) {
 
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            milliSec = ((1000L * now.tv_sec) + (now.tv_nsec/1000000L));
-
             // Iterate through the map
             auto it = timeMap.begin();
             while (it != timeMap.end()) {
                 // Check if "now" is more than MILLISEC_STORED millisec ahead of this entry
                 if ((milliSec - it->second) >= MILLISEC_STORED) {
- std::cout << " tick is TOO OLD" << std::endl;
+//std::cout << " tick is TOO OLD" << std::endl;
                     // It's too old, so release buffer resources
                     uint64_t tik = it->first;
                     auto bItem = tickMap[tik];
 
                     if (takeStats) {
                         stats->discardedBuffers++;
-                        stats->discardedBytes += bItem->getHeader().length;
+                        stats->discardedBytes += bItem->getDataLen();
                         // This will under count pkts discarded since not all have arrived yet
                         stats->discardedPackets  += bItem->getUserInt();
                     }
@@ -1165,7 +1258,7 @@ static void *threadReadBuffers(void *arg) {
 
     threadArg *tArg = (threadArg *) arg;
     int id = tArg->sourceId;
-    auto & supply = tArg->supplyMap[id];
+    auto & supply = tArg->supplyMap;
 
     std::cout << "   Started cleanup thread for source " << id << std::endl;
 
@@ -1222,6 +1315,7 @@ int main(int argc, char **argv) {
     bool pinBufCores = false;
     bool dumpBufs = false;
     bool noRestart = false;
+    bool jointStats = false;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -1236,7 +1330,7 @@ int main(int argc, char **argv) {
               &tickPrescale, &startingCore, &coreCount,
               &startingBufCore, sourceIds,
               &startingPort, &debug, &useIPv6,
-              &keepStats, &dumpBufs, &noRestart,
+              &keepStats, &dumpBufs, &noRestart, &jointStats,
               listeningAddr, filename);
 
     pinCores = startingCore >= 0;
@@ -1404,7 +1498,7 @@ int main(int argc, char **argv) {
     //---------------------------------------------------
     // Create supply in which to hold incoming packets in PacketStoreItem objects.
     //---------------------------------------------------
-    int pktRingSize = 8192;  // ~75MB allocation
+    int pktRingSize = 8192;  // ~150MB allocation
     bool orderedRelease = false; // reassembly thds will be finished with pkts in no fixed order
     std::shared_ptr<Supplier<PacketStoreItem>> pktSupply =
             std::make_shared<Supplier<PacketStoreItem>>(pktRingSize, orderedRelease);
@@ -1415,7 +1509,7 @@ int main(int argc, char **argv) {
     // There will be one reassembly thread which takes the single source packets from one
     // of these supplies and builds buffers.
     //---------------------------------------------------
-    int holdRingSize = 1024;
+    int holdRingSize = 8192;
     // packets used and released in order by reassembly thread
     orderedRelease = true;
     // set the packet supply once since it's the same for all packets
@@ -1428,30 +1522,35 @@ int main(int argc, char **argv) {
     //---------------------------------------------------
     // Each reassembly thd will have a buffer supply in which to hold reconstructed buffers.
     // Make these buffers sized as given on command line (100kB default) and expand as necessary.
-    // For really small buffers (1 or 2 pkts), they may be created out of order
-    // if pkts come out-of-order, so the orderedRelease flag should be false.
+    // For really small buffers (1 or 2 pkts), they may be created out of order.
+    // In that case, orderedRelease flag should be false. In general, however, we cannot do that
+    // since we may need to toss a buffer and we need all buffers to be explicitly released.
     //---------------------------------------------------
-    int ringSize = 64;
+
+    // Note that 256 buffers will work for large incoming data rates.
+    // If there are multiple sources, this can be divided amongst them.
+    int ringSize = 256;
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
-    // Map of buffer supplies. Each map --> key = src id, value = supply.
-    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
-    for (int j=0; j < sourceCount; j++) {
-        //auto bufSupply = std::make_shared<Supplier<BufferItem>>(ringSize, false);
-        supplyMap[sourceIds[j]] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
+//    // Map of buffer supplies. Each map --> key = src id, value = supply.
+//    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
+    // array of buffer supplies
+    std::shared_ptr<Supplier<BufferItem>> supplyMaps[sourceCount];
+    for (int i=0; i < sourceCount; i++) {
+        supplyMaps[i] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
     }
 
     // For each data source ...
     for (int i=0; i < sourceCount; i++) {
-        // Start thread to reassemble buffers of packets from all sources
+        // Start thread to reassemble buffers of packets from 1 source
         auto arg = tArg[i] = (threadArg *) calloc(1, sizeof(threadArg));
         if (arg == nullptr) {
             fprintf(stderr, "\n ******* ran out of memory\n\n");
             exit(1);
         }
 
-        arg->pktSupply  = pktSupply;
-        arg->refSupply  = refPktSupplys[i];
-        arg->supplyMap  = supplyMap;
+        arg->pktSupply = pktSupply;
+        arg->refSupply = refPktSupplys[i];
+        arg->supplyMap = supplyMaps[i];
 
         arg->stats = buildStats[i];
         arg->dump  = dumpBufs;
@@ -1461,7 +1560,7 @@ int main(int argc, char **argv) {
         arg->sourceId = sourceIds[i];
 
         if (pinBufCores) {
-            arg->core = startingBufCore + 2*i;
+            arg->core = startingBufCore + 3*i;
         }
         else {
             arg->core = -1;
@@ -1478,7 +1577,7 @@ int main(int argc, char **argv) {
     // Thread(s) to read fully reassembled buffers
     //---------------------------------------------------
     if (!dumpBufs) {
-        for (int j=0; j < sourceCount; j++) {
+        for (int i=0; i < sourceCount; i++) {
             threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
             if (targ == nullptr) {
                 fprintf(stderr, "out of mem\n");
@@ -1487,10 +1586,10 @@ int main(int argc, char **argv) {
 
             // Supply of buffers for holding reassembled data from a single source.
             // One from each reassembly thread.
-            targ->supplyMap = supplyMap;
+            targ->supplyMap = supplyMaps[i];
             targ->noRestart = noRestart;
             targ->debug = debug;
-            targ->sourceId = sourceIds[j];
+            targ->sourceId = sourceIds[i];
 
             pthread_t thd;
             status = pthread_create(&thd, NULL, threadReadBuffers, (void *) targ);
@@ -1512,6 +1611,7 @@ int main(int argc, char **argv) {
             return -1;
         }
 
+        targ->jointStats  = jointStats;
         targ->sourceCount = sourceCount;
         targ->stats = allBuildStats;
         memcpy(targ->sourceIds, sourceIds, sizeof(sourceIds));
@@ -1523,12 +1623,6 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
-
-    // Time Delay Here???
-
-    struct timespec timeout;
-    timeout.tv_sec = TIMEOUT;
-    timeout.tv_nsec = 0;
 
 
     while (true) {
@@ -1554,6 +1648,9 @@ int main(int argc, char **argv) {
         // Parse header & store in item
         reHeader *hdr = item->getHeader();
         parseReHeader(pkt, hdr);
+
+  //      fprintf(stderr, "%" PRIu64 "\n", hdr->tick);
+
         item->setPacketDataLength(bytesRead);
 //        printReHeader(hdr);
 //        printBytes(pkt, 20, "header");
@@ -1569,6 +1666,7 @@ int main(int argc, char **argv) {
         // we wrote in there. We'll keep the supply since it's always the same, but overwrite packet
         // with the new one.
         auto ref = sup->getAsIs();
+
         ref->setPacket(item);
         sup->publish(ref);
     }
