@@ -281,7 +281,7 @@ namespace ejfat {
 
 
         /**
-         * Get the next "n" available item in ring buffer for writing/reading data.
+         * Get the next "n" available itema in ring buffer for writing/reading data.
          * This may only be used in conjunction with:
          * {@link #publish(std::shared_ptr<T>)} or preferably {@link #publish(std::shared_ptr<T>[]}.
          * Not sure if this method is thread-safe.
@@ -328,6 +328,32 @@ namespace ejfat {
             bufItem->setProducerSequence(getSequence);
 
             return bufItem;
+        }
+
+
+        /**
+         * Get the next "n" available itema in ring buffer for writing/reading data.
+         * Does NOT reset the item.
+         * This may only be used in conjunction with:
+         * {@link #publish(std::shared_ptr<T>)} or preferably {@link #publish(std::shared_ptr<T>[]}.
+         * Not sure if this method is thread-safe.
+         *
+         * @param n number of ring buffer items to get.
+         * @param items array big enough to hold an array of n items.
+         * @throws InterruptedException if thread interrupted.
+         */
+        void getAsIs(int32_t n, std::shared_ptr<T> items[]) {
+            // Next available n items claimed by data producer
+            long hi = ringBuffer->next(n);
+            long lo = hi - (n - 1);
+
+            for (long seq = lo; seq <= hi; seq++) {
+                // Get object in that position (sequence) of ring buffer
+                std::shared_ptr<T> bufItem = (*ringBuffer.get())[seq];
+                bufItem->setFromConsumerGet(false);
+                items[seq - lo] = bufItem;
+                bufItem->setProducerSequence(seq);
+            }
         }
 
 
