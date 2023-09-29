@@ -951,30 +951,33 @@ std::cout << "Unexpected data source, id = " << srcId << ", ignoring this data" 
                 }
 
                 // Get buffer in which to reassemble
-                bufItem = (*pmap)[hdr->tick];
+                bufItem = (*pmap)[tick];
                 // If there is no buffer existing for this tick, get one
                 if (bufItem == nullptr) {
-//std::cout << "\ndiff src,  create buf for tick " << hdr->tick << std::endl;
+//std::cout << "\ndiff src,  create buf for tick " << tick << std::endl;
                     // This call gets a reset bufItem
-                    (*pmap)[hdr->tick] = bufItem = bufSupply->get();
+                    (*pmap)[tick] = bufItem = bufSupply->get();
 
                     // Copy header so that whoever gets the reassembled buffer has info about tick, src id, etc
-                    bufItem->setHeader(hdr);
+                    bufItem->setEventNum(tick);
+                    bufItem->setDataLen(hdr->length);
+
+//                    bufItem->setHeader(hdr);
 
                     // Track the biggest tick to be RECEIVED from this source.
                     // Anything too much smaller will be tossed since a late packet cannot be
                     // really, really late.
                     uint64_t largestTick = largestSavedTick[srcId];
-                    if (hdr->tick > largestTick) {
-//std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
-                        largestSavedTick[srcId] = hdr->tick;
+                    if (tick > largestTick) {
+//std::cout << "biggest tick " << tick << " for src " << srcId << std::endl;
+                        largestSavedTick[srcId] = tick;
                     }
-                    else if (hdr->tick < largestTick - tickBandwidth) {
+                    else if (tick < largestTick - tickBandwidth) {
                         // If here, we got a tick very much smaller than we should
 
                         if (++smallerTicks[srcId] > 100) {
                             // Got a much smaller tick 100x so sequence has been restarted, reset stats
-                            largestSavedTick[srcId] = hdr->tick;
+                            largestSavedTick[srcId] = tick;
                             smallerTicks[srcId] = 0;
 
                             // AND throw out all stored, unfinished bufs since they'll never
@@ -990,8 +993,8 @@ std::cout << "Unexpected data source, id = " << srcId << ", ignoring this data" 
                                 uint64_t tck = it->first;
                                 std::shared_ptr<BufferItem> bItem = it->second;
 
-                                // Remove all ticks larger than the first of the new sequence (hdr->tick)
-                                if (tck > hdr->tick) {
+                                // Remove all ticks larger than the first of the new sequence (tick)
+                                if (tck > tick) {
                                     it = pmap->erase(it);
 //std::cout << "  release stored buf for tick " << tck << std::endl;
 
@@ -1014,27 +1017,29 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
                     }
                 }
             }
-            else if (hdr->tick != prevTick) {
+            else if (tick != prevTick) {
                 // Same source as last pkt, but if NOT the same tick ...
-                bufItem = (*pmap)[hdr->tick];
+                bufItem = (*pmap)[tick];
                 if (bufItem == nullptr) {
-//std::cout << "\nsame src, create buf for tick " << hdr->tick << std::endl;
-                    (*pmap)[hdr->tick] = bufItem = bufSupply->get();
-                    bufItem->setHeader(hdr);
+//std::cout << "\nsame src, create buf for tick " << tick << std::endl;
+                    (*pmap)[tick] = bufItem = bufSupply->get();
+                    bufItem->setEventNum(tick);
+                    bufItem->setDataLen(hdr->length);
+//                    bufItem->setHeader(hdr);
                     uint64_t largestTick = largestSavedTick[srcId];
-                    if (hdr->tick > largestTick) {
-//std::cout << "biggest tick " << hdr->tick << " for src " << srcId << std::endl;
-                        largestSavedTick[srcId] = hdr->tick;
+                    if (tick > largestTick) {
+//std::cout << "biggest tick " << tick << " for src " << srcId << std::endl;
+                        largestSavedTick[srcId] = tick;
                     }
-                    else if (hdr->tick < largestTick - tickBandwidth) {
+                    else if (tick < largestTick - tickBandwidth) {
                         if (++smallerTicks[srcId] > 100) {
-                            largestSavedTick[srcId] = hdr->tick;
+                            largestSavedTick[srcId] = tick;
                             smallerTicks[srcId] = 0;
 
                             for (auto it = pmap->cbegin(); it != pmap->cend();) {
                                 uint64_t tck = it->first;
                                 std::shared_ptr<BufferItem> bItem = it->second;
-                                if (tck > hdr->tick) {
+                                if (tck > tick) {
                                     it = pmap->erase(it);
 //std::cout << "  release stored buf for tick " << tck << std::endl;
                                     if (dumpBufs) {
@@ -1057,7 +1062,7 @@ std::cout << "tick sequence has restarted for source " << srcId << ", reset stat
 
             // Keep track so if next packet is same source/tick, we don't have to look it up
             prevSrcId = srcId;
-            prevTick  = hdr->tick;
+            prevTick  = tick;
 
             // We are using the ability of the BufferItem to store a user's long.
             // Use it store how many bytes we've copied into it so far.
@@ -1105,8 +1110,8 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
                 bufItem->getBuffer()->limit(bytesSoFar).position(0);
 
                 // Clear buffer from local map
-                pmap->erase(hdr->tick);
-//std::cout << "Remove tck " << hdr->tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
+                pmap->erase(tick);
+//std::cout << "Remove tck " << tick << " src " << srcId << " from map, bytes = " << bytesSoFar << std::endl;
 
                 if (takeStats) {
                     mapp[srcId]->acceptedBytes += bytesSoFar;
@@ -1116,11 +1121,11 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                 // Pass buffer to waiting consumer or just dump it
                 if (dumpBufs) {
-//std::cout << "   " << id << ": dump tck " << hdr->tick << " src " << srcId << std::endl;
+//std::cout << "   " << id << ": dump tck " << tick << " src " << srcId << std::endl;
                     bufSupply->release(bufItem);
                 }
                 else {
-//std::cout << "   " << id << ": pub tck " << hdr->tick << " src " << srcId << std::endl;
+//std::cout << "   " << id << ": pub tck " << tick << " src " << srcId << std::endl;
                     bufSupply->publish(bufItem);
                 }
             }
@@ -1174,7 +1179,7 @@ std::cout << "EXPAND BUF!!! to " << hdr->length << std::endl;
 
                         // We can't count buffers that were entirely dropped
                         // unless we know exactly what's coming in.
-                        mapp[source]->droppedBytes += bItem->getHeader().length - bItem->getUserLong();
+                        mapp[source]->droppedBytes += bItem->getDataLen() - bItem->getUserLong();
                         // guesstimate
                         mapp[source]->droppedPackets += mapp[source]->discardedBytes / mtu;
                     }

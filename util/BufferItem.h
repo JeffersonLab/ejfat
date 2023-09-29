@@ -98,19 +98,19 @@ namespace ejfat {
 
         BufferItem();
         BufferItem(const BufferItem & item);
+        BufferItem(const std::shared_ptr<BufferItem> & item);
 //        ~BufferItem();
 
         BufferItem & operator=(const BufferItem & other) = delete;
+
+        void copy(const BufferItem & item);
+        void copy(const std::shared_ptr<BufferItem> & item);
 
         void reset();
 
         ByteOrder getOrder() const;
 
         std::unordered_set<uint32_t> & getOffsets();
-
-        // TODO: get rid of these 2???
-        reHeader & getHeader();
-        void setHeader(reHeader *hdr);
 
         uint64_t getEventNum();
         void setEventNum(uint64_t num);

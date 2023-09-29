@@ -69,7 +69,23 @@ namespace ejfat {
      * @param item ring item to copy.
      */
     BufferItem::BufferItem(const BufferItem & item) : SupplyItem(item) {
+        copy(item);
+    }
 
+    /**
+     * Copy constructor.
+     * @param item ring item to copy.
+     */
+    BufferItem::BufferItem(const std::shared_ptr<BufferItem> & item) : SupplyItem(*(item.get())) {
+        copy(item);
+    }
+
+
+    /**
+     * Copy given ring item.
+     * @param item ring item to copy.
+     */
+    void BufferItem::copy(const BufferItem & item) {
         // Avoid self copy ...
         if (this != &item) {
             buffer->copy(item.getBuffer());
@@ -86,6 +102,31 @@ namespace ejfat {
             offsets          = item.offsets;
 
             header           = item.header;
+        }
+    }
+
+
+    /**
+     * Copy given ring item.
+     * @param item ring item to copy.
+     */
+    void BufferItem::copy(const std::shared_ptr<BufferItem> & item) {
+        // Avoid self copy ...
+        if (this != item.get()) {
+            buffer->copy(item->getBuffer());
+            bufferSize       = item->bufferSize;
+            order            = item->order;
+            force            = item->force;
+            isValidData      = item->isValidData;
+            userInt          = item->userInt;
+            userLong         = item->userLong;
+            userBoolean      = item->userBoolean;
+
+            eventNum         = item->eventNum;
+            dataLen          = item->dataLen;
+            offsets          = item->offsets;
+
+            header           = item->header;
         }
     }
 
@@ -125,27 +166,32 @@ namespace ejfat {
       */
     std::unordered_set<uint32_t> & BufferItem::getOffsets() {return offsets;}
 
-    /**
-     * Get a reference to stored reassembly header associated with data if any.
-     * @return reference to stored reassembly header associated with data if any, else nullptr.
-     */
-    reHeader & BufferItem::getHeader() {return header;}
-
 
     /**
-     * Set the stored reassembly header associated with data if any.
-     * @param hdr reassembly header to copy.
+     * Get the event or tick number.
+     * @return the event or tick number.
      */
-    void BufferItem::setHeader(reHeader *hdr) {
-        if (hdr == nullptr) return;
-        header = *hdr;
-    }
-
     uint64_t BufferItem::getEventNum() {return eventNum;}
+
+    /**
+     * Set the event or tick number.
+     * @param num event or tick number.
+     */
     void BufferItem::setEventNum(uint64_t num) {eventNum = num;}
 
+
+     /**
+      * Get the length of valid data in bytes.
+      * @return length of valid data in bytes.
+      */
     uint32_t BufferItem::getDataLen() {return dataLen;}
+
+     /**
+      * Set the length of valid data in bytes.
+      * @param len length of valid data in bytes.
+      */
     void BufferItem::setDataLen(uint32_t len) {dataLen = len;}
+
 
     /**
      * Get the flag used to suggest a forced write to a consumer.
