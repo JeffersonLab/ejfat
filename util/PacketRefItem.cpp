@@ -18,19 +18,20 @@ namespace ejfat {
 
 
     /**
-     * Method to set PacketsItem parameters for objects created by eventFactory.
-     * Doing things in this roundabout manor is necessary because the disruptor's
+     * Method to set parameters for objects created by eventFactory.
+     * Doing things in this roundabout manner is necessary because the disruptor's
      * createSingleProducer method takes a function for created items which has no args! Thus these args,
-     * needed for construction of each PacketsItem, must be passed in as global parameters.
+     * needed for construction of each PacketRefItem, must be passed in as global parameters.
      *
-     * @param pktCount number of UDP packets that can be stored in this item.
+     * @param supplier supplier object of the contained PacketStoreItem, used to release it later
+     * when finished with this object.
      */
     void PacketRefItem::setDefaultFactorySettings(std::shared_ptr<Supplier<PacketStoreItem>> supplier) {
         PacketRefItem::defaultSupply = supplier;
     }
 
 
-    /** Function to create PacketHoldItems by RingBuffer. */
+    /** Function to create PacketRefItems by RingBuffer. */
     const std::function< std::shared_ptr<PacketRefItem> () >& PacketRefItem::eventFactory() {
         static std::function< std::shared_ptr<PacketRefItem> () > result([]  {
             return std::make_shared<PacketRefItem>();

@@ -42,12 +42,10 @@ namespace ejfat {
      */
     class PacketRefItem : public SupplyItem {
 
-    public:
-
-        /** Set dynamically by calling {@link #setEventFactorySettings}. */
-        static std::shared_ptr<Supplier<PacketStoreItem>> defaultSupply;
-
     private:
+
+        /** Set dynamically by calling {@link #setDefaultFactorySettings}. */
+        static std::shared_ptr<Supplier<PacketStoreItem>> defaultSupply;
 
         /** Shared pointer to item supply which contains packet object. */
         std::shared_ptr<Supplier<PacketStoreItem>> supply;
