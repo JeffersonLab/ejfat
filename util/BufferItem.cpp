@@ -100,8 +100,6 @@ namespace ejfat {
             eventNum         = item.eventNum;
             dataLen          = item.dataLen;
             offsets          = item.offsets;
-
-            header           = item.header;
         }
     }
 
@@ -125,8 +123,6 @@ namespace ejfat {
             eventNum         = item->eventNum;
             dataLen          = item->dataLen;
             offsets          = item->offsets;
-
-            header           = item->header;
         }
     }
 
@@ -147,8 +143,6 @@ namespace ejfat {
         eventNum = 0;
         dataLen = 0;
         offsets.clear();
-
-        clearHeader(&header);
     }
 
 

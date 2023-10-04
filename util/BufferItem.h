@@ -53,9 +53,11 @@ namespace ejfat {
         /** Byte order of buffer. */
         ByteOrder order {ByteOrder::ENDIAN_LOCAL};
 
-        // TODO: Full header does not make sense. Maybe tick & data length
-        uint64_t eventNum; // (tick)
-        uint32_t dataLen;  // bytes
+        /** Event number associated with data in buffer, also known as "tick". */
+        uint64_t eventNum = 0UL;
+
+        /** Length of valid data bytes in buffer. */
+        uint32_t dataLen = 0;
 
         /**
          * If UDP packets are used to contruct this buffer,
@@ -63,9 +65,6 @@ namespace ejfat {
          * are no duplicate packets included.
          */
         std::unordered_set<uint32_t> offsets;
-
-        /** Reassembly header associated with this data, if any. */
-        reHeader header;
 
         /**
          * If true, and this item comes from a supply used in the sense of
