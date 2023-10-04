@@ -1012,7 +1012,12 @@ static void *threadAssemble(void *arg) {
         if (tick != prevTick) {
 
             if (tick < largestTick) {
-                bufItem = tickMap[tick];
+
+                bufItem = nullptr;
+                if (tickMap.count(tick)) {
+                    bufItem = tickMap[tick];
+                }
+
                 if (bufItem == nullptr) {
                     // If there is no buffer associated with this tick available,
                     //    1) tick may have been reassembled and this is a late, duplicate packet, or
@@ -1098,6 +1103,7 @@ static void *threadAssemble(void *arg) {
                 auto oldestEntry = *(tickMap.begin());
                 uint64_t oldestTick = oldestEntry.first;
                 std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
+
                 tickMap.erase(oldestTick);
                 timeMap.erase(oldestTick);
 //std::cout << "  remove partial tick " << oldestTick << ", tickMap size = " << tickMap.size() << std::endl;
