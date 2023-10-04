@@ -314,6 +314,64 @@ namespace ejfat {
 
         /**
          * <p>
+         * Set the Reassembly Header data.
+         * The first 16 bits go as ordered. The dataId is put in network byte order.
+         * The offset, length and tick are also put into network byte order.
+         * This version of this function allows using 1 byte of the reserved field
+         * for <b>testing purposes</b>.
+         * </p>
+         *
+         * Implemented <b>without</b> using C++ bit fields.
+         * This is the new, version 2, RE header.
+         *
+         * <pre>
+         *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
+         *
+         *  0                   1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |Version|        Rsvd           |            Data-ID            |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                         Buffer Offset                         |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                         Buffer Length                         |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         *  |                                                               |
+         *  +                             Tick                              +
+         *  |                                                               |
+         *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * </pre>
+         *
+         * @param buffer  buffer in which to write the header.
+         * @param offset  byte offset into full buffer payload.
+         * @param length  total length in bytes of full buffer payload.
+         * @param tick    64 bit tick number used to tell the load balancer
+         *                which backend host to direct the packet to. Necessary to
+         *                disentangle packets from different ticks at one destination
+         *                as there may be overlap in time.
+         * @param version the version of this software.
+         * @param dataId  the data source id number.
+         * @param reserved the "reserved" number which may be useful in setting during testing.
+         *                 Use lowest 8 bits which are placed next to the data id, 2nd byte from beginning.
+         */
+        static void setReMetadata(char* buffer, uint32_t offset, uint32_t length,
+                                  uint64_t tick, int version, uint16_t dataId, int reserved) {
+
+
+            buffer[0] = version << 4;
+            buffer[1] = reserved;
+
+            *((uint16_t *)(buffer + 2))  = htons(dataId);
+            *((uint32_t *)(buffer + 4))  = htonl(offset);
+            *((uint32_t *)(buffer + 8))  = htonl(length);
+            *((uint64_t *)(buffer + 12)) = htonll(tick);
+        }
+
+
+
+
+        /**
+         * <p>
          * Set the data for a synchronization message sent directly to the load balancer.
          * The first 3 fields go as ordered. The srcId, evtNum, evtRate and time are all
          * put into network byte order.</p>
@@ -728,6 +786,7 @@ namespace ejfat {
     }
 
 
+
     /** <p>
      * <p>
      * This routine uses the latest, 20-byte RE header with offset into buf and len of buf.
@@ -768,6 +827,8 @@ namespace ejfat {
      * @param debug          turn debug printout on & off.
      * @param direct         don't include LB header since packets are going directly to receiver.
      * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
+     * @param reserved       set 1 byte of the RE header "reserved" field
+     *                       with least significant byte for testing.
      *
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
      */
@@ -778,7 +839,7 @@ namespace ejfat {
                                            uint32_t delayPrescale, uint32_t *delayCounter,
                                            bool firstBuffer, bool lastBuffer,
                                            bool debug, bool direct,
-                                           int64_t *packetsSent) {
+                                           int64_t *packetsSent, int reserved) {
 
         ssize_t err;
         int64_t sentPackets=0;
@@ -836,7 +897,7 @@ namespace ejfat {
             // Write RE meta data into buffer
             setReMetadata(buffer + lbHeaderSize,
                           localOffset, fullLen,
-                             tick, version, dataId);
+                          tick, version, dataId, reserved);
 
             // This is where and how many bytes to write for data
             memcpy(buffer + allHeadersSize, (const void *)getDataFrom, bytesToWrite);
@@ -898,6 +959,71 @@ namespace ejfat {
 
         return 0;
     }
+
+
+    /** <p>
+     * <p>
+     * This routine uses the latest, 20-byte RE header with offset into buf and len of buf.
+     * Send a buffer to a given destination by breaking it up into smaller
+     * packets and sending these by UDP. This buffer may contain only part
+     * of a larger buffer that needs to be sent. This method can then be called
+     * in a loop, with the offset arg providing necessary feedback.
+     * The receiver is responsible for reassembling these packets back into the original data.</p>
+     * <p>
+     * The weakness of this routine is that if it's called in a loop to send one buffer,
+     * the choice of dataLen (plus headers) should match the size of an integral number
+     * of UDP packets. If there is a poor match, then the last packet sent by this routine
+     * may hold only a small amount of data.</p>
+     *
+     * This routine calls "send" on a connected socket.
+     * All data (header and actual data from dataBuffer arg) are copied into a separate
+     * buffer and sent. Unlike the {@link #sendPacketizedBufferFastNew} routine, the
+     * original data is unchanged.
+     * This uses the new, version 2, RE header.
+     *
+     * @param dataBuffer     data to be sent.
+     * @param dataLen        number of bytes to be sent.
+     * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
+     * @param clientSocket   UDP sending socket.
+     * @param tick           value used by load balancer in directing packets to final host.
+     * @param protocol       protocol in laad balance header.
+     * @param entropy        entropy in laad balance header.
+     * @param version        version in reassembly header.
+     * @param dataId         data id in reassembly header.
+     * @param fullLen        size of full dataBuffer in bytes to be sent for this tick.
+     * @param offset         value-result parameter that passes in the sequence number of first packet
+     *                       and returns the sequence to use for next packet to be sent.
+     * @param delay          delay in microsec between each packet being sent.
+     * @param delayPrescale  prescale for delay (i.e. only delay every Nth time).
+     * @param delayCounter   value-result parameter tracking when delay was last run.
+     * @param firstBuffer    if true, this is the first buffer to send in a sequence.
+     * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
+     * @param debug          turn debug printout on & off.
+     * @param direct         don't include LB header since packets are going directly to receiver.
+     * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
+     *
+     * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
+     */
+    static int sendPacketizedBufferSendNew(const char* dataBuffer, size_t dataLen, int maxUdpPayload,
+                                           int clientSocket, uint64_t tick, int protocol, int entropy,
+                                           int version, uint16_t dataId, uint32_t fullLen,
+                                           uint32_t *offset, uint32_t delay,
+                                           uint32_t delayPrescale, uint32_t *delayCounter,
+                                           bool firstBuffer, bool lastBuffer,
+                                           bool debug, bool direct,
+                                           int64_t *packetsSent) {
+
+        // served header element set to 0 by default
+        return sendPacketizedBufferSendNew(dataBuffer, dataLen, maxUdpPayload,
+                clientSocket, tick, protocol, entropy,
+                version, dataId, fullLen,
+                offset, delay,
+                delayPrescale, delayCounter,
+                firstBuffer, lastBuffer,
+                debug, direct,
+                packetsSent, 0);
+    }
+
 
 
     /**

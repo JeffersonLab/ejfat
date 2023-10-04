@@ -113,7 +113,8 @@ static inline uint64_t bswap_64(uint64_t x) {
 
         // Structure to hold reassembly header info
         typedef struct reHeader_t {
-            uint8_t  version = 2;
+            uint8_t  version  = 2;
+            int      reserved = 0; // use 8 of 12 bytes for testing for now
             uint16_t dataId;
             uint32_t offset;
             uint32_t length;
@@ -489,11 +490,12 @@ static inline uint64_t bswap_64(uint64_t x) {
         {
             // Now pull out the component values
             if (header != nullptr) {
-                header->version =                       (buffer[0] >> 4) & 0xf;
-                header->dataId  = ntohs(*((uint16_t *)  (buffer + 2)));
-                header->offset  = ntohl(*((uint32_t *)  (buffer + 4)));
-                header->length  = ntohl(*((uint32_t *)  (buffer + 8)));
-                header->tick    = ntohll(*((uint64_t *) (buffer + 12)));
+                header->version  =                       (buffer[0] >> 4) & 0xf;
+                header->reserved =                        buffer[1] & 0xff;
+                header->dataId   = ntohs(*((uint16_t *)  (buffer + 2)));
+                header->offset   = ntohl(*((uint32_t *)  (buffer + 4)));
+                header->length   = ntohl(*((uint32_t *)  (buffer + 8)));
+                header->tick     = ntohll(*((uint64_t *) (buffer + 12)));
             }
         }
 
