@@ -734,17 +734,17 @@ int main(int argc, char **argv) {
         }
 
         lastIndex = i;
-    }
 
-    // set the don't fragment bit
+        // set the don't fragment bit
 #ifdef __linux__
-    {
-        int val = IP_PMTUDISC_DO;
-        for (int i = 0; i < sockCount; i++) {
+        {
+            int val = IP_PMTUDISC_DO;
             setsockopt(clientSockets[i], IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
         }
-    }
 #endif
+
+    }
+
 
     // Start thread to do rate printout
     pthread_t thd;
@@ -897,7 +897,7 @@ int main(int argc, char **argv) {
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) bufSize, &offset,
                                               packetDelay, delayPrescale, &delayCounter,
-                                              firstBuffer, lastBuffer, debug, direct, &packetsSent);
+                                              firstBuffer, lastBuffer, debug, direct, &packetsSent, portIndex);
         if (err < 0) {
             // Should be more info in errno
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
