@@ -61,7 +61,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <filename>",
             "        [-r <# repeat read-file cycles>]",
@@ -74,6 +74,7 @@ static void printHelp(char *programName) {
             "        [-cp_addr <CP IP address (default = none & no CP comm)>]",
             "        [-cp_port <CP port for sync msgs (default 19523)>]",
 
+            "        [-sock <# of UDP sockets, 16 max>]",
             "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
             "        [-mtu <desired MTU size>]",
             "        [-t <tick>]",
@@ -104,6 +105,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t *avgBufSize, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       uint32_t *repeats,
+                      int *socks,
                       int *cores,
                       bool *debug,
                       bool *useIPv6, bool *bufDelay, bool *sendSync,
@@ -123,6 +125,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"id",    1, NULL, 4},
              {"pro",   1, NULL, 5},
              {"sync",   0, NULL, 6},
+             {"sock",   1, NULL, 7},
              {"dpre",  1, NULL, 9},
              {"tpre",  1, NULL, 10},
              {"ipv6",  0, NULL, 11},
@@ -297,6 +300,19 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 6:
                 // do we send sync messages to LB?
                 *sendSync = true;
+                break;
+
+            case 7:
+                // # of UDP sockets used to send data
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 0 && i_tmp < 17) {
+                    *socks = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -sock, # sockets must be > 0 and < 17\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
                 break;
 
             case 9:
@@ -585,6 +601,7 @@ int main(int argc, char **argv) {
 
     uint64_t tick = 0;
     int cores[10];
+    int socks = 1;
     int mtu, version = 2, protocol = 1, entropy = 0;
     int rtPriority = 0;
     uint16_t dataId = 1;
@@ -609,7 +626,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version,
             &dataId, &port, &cp_port, &tick,
               &delay, &bufRate, &avgBufSize, &sendBufSize,
-              &delayPrescale, &tickPrescale,  &repeats, cores, &debug,
+              &delayPrescale, &tickPrescale,  &repeats, &socks, cores, &debug,
               &useIPv6, &bufDelay, &sendSync,
               host, cp_host, interface, filename);
 
@@ -737,7 +754,7 @@ int main(int argc, char **argv) {
     int portIndex = 0, lastIndex = -1;
     int clientSockets[maxSocks];
 
-    for (int i = 0; i < maxSocks; i++) {
+    for (int i = 0; i < socks; i++) {
         if (useIPv6) {
             struct sockaddr_in6 serverAddr6;
 
@@ -1012,7 +1029,7 @@ if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRat
             }
         }
 
-        portIndex = (portIndex + 1) % 16;
+        portIndex = (portIndex + 1) % socks;
 
         // delay if any
         if (bufDelay) {
