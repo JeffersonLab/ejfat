@@ -359,7 +359,7 @@ namespace ejfat {
 
 
             buffer[0] = version << 4;
-            buffer[1] = reserved;
+            buffer[1] = reserved & 0xff;
 
             *((uint16_t *)(buffer + 2))  = htons(dataId);
             *((uint32_t *)(buffer + 4))  = htonl(offset);
