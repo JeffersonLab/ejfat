@@ -1190,7 +1190,7 @@ static void *threadAssemble(void *arg) {
                             exit(1);
                         }
 
-                        fprintf(stderr, "\nRestarted data source %d\n", sourceId);
+                        //fprintf(stderr, "\nRestarted data source %d\n", sourceId);
 
                         // Tell stat thread when restart happened so that rates can be calculated within reason
                         struct timespec now;
@@ -1287,14 +1287,6 @@ static void *threadAssemble(void *arg) {
                 auto oldestEntry = *(fastTickMap.begin());
                 uint64_t oldestTick = oldestEntry.first;
                 std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
-
-                if (oldestBufItem.get() == nullptr) {
-std::cout << "oldest fastmap item is NULL!\n";
-                }
-
-                if (oldestBufItem->getBuffer() == nullptr) {
-                    std::cout << "oldest fastmap item is NULL!\n";
-                }
 
                 // Copy entry
                 auto slowBufItem = std::make_shared<BufferItem>(oldestBufItem);
