@@ -7,9 +7,6 @@
 # To build code that uses the ET system,
 #   % cmake .. -DBUILD_ET=1
 #
-# To build code that uses the ZMQ,
-#   % cmake .. -DBUILD_ZMQ=1
-#
 # To build ERSAP engine/service code, define env var ERSAP_HOME and
 #   % cmake .. -DBUILD_ERSAP=1
 #
@@ -250,7 +247,8 @@ else()
 endif()
 
 
-# Ersap build is optional and set it to OFF by default
+# Ersap build is optional and set it to OFF by default.
+# Building this requires the ZMQ library.
 option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
 
 if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
@@ -316,12 +314,11 @@ if (DEFINED MAKE_EXEC)
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
             target_include_directories(${execName} PUBLIC   ${HIPO_INCLUDE_DIRS}
-                    ${ZeroMQ_INCLUDE_DIRS}
                     ${ET_INCLUDE_DIRS}
                     ${CMAKE_SOURCE_DIR}/simulation
                     ${CMAKE_SOURCE_DIR}/util)
             # Needs these libs
-            target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY} ${HIPO_LIBRARIES})
+            target_link_libraries(${execName} pthread ${ET_LIBRARY} ${HIPO_LIBRARIES})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)
