@@ -897,7 +897,7 @@ int main(int argc, char **argv) {
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) bufSize, &offset,
                                               packetDelay, delayPrescale, &delayCounter,
-                                              firstBuffer, lastBuffer, debug, direct, &packetsSent, portIndex);
+                                              firstBuffer, lastBuffer, debug, direct, &packetsSent);
         if (err < 0) {
             // Should be more info in errno
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
