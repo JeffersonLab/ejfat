@@ -96,7 +96,6 @@ Doesn't make a diff if buffers dumped or examined.
 
 #### packetBlasteeEtFifoClient.cc  &   packtBlasteeEtFifoClientNew.cc
 
-
 This data receiver reads UDP packets from clasBlaster.cc as an event source, reassembles it, then
 places it into an ET system which is configured to be used as a FIFO.
 It also connects and reports telemetry to the LB's control plane.
@@ -113,7 +112,6 @@ developed when finishing work for the CHEP paper. It's yet untested.
 
 #### packetBlastee.cc
 
-
 The originial and most basic data receiver with one thread for stats and a settable number
 of threads for the reading and reassembling of events.
 
@@ -128,24 +126,56 @@ Duplicate packets will mess things up.
 General program used to send data to the various receiving programs. Lots of cmd line options.
 
 
-#### udp_send_order.cc & udp_recv_order.cc
 
-These 2 programs send and receive packets.
-They can communicate directly with eachother if, in ejfat_packetize.hpp, you comment out the
+#### udp_rcv_et.cc
+
+This program acts as a data receiver in testing the use of the ET system as a fifo.
+It receives data sent by multiple source ids (given on command line), and 
+places those in an ET system acting as a fifo.
+You'll have to coordinate the number of data sources, with the setting up of the ET system.
+For example, for 3 sources, run the ET with something like:
+
+    et_start_fifo -f /tmp/fifoEt -d -s 150000 -n 3 -e 1000
+
+You can then run this program like:
+
+    udp_rcv_et -et /tmp/fifoEt -ids 1,3,76 -p 17750 -core 80 -pinCnt 4
+
+This expects data sources 1,3, and 76. There will be room in each ET fifo entry to have
+3 buffers (ET events), one for each source, all the same event number. There will be 1000 entries.
+Each buffer will be 150kB. Max # of sources is 16 (can change that).
+
+You can run the data producing program like:
+
+    clas_source/clasBlasterIds -f /daqfs/java/clas_005038.1231.hipo -host 172.19.22.244 -p 19522 -mtu 9000 -s 25000000 -cores 60 -ids 1,3,76  -bufdelay -d 50000
+
+
+
+#### udp_send_order.cc
+
+Send a file, which is either read or piped-in, to udp_rcv_order.cc
+
+
+
+#### udp_rcv_order.cc
+
+Receive the file sent to it by udp_send_order.cc and reconstruct it.
+
+These 2 programs can communicate directly with eachother and bypass the LB if,
+in ejfat_packetize.hpp, you comment out the
 
     #define ADD_LB_HEADER 1
 
-line near the top of the file. If, however, you want to use this with the ejfat emulater,
-it must not be commented out.
-
-Most of the hard work is done in ejfat_packetize.hpp and ejfat_assemble_ersap.hpp.
-These 2 files are copied over to ersap-ejfat for implementing the packetizing
-and reassembly services and engines.
+line near the top of the file.
+Most of the work is done in ejfat_packetize.hpp and ejfat_assemble_ersap.hpp header files.
 
 
 
+#### ersap_et_consumer.cc
 
-
+This file is just an example for Vardan or any user of the ET-system-as-a-fifo.
+It shows how to read the ET system when it's configured as a fifo.
+Other than that, this program is never used or run.
 
 
 ## THINGS TO DO:
