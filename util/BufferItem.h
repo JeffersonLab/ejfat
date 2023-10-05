@@ -64,7 +64,7 @@ namespace ejfat {
          * track the packet header offsets to ensure there
          * are no duplicate packets included.
          */
-        std::unordered_set<uint32_t> offsets;
+        std::unordered_set<uint32_t> offsets {};
 
         /**
          * If true, and this item comes from a supply used in the sense of

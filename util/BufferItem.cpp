@@ -88,18 +88,18 @@ namespace ejfat {
     void BufferItem::copy(const BufferItem & item) {
         // Avoid self copy ...
         if (this != &item) {
-            buffer->copy(item.getBuffer());
-            bufferSize       = item.bufferSize;
-            order            = item.order;
-            force            = item.force;
-            isValidData      = item.isValidData;
-            userInt          = item.userInt;
-            userLong         = item.userLong;
-            userBoolean      = item.userBoolean;
+            buffer      = ByteBuffer::copyBuffer(item.getBuffer());
+            bufferSize  = item.bufferSize;
+            order       = item.order;
+            force       = item.force;
+            isValidData = item.isValidData;
+            userInt     = item.userInt;
+            userLong    = item.userLong;
+            userBoolean = item.userBoolean;
 
-            eventNum         = item.eventNum;
-            dataLen          = item.dataLen;
-            offsets          = item.offsets;
+            eventNum    = item.eventNum;
+            dataLen     = item.dataLen;
+            offsets     = item.offsets;
         }
     }
 
@@ -111,18 +111,19 @@ namespace ejfat {
     void BufferItem::copy(const std::shared_ptr<BufferItem> & item) {
         // Avoid self copy ...
         if (this != item.get()) {
-            buffer->copy(item->getBuffer());
-            bufferSize       = item->bufferSize;
-            order            = item->order;
-            force            = item->force;
-            isValidData      = item->isValidData;
-            userInt          = item->userInt;
-            userLong         = item->userLong;
-            userBoolean      = item->userBoolean;
+            auto buf = item->getBuffer();
+            buffer      = ByteBuffer::copyBuffer(item->getBuffer());
+            bufferSize  = item->bufferSize;
+            order       = item->order;
+            force       = item->force;
+            isValidData = item->isValidData;
+            userInt     = item->userInt;
+            userLong    = item->userLong;
+            userBoolean = item->userBoolean;
 
-            eventNum         = item->eventNum;
-            dataLen          = item->dataLen;
-            offsets          = item->offsets;
+            eventNum    = item->eventNum;
+            dataLen     = item->dataLen;
+            offsets     = item->offsets;
         }
     }
 
