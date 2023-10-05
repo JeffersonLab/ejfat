@@ -12,12 +12,11 @@
  * <p>
  * @file Read the given HIPO data file and send each event in it
  * to an ejfat router (FPGA-based or simulated) which then passes it
- * to the receiving program - possibly packetBlastee.cc but more likely
- * packetBlasteeEtFifoClient.cc .
+ * to the receiving program - possibly packetBlasteeEtFifoClient.cc .
  * Try /daqfs/java/clas_005038.1231.hipo on the DAQ group disk.
  * </p>
  * <p>
- * This program creates 16 output UDP sockets and rotates between them when
+ * This program creates 1 to 16 output UDP sockets and rotates between them when
  * sending each event/buffer. This is to facilitate efficient switch operation.
  * The variation in port numbers gives the switch more "entropy",
  * according to ESNET, since each connection is defined by source & host IP and port #s
