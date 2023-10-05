@@ -51,11 +51,12 @@
  * To produce at 4.7 GB/s, use cores 80-87. (Notices cores # start at 0).
  *
  * On an EJFAT node, this receiver will be able to receive data on a single thread of over
- * 3.3 GB/s dropping about 0.02%. It can receive at
- * 3.48 GB/s with dropping about 0.2%, but can't seem to be pushed beyond that.
+ * 3.3 GB/s dropping about 0.03%. It can receive at
+ * 3.4 GB/s with dropping about 0.2% with 3 cores, but can't seem to be pushed beyond that.
  * To receive at high rates, the args "-pinRead 80 -pinCnt 2" must be used to specify the fastest
  * network cores for packet-reading-reassembling threads.
- * There needs to be 2 or 3 cores/thd to distribute the work, 2 is best.
+ * There needs to be 2 or 3 cores/thd to distribute the work, 2 is fine except when pushing the limit
+ * in which case 3 helps a little.
  * Cores 80-87 have fastest access to the NIC.
  * Also, the main core needs to be pinned to the same chip to get least drops.
  * </p>
@@ -910,15 +911,12 @@ typedef struct threadArg_t {
  * <p>
  * Thread to assemble incoming packets into their original buffers.
  *
- * There is an input data ring in which references to packets from just one data source have been placed
- * by the reading thread. (This reading thd looks to see which source a packet is from
- * and places it into the proper data ring).
- * There is another ring (one per source in this application) which contains empty buffers
- * designed to hold built events.
- * An empty buffer is taken from the buffer ring. Then packets are taken from the
- * data ring and reconstructed into an event in that empty buffer.
+ * There is a fast-ring-buffer-based supply which contains empty buffers designed to hold built events.
+ * An empty buffer is taken from the buffer supply. Then packets are read from the socket and
+ * reconstructed into an event in that empty buffer.
  * When the event is fully constructed, the buffer is released back to the ring
- * which is then accessed by another thread which is looking for the built events.
+ * which is then accessed by another thread which is looking for the built events downstream
+ * (or it can simply be dumped straight away).
  * </p>
  * <p>
  * How is the decision made to discard packets?
@@ -926,15 +924,15 @@ typedef struct threadArg_t {
  * This thread will only keep a limited number of partially constructed events in an effort to wait
  * for straggling packets with the oldest event being discarded if more storage is needed.
  * Also, old events will have their memory released if not fully constructed before a given
- * number of microseconds.
+ * time limit.
  * After each packet is consumed, a scan is made to see if anything needs to be discarded.
  * All out-of-order and duplicate packets are handled.
  * </p>
  * <p>
  * What happens if a data source dies and restarts?
- * This causes the tick sequence to restart. In order to avoid causing problems
- * calculating various stats, like rates, the "biggest tick" from a source is
- * reset if 1000 packets with smaller ticks show up after.
+ * This causes the tick/event-number sequence to restart. In order to avoid causing problems
+ * calculating various stats, like rates, the "biggest tick" from a source is reset if 1000
+ * packets with smaller ticks than the current largest.
  * </p>
  *
  *
@@ -1053,7 +1051,7 @@ static void *threadAssemble(void *arg) {
 
 
 
-    std::shared_ptr<BufferItem>  bufItem;
+    std::shared_ptr<BufferItem>  bufItem, prevBufItem;
     std::shared_ptr<ByteBuffer>  buf;
 
 #ifdef __linux__
@@ -1112,20 +1110,21 @@ static void *threadAssemble(void *arg) {
     // If this is the case, then the tick # will be much smaller than the previous value.
     int64_t tick, prevTick = -1, largestTick = -1, largestSlowTick = -1;
     uint32_t offset, length;
+    int portIndex;
     bool restarted = false, fromSlowMap = false;
+    size_t count;
 
     int pktSizeMax = 9100;
     char pkt[pktSizeMax];
+    reHeader hdr;
 
 
     while (true) {
 
         //-------------------------------------------------------------
-        // Get item containing packet previously read in by main thd
+        // Get packet
         //-------------------------------------------------------------
 
-        //ssize_t bytesRead = recvfrom(udpSocket, pkt, PacketStoreItem::size, 0, nullptr, nullptr);
-        // We can use this with packetBlaster and is faster than recvfrom()
         ssize_t bytesRead = recv(udpSocket, pkt, PacketStoreItem::size, 0);
         if (bytesRead < 0) {
             if (debug) fprintf(stderr, "recvmsg failed: %s\n", strerror(errno));
@@ -1137,12 +1136,12 @@ static void *threadAssemble(void *arg) {
         }
 
         // Parse header & store in item
-        reHeader hdr;
         parseReHeader(pkt, &hdr);
 
         tick    = (int64_t)hdr.tick;
         offset  = hdr.offset;
         length  = hdr.length;
+        portIndex = hdr.reserved;
         fromSlowMap = false;
 
         assert(hdr.dataId == sourceId);
@@ -1150,17 +1149,26 @@ static void *threadAssemble(void *arg) {
         // If NOT the same tick as previous ...
         if (tick != prevTick) {
 
-            // If older tick than last tick ...
-            if (tick < largestTick) {
+            bufItem = nullptr;
+
+            // If tick is larger than largest, we'll need to get a new bufItem from supply
+
+            // Also, if tick is <= largest tick received thus far,
+            // it may be stored in one of the maps ...
+            if (tick <= largestTick) {
 
                 // If VERY OLD tick which will only be found in slow storage ...
                 if (tick <= largestSlowTick) {
-                    fromSlowMap = true;
-                    bufItem = slowTickMap[tick];
+                    if (slowTickMap.count(tick)) {
+                        bufItem = slowTickMap[tick];
+                        fromSlowMap = true;
+                    }
                 }
                 else {
                     // Look for it in fast storage
-                    bufItem = fastTickMap[tick];
+                    if (fastTickMap.count(tick)) {
+                        bufItem = fastTickMap[tick];
+                    }
                 }
 
                 if (bufItem == nullptr) {
@@ -1174,7 +1182,6 @@ static void *threadAssemble(void *arg) {
                     // How do we tell if a data source has been restarted?
                     // Hopefully this is good enough.
                     bool restarted = (largestTick - tick > 1000);
-//fprintf(stderr, "Smaller tick %" PRId64 "\n", tick);
 
                     if (restarted) {
                         if (noRestart) {
@@ -1182,6 +1189,8 @@ static void *threadAssemble(void *arg) {
                             fflush(stderr);
                             exit(1);
                         }
+
+                        fprintf(stderr, "\nRestarted data source %d\n", sourceId);
 
                         // Tell stat thread when restart happened so that rates can be calculated within reason
                         struct timespec now;
@@ -1213,38 +1222,65 @@ static void *threadAssemble(void *arg) {
                                 // next iterator. So, don't need to increment.
                                 it = fastTimeMap.erase(it);
                             }
-
-                            slowTickMap.clear();
-                            slowTimeMap.clear();
                         }
+
+                        slowTickMap.clear();
+                        slowTimeMap.clear();
 
                         if (takeStats) {
                             clearStats(stats);
                         }
                     }
                     else  {
-                        std::cout << "  ignore old pkt from tick " << tick << std::endl;
+                        // std::cout << "  ignore old pkt from tick " << tick << std::endl;
+
+                        // If we're here:
+                        //    1) tick may have been reassembled and this is a duplicate packet, or
+                        //    2) it is a very late packet
+                        //
+                        // In both cases, the incomplete buffer was deleted/released.
+                        // So just ignore this packet.
+                        // This actually happens quite often when packetBlaster has its "-sock" flag set to > 1.
+                        // There seems to be a race condition between packets sent by one app but on different
+                        // sockets!
+                        //
+                        // Unfortuneately, we just set bufItem = nullptr since tick changed. But, presumably,
+                        // it will change back to the tick we were most recently working on.
+                        // If we leave bufItem = nullptr, then a new buffer will be obtained from the supply
+                        // and overwrite the previous causing many problems.
+
+                        // So, go back and restore things back to they way they were before the really
+                        // old packets showed up.
+                        bufItem = prevBufItem;
                         continue;
                     }
                 }
             }
 
-            // With the load balancer, ticks can only increase. This new, largest tick
-            // (or restarted tick) will not have an associated buffer yet, so create it,
-            // store it, etc.
 
-            fastTickMap[tick] = bufItem = bufSupply->get();
-            bufItem->setEventNum(tick);
-            bufItem->setDataLen(length);
+            // Could not find it stored anywhere. This will only happen if it's the largest tick
+            // received so far or the source was restarted and thus it is now the largest tick.
+            if (bufItem == nullptr) {
+                // With the load balancer, ticks can only increase. This new, largest tick
+                // (or restarted tick) will not have an associated buffer yet, so create it,
+                // store it, etc.
 
-            // store current time in microsec
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            microSec = ((1000000L * now.tv_sec) + (now.tv_nsec/1000L));
-            fastTimeMap.insert({tick, microSec});
+                fastTickMap[tick] = bufItem = bufSupply->get();
+                bufItem->setEventNum(tick);
+                bufItem->setDataLen(length);
 
-            largestTick = tick;
+                // store current time in microsec
+                clock_gettime(CLOCK_MONOTONIC, &now);
+                microSec = ((1000000L * now.tv_sec) + (now.tv_nsec / 1000L));
+                fastTimeMap[tick] = microSec;
+
+                largestTick = tick;
+            }
+
 
             // At limit of # of bufs that can be worked on concurrently?
+            // If we pulled bufItem out of the fastTickMap above, then this
+            // should not be true.
             if (fastTickMap.size() > FAST_MAP_MAX) {
 
                 // Find oldest entry in the fast map (still part of the supply)
@@ -1252,9 +1288,13 @@ static void *threadAssemble(void *arg) {
                 uint64_t oldestTick = oldestEntry.first;
                 std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
 
-                // Remove oldest entry from fast map
-                fastTickMap.erase(oldestTick);
-                fastTimeMap.erase(oldestTick);
+                if (oldestBufItem.get() == nullptr) {
+std::cout << "oldest fastmap item is NULL!\n";
+                }
+
+                if (oldestBufItem->getBuffer() == nullptr) {
+                    std::cout << "oldest fastmap item is NULL!\n";
+                }
 
                 // Copy entry
                 auto slowBufItem = std::make_shared<BufferItem>(oldestBufItem);
@@ -1276,18 +1316,18 @@ static void *threadAssemble(void *arg) {
                     uint64_t oldestSlowTick = oldestSlowEntry.first;
                     auto oldestSlowItem = oldestSlowEntry.second;
 
-                    // Remove oldest entry from slow map. NOTE:
-                    // BufferItems in slowTickMap are not part of the supply and so can
-                    // be deleted without having to publish or release back to the supply.
-                    slowTickMap.erase(oldestSlowTick);
-                    slowTimeMap.erase(oldestSlowTick);
-
                     if (takeStats) {
                         stats->discardedBuffers++;
                         stats->discardedBytes += oldestSlowItem->getDataLen();
                         // This will under count pkts discarded since not all have arrived yet
                         stats->discardedPackets  += oldestSlowItem->getUserInt();
                     }
+
+                    // Remove oldest entry from slow map. NOTE:
+                    // BufferItems in slowTickMap are not part of the supply and so can
+                    // be deleted without having to publish or release back to the supply.
+                    slowTickMap.erase(oldestSlowTick);
+                    slowTimeMap.erase(oldestSlowTick);
 //std::cout << "D_" << slowTickMap.size() << " ";
                 }
 
@@ -1297,13 +1337,17 @@ static void *threadAssemble(void *arg) {
                 largestSlowTick = oldestTick;
 //std::cout << "M_" << slowTickMap.size() << " ";
 
+                // Remove oldest entry from fast map
+                fastTickMap.erase(oldestTick);
+                fastTimeMap.erase(oldestTick);
 //std::cout << "  remove partial tick " << oldestTick << ", fastTickMap size = " << fastTickMap.size() << std::endl;
-
             }
         }
 
+
         // Check for duplicate packets, ie if its offset has been stored already
         auto &offsets = bufItem->getOffsets();
+//std::cout << portIndex << " " ;
         if (offsets.find(offset) != offsets.end()) {
             // There was already a packet with this offset, so ignore this duplicate packet!!
 std::cout << "Got duplicate packet for event " << tick << ", offset " << offset << std::endl;
@@ -1316,6 +1360,7 @@ std::cout << "Got duplicate packet for event " << tick << ", offset " << offset 
 
         // Keep track so if next packet is same source/tick, we don't have to look it up
         prevTick = tick;
+        prevBufItem = bufItem;
 
         // We are using the ability of the BufferItem to store a user's long.
         // Use it store how many bytes we've copied into it so far.
@@ -1361,9 +1406,6 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
             if (fromSlowMap) {
                 // It should be a VERY SELDOM thing that a very old partially-constructed buffer
                 // gets a late packet, gets completely assembled, and is ready to be passed on.
-                // Clear buffer from local map.
-                slowTickMap.erase(tick);
-                slowTimeMap.erase(tick);
 
                 // Get it back into the supply by getting a free buffer from supply, copying this
                 // item into the new buffer, and placing it back into the supply.
@@ -1378,18 +1420,22 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
                 else {
                     bufSupply->publish(bItem);
                 }
+
+                // Clear buffer from local map
+                slowTickMap.erase(tick);
+                slowTimeMap.erase(tick);
             }
             else {
-                // Clear buffer from local map
-                fastTickMap.erase(tick);
-                fastTimeMap.erase(tick);
-
                 if (dumpBufs) {
                     bufSupply->release(bufItem);
                 }
                 else {
                     bufSupply->publish(bufItem);
                 }
+
+                // Clear buffer from local map
+                fastTickMap.erase(tick);
+                fastTimeMap.erase(tick);
             }
         }
 
@@ -1425,21 +1471,21 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
                         uint64_t oldestSlowTick = oldestSlowEntry.first;
                         auto oldestSlowItem = oldestSlowEntry.second;
 
-                        slowTickMap.erase(oldestSlowTick);
-                        slowTimeMap.erase(oldestSlowTick);
-
                         if (takeStats) {
                             stats->discardedBuffers++;
-                            stats->discardedBytes += oldestSlowItem->getDataLen();
-                            stats->discardedPackets  += oldestSlowItem->getUserInt();
+                            stats->discardedBytes   += oldestSlowItem->getDataLen();
+                            stats->discardedPackets += oldestSlowItem->getUserInt();
                         }
+
+                        slowTickMap.erase(oldestSlowTick);
+                        slowTimeMap.erase(oldestSlowTick);
 //std::cout << "D" << slowTickMap.size() << " ";
                     }
 
-                    // Put copied bufItem into slow map
+                    // Put copied bItem into slow map
                     slowTickMap[tik] = slowItem;
-                    slowTimeMap.insert({tik, microSec});
-                    largestSlowTick = tik;
+                    slowTimeMap[tik] = microSec;
+                    largestSlowTick  = tik;
 //std::cout << "M" << slowTickMap.size() << " ";
 
                     // Erase the entry in fastTickMap associated with this tick
@@ -1468,7 +1514,7 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
 
                     if (takeStats) {
                         stats->discardedBuffers++;
-                        stats->discardedBytes += bItem->getDataLen();
+                        stats->discardedBytes   += bItem->getDataLen();
                         stats->discardedPackets += bItem->getUserInt();
                     }
 
@@ -1480,7 +1526,6 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
                 }
             }
         }
-
 
     }
 
@@ -1612,7 +1657,7 @@ static void *threadAssembleGood(void *arg) {
 
 
 
-    std::shared_ptr<BufferItem>      bufItem;
+    std::shared_ptr<BufferItem>      bufItem, prevBufItem;
     std::shared_ptr<ByteBuffer>      buf;
 
 #ifdef __linux__
@@ -1660,6 +1705,7 @@ static void *threadAssembleGood(void *arg) {
 
     int pktSizeMax = 9100;
     char pkt[pktSizeMax];
+    reHeader hdr;
 
 
     while (true) {
@@ -1681,7 +1727,6 @@ static void *threadAssembleGood(void *arg) {
         }
 
         // Parse header & store in item
-        reHeader hdr;
         parseReHeader(pkt, &hdr);
 
         tick    = (int64_t)hdr.tick;
@@ -1693,9 +1738,17 @@ static void *threadAssembleGood(void *arg) {
         // If NOT the same tick as previous ...
         if (tick != prevTick) {
 
-            if (tick < largestTick) {
-                bufItem = tickMap[tick];
-                if (bufItem == nullptr) {
+            bufItem = nullptr;
+
+            // If tick is larger than largest, we'll need to get a new bufItem from supply.
+
+            // Also, if tick is <= largest tick received thus far, may be stored in the map ...
+            if (tick <= largestTick) {
+
+                if (tickMap.count(tick)) {
+                    bufItem = tickMap[tick];
+                }
+                else {
                     // If there is no buffer associated with this tick available,
                     //    1) tick may have been reassembled and this is a late, duplicate packet, or
                     //    2) it is a very late packet and the incomplete buffer was deleted/released, or
@@ -1752,26 +1805,31 @@ static void *threadAssembleGood(void *arg) {
                         }
                     }
                     else  {
-                        std::cout << "  ignore old pkt from tick " << tick << std::endl;
+                        //std::cout << "  ignore old pkt from tick " << tick << std::endl;
+                        bufItem = prevBufItem;
                         continue;
                     }
                 }
             }
 
-            // With the load balancer, ticks can only increase. This new, largest tick
-            // (or restarted tick) will not have an associated buffer yet, so create it,
-            // store it, etc.
+            // Could not find it stored anywhere. This will only happen if it's the largest tick
+            // received so far or the source was restarted and thus it is now the largest tick.
+            if (bufItem == nullptr) {
+                // With the load balancer, ticks can only increase. This new, largest tick
+                // (or restarted tick) will not have an associated buffer yet, so create it,
+                // store it, etc.
 
-            tickMap[tick] = bufItem = bufSupply->get();
-            bufItem->setEventNum(tick);
-            bufItem->setDataLen(length);
+                tickMap[tick] = bufItem = bufSupply->get();
+                bufItem->setEventNum(tick);
+                bufItem->setDataLen(length);
 
-            // store current time in msec
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            microSec = ((1000000L * now.tv_sec) + (now.tv_nsec/1000L));
-            timeMap.insert({tick, microSec});
+                // store current time in msec
+                clock_gettime(CLOCK_MONOTONIC, &now);
+                microSec = ((1000000L * now.tv_sec) + (now.tv_nsec / 1000L));
+                timeMap.insert({tick, microSec});
 
-            largestTick = tick;
+                largestTick = tick;
+            }
 
             // Are we at limit of # of buffers being worked on? If so, discard oldest
             if (tickMap.size() > 4) {
@@ -1814,6 +1872,7 @@ static void *threadAssembleGood(void *arg) {
 
         // Keep track so if next packet is same source/tick, we don't have to look it up
         prevTick = tick;
+        prevBufItem = bufItem;
 
         // We are using the ability of the BufferItem to store a user's long.
         // Use it store how many bytes we've copied into it so far.
