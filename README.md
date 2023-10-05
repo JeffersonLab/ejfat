@@ -51,6 +51,7 @@ ESnet-JLab FPGA Accelerated Transport
 - libxmsg.so
 - libhipo.so
 - liblz4.so
+- libzmq.so
 
 #### From (and for) grpc
 
