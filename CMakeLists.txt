@@ -13,7 +13,8 @@
 # To build ERSAP engine/service code, define env var ERSAP_HOME and
 #   % cmake .. -DBUILD_ERSAP=1
 #
-# These flag may be combined
+# These and other flags may be combined to do a complete build
+#  % cmake .. -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1
 #
 # After doing this once can do the following to recompile
 #  % cd <top level evio dir>
@@ -105,6 +106,7 @@ set(EMU_EXEC_FILES
 
 set(GRPC_EXEC_FILES
         simulation/packetBlasteeEtFifoClient.cc
+        simulation/packetBlasteeEtFifoClientNew.cc
         )
 
 set(ET_EXEC_FILES
@@ -116,7 +118,6 @@ set(ET_EXEC_FILES
 set(DIS_EXEC_FILES
         simulation/packetBlasteeFullNew.cc
         simulation/packetBlasteeFullNewMP.cc
-        simulation/packetBlasteeTcpMT.cc
         )
 
 set(UTIL_FILES
@@ -136,8 +137,6 @@ set(SIM_EXEC_FILES
         simulation/udp_rcv_order.cc
         simulation/udp_send_order.cc
         simulation/packetBlastee.cc
-        simulation/packetBlasteeMT.cc
-        simulation/packetBlasteeTcp.cc
         simulation/packetBlaster.cc
         simulation/packetBlasterSmall.cc
         )
