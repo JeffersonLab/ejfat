@@ -366,6 +366,34 @@ static inline uint64_t bswap_64(uint64_t x) {
         }
 
 
+       /**
+        * Parse the load balance header at the start of the given buffer.
+        * This is used only to debug the data coming over on the header.
+        * Return first 2 bytes as ints, not chars in case there are issues.
+        * Throw no exception.
+        *
+        * @param buffer   buffer to parse.
+        * @param ll       return 1st byte as int.
+        * @param bb       return 2nd byte as int.
+        * @param version  return 3rd byte as integer version.
+        * @param protocol return 4th byte as integer protocol.
+        * @param entropy  return 2 bytes as 16 bit integer entropy.
+        * @param tick     return last 8 bytes as 64 bit integer tick.
+        */
+        static void readLbHeader(const char* buffer, int* ll, int* bb,
+                                          uint32_t* version, uint32_t* protocol,
+                                          uint32_t* entropy, uint64_t* tick)
+        {
+            *ll = (int)buffer[0];
+            *bb = (int)buffer[1];
+
+            *version  = ((uint32_t)buffer[2] & 0xff);
+            *protocol = ((uint32_t)buffer[3] & 0xff);
+            *entropy  = ntohs(*((uint16_t *)(&buffer[6]))) & 0xffff;
+            *tick     = ntohll(*((uint64_t *)(&buffer[8])));
+        }
+
+
         /**
          * Parse the reassembly header at the start of the given buffer.
          * Return parsed values in pointer args.
