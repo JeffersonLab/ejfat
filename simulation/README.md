@@ -121,6 +121,13 @@ Duplicate packets will mess things up.
 
 
 
+#### packetAnalyzer.cc
+
+This program accepts packets and prints out both the LB and RE headers.
+Used only to debug header issues.
+
+
+
 #### packetBlaster.cc
 
 General program used to send data to the various receiving programs. Lots of cmd line options.
