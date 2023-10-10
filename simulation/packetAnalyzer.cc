@@ -9,8 +9,7 @@
 
 
 /**
- * @file Receive generated data sent by packetBlaster.c program.
- * This assumes there is an emulator or FPGA between this and the sending program.
+ * @file Receive UDP packets and print out both LB and RE headers in effort to debug.
  */
 
 #include <cstdlib>
