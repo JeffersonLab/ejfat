@@ -133,6 +133,7 @@ set(UTIL_FILES
 set(SIM_EXEC_FILES
         simulation/udp_rcv_order.cc
         simulation/udp_send_order.cc
+        simulation/packetAnalyzer.cc
         simulation/packetBlastee.cc
         simulation/packetBlaster.cc
         simulation/packetBlasterSmall.cc
