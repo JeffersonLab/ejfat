@@ -46,6 +46,7 @@
 #endif
 
 
+#define ADD_LB_HEADER 1
 
 #define LB_HEADER_BYTES_OLD 16
 #define HEADER_BYTES_OLD    34
