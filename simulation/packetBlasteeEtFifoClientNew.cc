@@ -81,22 +81,21 @@ using namespace ejfat;
 
 
 template<class X>
-X pid(          // Proportional, Integrative, Derivative Controller
-        const X& setPoint, // Desired Operational Set Point
-        const X& prcsVal,  // Measure Process Value
-        const X& delta_t,  // Time delta between determination of last control value
-        const X& Kp,       // Konstant for Proprtional Control
-        const X& Ki,       // Konstant for Integrative Control
-        const X& Kd,       // Konstant for Derivative Control
-        const X& previous_error // previous error from 1 second ago
+X pid(                      // Proportional, Integrative, Derivative Controller
+        const X& setPoint,  // Desired Operational Set Point
+        const X& prcsVal,   // Measure Process Value
+        const X& delta_t,   // Time delta between determination of last control value
+        const X& Kp,        // Konstant for Proprtional Control
+        const X& Ki,        // Konstant for Integrative Control
+        const X& Kd,        // Konstant for Derivative Control
+        const X& prev_err,  // previous error
+        const X& prev_err_t // # of microseconds earlier that previous error was recorded
 )
 {
-    //static X previous_error = 0; // for Derivative (now given as arg)
     static X integral_acc = 0;   // For Integral (Accumulated Error)
     X error = setPoint - prcsVal;
     integral_acc += error * delta_t;
-    X derivative = (error - previous_error) / delta_t;
-    //previous_error = error;
+    X derivative = (error - prev_err) * 1000000. / prev_err_t;
     return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
 }
 
@@ -129,9 +128,9 @@ static void printHelp(char *programName) {
             "        [-gport <CP port (default 18347)>]",
             "        [-gname <name of this backend (default backend_<time>)>]\n\n",
 
-            "        [-kp <PID proportional constant, default 0.8>]",
-            "        [-ki <PID integral constant, default 0.02>]",
-            "        [-kd <PID differential constant, default 0.001>]\n",
+            "        [-kp <PID proportional constant, default 0.52>]",
+            "        [-ki <PID integral constant, default 0.005>]",
+            "        [-kd <PID differential constant, default 0.0>]\n",
 
             "        [-count <# of most recent fill values averaged, default 1000>]",
             "        [-rtime <millisec for reporting fill to CP, default 1000>]\n\n",
@@ -781,7 +780,7 @@ static void *pidThread(void *arg) {
 
         fillAvg = runningFillTotal / fcountFlt;
         fillPercent = fillAvg / fifoCapacityFlt;
-        pidError = pid<float>(setPoint, fillPercent, deltaT, Kp, Ki, Kd, oldestPidError);
+        pidError = pid<float>(setPoint, fillPercent, deltaT, Kp, Ki, Kd, oldestPidError, sampleTime*fcount);
 
         // Track pid error
         oldPidErrors[currentIndex] = pidError;
@@ -1056,6 +1055,7 @@ int main(int argc, char **argv) {
               &Kp, &Ki, &Kd);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
+    std::cerr << "Using Kp = " << Kp << ", Ki = " << Ki << ", Kd = " << Kd << "\n";
 
     // Do we report to control plane?
     bool reportToCP = true;
