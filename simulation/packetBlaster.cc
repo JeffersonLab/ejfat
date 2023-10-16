@@ -61,14 +61,15 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6] [-sync] [-direct]\n",
 
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port, default 19522>]",
-            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]\n",
+            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
+            "        [-nc (no connect on socket)]\n",
 
             "        [-sock <# of UDP sockets, 16 max>]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
@@ -105,7 +106,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       uint32_t *sockets, int *cores,
                       bool *debug, bool *useIPv6, bool *bufDelay,
-                      bool *sendSync, bool *direct,
+                      bool *sendSync, bool *direct, bool *noConnect,
                       char* host, char *interface) {
 
     int c, i_tmp;
@@ -130,6 +131,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"byterate",  1, nullptr, 15},
              {"sock",  1, nullptr, 16},
              {"direct",  0, nullptr, 17},
+             {"nc",  0, nullptr, 18},
              {nullptr,       0, 0,    0}
             };
 
@@ -361,6 +363,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *direct = true;
                 break;
 
+            case 18:
+                // do we NOT connect socket?
+                *noConnect = true;
+                break;
+
             case 13:
                 // Cores to run on
                 if (strlen(optarg) < 1) {
@@ -567,6 +574,7 @@ int main(int argc, char **argv) {
     bool setBufRate = false, setByteRate = false;
     bool sendSync = false;
     bool direct = false;
+    bool noConnect = false;
 
     char syncBuf[28];
     char host[INPUT_LENGTH_MAX], interface[16];
@@ -581,7 +589,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale, &sockCount, cores, &debug,
-              &useIPv6, &bufDelay, &sendSync, &direct, host, interface);
+              &useIPv6, &bufDelay, &sendSync, &direct, &noConnect, host, interface);
 
 #ifdef __linux__
 
@@ -616,6 +624,7 @@ int main(int argc, char **argv) {
 
 #endif
 
+    fprintf(stderr, "no connect = %s\n", btoa(noConnect));
     fprintf(stderr, "send = %s\n", btoa(send));
 
     if (bufDelay) {
@@ -652,10 +661,35 @@ int main(int argc, char **argv) {
     int lastIndex = -1;
     int clientSockets[sockCount];
 
-    for (int i = 0; i < sockCount; i++) {
-        if (useIPv6) {
-            struct sockaddr_in6 serverAddr6;
+    // This host for IPv4 and 6
+    struct sockaddr_in  serverAddr;
+    struct sockaddr_in6 serverAddr6;
 
+    if (useIPv6) {
+        // Configure settings in address struct
+        // Clear it out
+        memset(&serverAddr6, 0, sizeof(serverAddr6));
+        // it is an INET address
+        serverAddr6.sin6_family = AF_INET6;
+        // the port we are going to send to, in network byte order
+        serverAddr6.sin6_port = htons(port);
+        // the server IP address, in network byte order
+        inet_pton(AF_INET6, host, &serverAddr6.sin6_addr);
+    }
+    else {
+        // Configure settings in address struct
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(port);
+        serverAddr.sin_addr.s_addr = inet_addr(host);
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+    }
+
+
+
+    for (int i = 0; i < sockCount; i++) {
+
+        if (useIPv6) {
             /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
             if ((clientSockets[i] = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
                 perror("creating IPv6 client socket");
@@ -673,28 +707,18 @@ int main(int argc, char **argv) {
             getsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
             fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-            // Configure settings in address struct
-            // Clear it out
-            memset(&serverAddr6, 0, sizeof(serverAddr6));
-            // it is an INET address
-            serverAddr6.sin6_family = AF_INET6;
-            // the port we are going to send to, in network byte order
-            serverAddr6.sin6_port = htons(port);
-            // the server IP address, in network byte order
-            inet_pton(AF_INET6, host, &serverAddr6.sin6_addr);
-
-            int err = connect(clientSockets[i], (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP socket:");
-                for (int j = 0; j < lastIndex + 1; j++) {
-                    close(clientSockets[j]);
+            if (!noConnect) {
+                int err = connect(clientSockets[i], (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+                if (err < 0) {
+                    if (debug) perror("Error connecting UDP socket:");
+                    for (int j = 0; j < lastIndex + 1; j++) {
+                        close(clientSockets[j]);
+                    }
+                    exit(1);
                 }
-                exit(1);
             }
         }
         else {
-            struct sockaddr_in serverAddr;
-
             // Create UDP socket
             if ((clientSockets[i] = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
                 perror("creating IPv4 client socket");
@@ -713,23 +737,16 @@ int main(int argc, char **argv) {
             getsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
             fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-            // Configure settings in address struct
-            memset(&serverAddr, 0, sizeof(serverAddr));
-            serverAddr.sin_family = AF_INET;
-            //if (debug) fprintf(stderr, "Sending on UDP port %hu\n", lbPort);
-            serverAddr.sin_port = htons(port);
-            //if (debug) fprintf(stderr, "Connecting to host %s\n", lbHost);
-            serverAddr.sin_addr.s_addr = inet_addr(host);
-            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-            fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
-            int err = connect(clientSockets[i], (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP socket:");
-                for (int j = 0; j < lastIndex + 1; j++) {
-                    close(clientSockets[j]);
+            if (!noConnect) {
+                fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
+                int err = connect(clientSockets[i], (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+                if (err < 0) {
+                    if (debug) perror("Error connecting UDP socket:");
+                    for (int j = 0; j < lastIndex + 1; j++) {
+                        close(clientSockets[j]);
+                    }
+                    exit(1);
                 }
-                exit(1);
             }
         }
 
@@ -892,12 +909,38 @@ int main(int argc, char **argv) {
             countDown = buffersAtOnce - 1;
         }
 
-        err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload,
-                                          clientSockets[portIndex],
+        if (noConnect) {
+            if (useIPv6) {
+                err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload,
+                                                  clientSockets[portIndex],
+                                                  tick, protocol, entropy, version, dataId,
+                                                  (uint32_t) bufSize, &offset,
+                                                  packetDelay, delayPrescale, &delayCounter,
+                                                  firstBuffer, lastBuffer, debug,
+                                                  direct, noConnect,
+                                                  &packetsSent, 0,
+                                                  (sockaddr * ) & serverAddr6, sizeof(struct sockaddr_in6));
+            }
+            else {
+                err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload,
+                                                  clientSockets[portIndex],
+                                                  tick, protocol, entropy, version, dataId,
+                                                  (uint32_t) bufSize, &offset,
+                                                  packetDelay, delayPrescale, &delayCounter,
+                                                  firstBuffer, lastBuffer, debug,
+                                                  direct, noConnect,
+                                                  &packetsSent, 0,
+                                                  (sockaddr * ) & serverAddr, sizeof(struct sockaddr_in));
+            }
+        }
+        else {
+            err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload,
+                                              clientSockets[portIndex],
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) bufSize, &offset,
                                               packetDelay, delayPrescale, &delayCounter,
                                               firstBuffer, lastBuffer, debug, direct, &packetsSent);
+        }
         if (err < 0) {
             // Should be more info in errno
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));

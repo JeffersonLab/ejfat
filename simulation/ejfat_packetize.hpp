@@ -827,9 +827,12 @@ namespace ejfat {
      * @param lastBuffer     if true, this is the  last buffer to send in a sequence.
      * @param debug          turn debug printout on & off.
      * @param direct         don't include LB header since packets are going directly to receiver.
+     * @param noConnect      socket did NOT have connect called on it.
      * @param packetsSent    filled with number of packets sent over network (valid even if error returned).
      * @param reserved       set 1 byte of the RE header "reserved" field
      *                       with least significant byte for testing.
+     * @param destAddr       destination address to use with sendto if noConnect true.
+     * @param destLen        length in bytes of destAddr to use with sendto if noConnect true.
      *
      * @return 0 if OK, -1 if error when sending packet. Use errno for more details.
      */
@@ -839,8 +842,10 @@ namespace ejfat {
                                            uint32_t *offset, uint32_t delay,
                                            uint32_t delayPrescale, uint32_t *delayCounter,
                                            bool firstBuffer, bool lastBuffer,
-                                           bool debug, bool direct,
-                                           int64_t *packetsSent, int reserved) {
+                                           bool debug, bool direct, bool noConnect,
+                                           int64_t *packetsSent, int reserved,
+                                           /* if sock not connected, specify dest */
+                                           struct sockaddr* destAddr, socklen_t destLen) {
 
         ssize_t err;
         int64_t sentPackets=0;
@@ -911,7 +916,13 @@ namespace ejfat {
             // In our case, the calling function connected the socket, so we call "send".
 
             // Send message to receiver
-            err = send(clientSocket, buffer, bytesToWrite + allHeadersSize, 0);
+            if (noConnect) {
+                err = sendto(clientSocket, buffer, bytesToWrite + allHeadersSize, 0, destAddr, destLen);
+            }
+            else {
+                err = send(clientSocket, buffer, bytesToWrite + allHeadersSize, 0);
+            }
+
             if (err == -1) {
                 if ((errno == EMSGSIZE) && (veryFirstPacket)) {
                     // The UDP packet is too big, so we need to reduce it.
@@ -1021,8 +1032,8 @@ namespace ejfat {
                 offset, delay,
                 delayPrescale, delayCounter,
                 firstBuffer, lastBuffer,
-                debug, direct,
-                packetsSent, 0);
+                debug, direct, false,
+                packetsSent, 0, nullptr, 0);
     }
 
 
