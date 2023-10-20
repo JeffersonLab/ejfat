@@ -1186,11 +1186,22 @@ int main(int argc, char **argv) {
         }
 
         // Bind socket with address struct
+if (debug) fprintf(stderr, "Will try binding IPv6 UDP socket to listening port %d\n", (int)port);
         int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
         if (err != 0) {
-            if (debug) fprintf(stderr, "bind socket error\n");
+            if (err == EADDRINUSE) {
+                fprintf(stderr, "Cannot bind IPv6 socket to %d since it's already in use\n", (int)port);
+            }
+            else if (err == EINVAL) {
+                fprintf(stderr, "Cannot bind IPv6 socket to %d since it's already bound\n", (int)port);
+            }
+            else {
+                fprintf(stderr, "Cannot bind IPv6 socket to %d\n", (int) port);
+            }
             return -1;
         }
+if (debug) fprintf(stderr, "Successful binding IPv6 UDP socket to listening port %d\n", (int)port);
+
     }
     else {
         // Create UDP socket
@@ -1220,11 +1231,22 @@ int main(int argc, char **argv) {
         memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
         // Bind socket with address struct
+if (debug) fprintf(stderr, "Will try binding IPv4 UDP socket to listening port %d\n", (int)port);
         int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
         if (err != 0) {
-            fprintf(stderr, "bind socket error\n");
+            if (err == EADDRINUSE) {
+                fprintf(stderr, "Cannot bind IPv4 socket to %d since it's already in use\n", (int)port);
+            }
+            else if (err == EINVAL) {
+                fprintf(stderr, "Cannot bind IPv4 socket to %d since it's already bound\n", (int)port);
+            }
+            else {
+                fprintf(stderr, "Cannot bind IPv4 socket to %d\n", (int) port);
+            }
             return -1;
         }
+if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port %d\n", (int)port);
+
     }
 
     // Start thread to printout incoming data rate
