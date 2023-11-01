@@ -164,6 +164,7 @@ set(CPP_HEADER_FILES
         util/PacketsItemN.h
         util/PacketStoreItem.h
         util/PacketRefItem.h
+        util/ejfatUtil.h
         )
 
 
@@ -357,6 +358,30 @@ if (DEFINED MAKE_EXEC)
                 install(TARGETS ${execName} RUNTIME DESTINATION bin)
             endif()
         endforeach(fileName)
+
+        # Also create a utility library out of the utility files
+        set (UTIL_LIB_NAME ejfat_util)
+        set (UTIL_LIB_NAME_STATIC ejfat_util_st)
+
+        add_library(${UTIL_LIB_NAME} SHARED ${UTIL_FILES})
+        target_include_directories(${UTIL_LIB_NAME} PUBLIC
+                ${CMAKE_SOURCE_DIR}/util
+                ${Boost_INCLUDE_DIRS}
+                ${DISRUPTOR_INCLUDE_DIRS})
+
+        add_library(${UTIL_LIB_NAME_STATIC} STATIC ${UTIL_FILES})
+        target_include_directories(${UTIL_LIB_NAME_STATIC} PUBLIC
+                ${CMAKE_SOURCE_DIR}/util
+                ${Boost_INCLUDE_DIRS}
+                ${DISRUPTOR_INCLUDE_DIRS})
+
+        if (DEFINED INSTALL_DIR_DEFINED)
+            # Install library into lib dir
+            install(TARGETS ${UTIL_LIB_NAME} LIBRARY DESTINATION lib)
+            install(TARGETS ${UTIL_LIB_NAME_STATIC} LIBRARY DESTINATION lib)
+            # Install headers into include dir
+        endif()
+
     endif()
 
     if (BUILD_GRPC AND GRPC_FOUND)
