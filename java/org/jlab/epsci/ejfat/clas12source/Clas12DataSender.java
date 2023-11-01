@@ -23,7 +23,8 @@ public class Clas12DataSender {
     /** Size of EJFAT load balancing header */
     static final int LB_HEADER_BYTES = 16;
     /** Size of UDP EJFAT reassembly header. */
-    static final int RE_HEADER_BYTES = 16;
+    static final int RE_HEADER_BYTES_OLD = 16;
+    static final int RE_HEADER_BYTES = 20;
     /** Size of all headers. */
     static final int HEADER_BYTES = RE_HEADER_BYTES + LB_HEADER_BYTES;
     /** Default MTU to be used if it cannot be found programmatically. */
@@ -385,6 +386,7 @@ public class Clas12DataSender {
      * in the format used in ERSAP project.
      * The first 16 bits go as ordered. The dataId is put in network byte order.
      * The offset and tick are also put into network byte order.</p>
+     * This is the old, version 1, RE header.
      * </p>
      * <pre>
      *  protocol 'Version:4, Rsvd:10, First:1, Last:1, Data-ID:16, Offset:32'
@@ -412,12 +414,12 @@ public class Clas12DataSender {
      * @param tick          tick value.
      * @throws EmuException if offset &lt; 0 or buffer overflow.
      */
-    static void writeErsapReHeader(byte[] buffer, int offset,
-                                   int version, boolean first, boolean last,
-                                   short dataId, int packetOffset, long tick)
+    static void writeErsapReHeaderV1(byte[] buffer, int offset,
+                                     int version, boolean first, boolean last,
+                                     short dataId, int packetOffset, long tick)
             throws Exception {
 
-        if (offset < 0 || (offset + 16 > buffer.length)) {
+        if (offset < 0 || (offset + RE_HEADER_BYTES_OLD > buffer.length)) {
             throw new Exception("offset arg < 0 or buf too small");
         }
 
@@ -430,6 +432,59 @@ public class Clas12DataSender {
         toBytes(packetOffset, ByteOrder.BIG_ENDIAN, buffer, offset + 4);
         toBytes(tick, ByteOrder.BIG_ENDIAN, buffer, offset + 8);
     }
+
+
+    /**
+     * <p>
+     * Write the reassembly header, at the start of the given byte array,
+     * in the format used in ERSAP project.
+     * The first 16 bits go as ordered. The dataId is put in network byte order.
+     * The offset, length and tick are also put into network byte order.</p>
+     * This is the new, version 2, RE header.
+     *
+     * <pre>
+     *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
+     *
+     *  0                   1                   2                   3
+     *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |Version|        Rsvd           |            Data-ID            |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |                         Buffer Offset                         |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |                         Buffer Length                         |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |                                                               |
+     *  +                             Tick                              +
+     *  |                                                               |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * </pre>
+     *
+     * @param buffer        byte array in which to write.
+     * @param offset        index in buffer to start writing.
+     * @param version       version of meta data (should be 2).
+     * @param dataId        data source id.
+     * @param bufferOffset  byte offset into full buffer payload.
+     * @param bufferLength  total length in bytes of full buffer payload.
+     * @param tick          tick value.
+     * @throws EmuException if offset &lt; 0 or buffer overflow.
+     */
+     static void writeErsapReHeader(byte[] buffer, int offset,
+                                      int version, short dataId,
+                                      int bufferOffset, int bufferLength, long tick)
+            throws Exception {
+
+        if (offset < 0 || (offset + RE_HEADER_BYTES > buffer.length)) {
+            throw new Exception("offset arg < 0 or buf too small");
+        }
+
+        buffer[offset] = (byte) (version << 4);
+
+        toBytes(dataId, ByteOrder.BIG_ENDIAN, buffer, offset + 2);
+        toBytes(bufferOffset, ByteOrder.BIG_ENDIAN, buffer, offset + 4);
+        toBytes(bufferLength, ByteOrder.BIG_ENDIAN, buffer, offset + 8);
+        toBytes(tick, ByteOrder.BIG_ENDIAN, buffer, offset + 12);
+     }
 
 
     /**
@@ -558,11 +613,13 @@ public class Clas12DataSender {
      * ONE channel by round-robin. The ER is an exception but only allows file and ET
      * output channels. So things should be fine.</b>
      *
+     * This is for version 2 of the RE header.
+     *
      * @param dataBuffer     data to be sent.
      * @param readFromIndex  index into dataBuffer to start reading.
      * @param dataLen        number of bytes to be sent.
      * @param packetStorage  array in which to build a packet to send.
-     *                       It's pssed in as a parameter to avoid object creation and its
+     *                       It's passed in as a parameter to avoid object creation and its
      *                       attendant strain on the garbage collector with each call.
      * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
      *
@@ -573,9 +630,8 @@ public class Clas12DataSender {
      * @param entropy        entropy used by LB header in directing packets to a specific port
      *                       (but currently unused).
      * @param lbProtocol     protocol in LB header.
-     * @param lbVersion      verion of LB header.
+     * @param lbVersion      version of LB header.
      *
-     * @param recordId       record id in reassembly (RE) header.
      * @param dataId         data id in RE header.
      * @param reVersion      version of RE header.
      *
@@ -590,25 +646,21 @@ public class Clas12DataSender {
                                          byte[] packetStorage, int maxUdpPayload,
                                          DatagramSocket clientSocket, DatagramPacket udpPacket,
                                          long tick, int entropy, int lbProtocol, int lbVersion,
-                                         int recordId, int dataId, int reVersion,
+                                         int dataId, int reVersion,
                                          int delay, boolean debug,
                                          int[] packetsSent)
             throws IOException {
 
         int bytesToWrite, sentPackets = 0;
+        // Offset for the packet currently being sent (into full buffer)
+        int bufOffset = 0;
+        int fullLen = dataLen;
 
         // How many total packets are we sending? Round up.
         int totalPackets = (dataLen + maxUdpPayload - 1)/maxUdpPayload;
 
-        // The very first packet goes in here
-        //byte[] packetStorage = new byte[maxUdpPayload + HEADER_BYTES];
         // Index into packetStorage to write
         int writeToIndex = 0;
-
-        // If this packet is the very first packet sent for this data buffer
-        boolean veryFirstPacket = true;
-        // If this packet is the very last packet sent for this data buffer
-        boolean veryLastPacket  = false;
 
         int packetCounter = 0;
         // Use this flag to allow transmission of a single zero-length buffer
@@ -619,14 +671,7 @@ public class Clas12DataSender {
             // The number of regular data bytes to write into this packet
             bytesToWrite = dataLen > maxUdpPayload ? maxUdpPayload : dataLen;
 
-            // Is this the very last packet for buffer?
-            if (bytesToWrite == dataLen) {
-                veryLastPacket = true;
-            }
-
             if (debug) System.out.println("Send " + bytesToWrite +
-                    " bytes, very first = " + veryFirstPacket +
-                    ", very last = " + veryLastPacket +
                     ", total packets = " + totalPackets +
                     ", packet counter = " + packetCounter +
                     ", writeToIndex = " + writeToIndex);
@@ -639,32 +684,31 @@ public class Clas12DataSender {
 
                 // Write RE meta data into byte array
                 writeErsapReHeader(packetStorage, writeToIndex + LB_HEADER_BYTES,
-                        reVersion, veryFirstPacket, veryLastPacket, (short)dataId,
-                        packetCounter++, tick);
+                                   reVersion, (short)dataId, bufOffset, fullLen, tick);
             }
             catch (Exception e) {/* never happen */}
 
             if (firstLoop) {
-                // Copy data for very first packet only
+                // Copy data for very first packet only since we need to write header BEFORE data,
+                // but most likely cannot do so directly in the data buffer.
                 System.arraycopy(dataBuffer, readFromIndex,
                         packetStorage, writeToIndex + HEADER_BYTES,
                         bytesToWrite);
             }
-
-            // "UNIX Network Programming" points out that a connect call made on a UDP client side socket
-            // figures out and stores all the state about the destination socket address in advance
-            // (masking, selecting interface, etc.), saving the cost of doing so on every send call.
-            // This book claims that a connected socket can be up to 3x faster because of this reduced overhead -
-            // data can go straight to the NIC driver bypassing most IP stack processing.
-            // In our case, the calling function connected the socket.
 
             // Send message to receiver
             udpPacket.setData(packetStorage, writeToIndex, bytesToWrite + HEADER_BYTES);
             clientSocket.send(udpPacket);
 
             if (firstLoop) {
-                // Switch from external array to writing from dataBuffer for rest of packets
+                // Switch from external array to writing from dataBuffer for rest of packets.
+                // Now we have room to write header into dataBuffer BEFORE the data we're sending.
+                // Warning, this messes up the data buffer!
                 packetStorage = dataBuffer;
+                // We want to start writing 1 header len before the 2nd chunk of data.
+                // After "writeToIndex" below is added to bytesToWrite a little further down,
+                // this index will be in the correct place. The header will be written there,
+                // then the header + data will be sent.
                 writeToIndex = -1 * HEADER_BYTES;
             }
 
@@ -678,18 +722,167 @@ public class Clas12DataSender {
                 catch (InterruptedException e) {}
             }
 
-            dataLen -= bytesToWrite;
-            writeToIndex += bytesToWrite;
-            readFromIndex += bytesToWrite;
-            veryFirstPacket = false;
-            firstLoop = false;
+            bufOffset      += bytesToWrite;
+            dataLen        -= bytesToWrite;
+            writeToIndex   += bytesToWrite;
+            readFromIndex  += bytesToWrite;
+            firstLoop       = false;
 
-            if (debug) System.out.println("Sent pkt " + (packetCounter - 1) +
+            if (debug) System.out.println("Sent pkt " + (packetCounter++) +
                     ", remaining bytes = " + dataLen + "\n");
         }
 
         packetsSent[0] = sentPackets;
     }
+
+
+
+        /** <p>
+         * Send a buffer to a given destination by breaking it up into smaller
+         * packets and sending these by UDP.
+         * The receiver is responsible for reassembling these packets back into the original data.</p>
+         *
+         * Optimize by minimizing copying of data and calling "send" on a connected socket.
+         * The very first packet is sent in buffer of copied data.
+         * However, subsequently it writes the new header into the
+         * dataBuffer just before the data to be sent, and then sends.
+         * <b>Be warned that the original buffer will be changed after calling this routine!
+         * This should not be a big deal as emu output channels send out each event only on
+         * ONE channel by round-robin. The ER is an exception but only allows file and ET
+         * output channels. So things should be fine.</b>
+         *
+         * This is for version 1 of the RE header.
+         *
+         * @param dataBuffer     data to be sent.
+         * @param readFromIndex  index into dataBuffer to start reading.
+         * @param dataLen        number of bytes to be sent.
+         * @param packetStorage  array in which to build a packet to send.
+         *                       It's passed in as a parameter to avoid object creation and its
+         *                       attendant strain on the garbage collector with each call.
+         * @param maxUdpPayload  maximum number of bytes to place into one UDP packet.
+         *
+         * @param clientSocket   UDP sending socket.
+         * @param udpPacket      UDP sending packet.
+         *
+         * @param tick           value used by load balancer (LB) in directing packets to final host.
+         * @param entropy        entropy used by LB header in directing packets to a specific port
+         *                       (but currently unused).
+         * @param lbProtocol     protocol in LB header.
+         * @param lbVersion      version of LB header.
+         *
+         * @param dataId         data id in RE header.
+         * @param reVersion      version of RE header.
+         *
+         * @param delay          delay in millisec between each packet being sent.
+         * @param debug          turn debug printout on & off.
+         * @param packetsSent    Array with one element.
+         *                       Used to return the number of packets sent over network
+         *                              (valid even if error returned).
+         * @throws IOException if error sending packets
+         */
+        static void sendPacketizedBufferFastV1(byte[] dataBuffer, int readFromIndex, int dataLen,
+                                               byte[] packetStorage, int maxUdpPayload,
+                                               DatagramSocket clientSocket, DatagramPacket udpPacket,
+                                               long tick, int entropy, int lbProtocol, int lbVersion,
+                                               int dataId, int reVersion,
+                                               int delay, boolean debug,
+                                               int[] packetsSent)
+                throws IOException {
+
+            int bytesToWrite, sentPackets = 0;
+
+            // How many total packets are we sending? Round up.
+            int totalPackets = (dataLen + maxUdpPayload - 1)/maxUdpPayload;
+
+            // Index into packetStorage to write
+            int writeToIndex = 0;
+
+            // If this packet is the very first packet sent for this data buffer
+            boolean veryFirstPacket = true;
+            // If this packet is the very last packet sent for this data buffer
+            boolean veryLastPacket  = false;
+
+            int packetCounter = 0;
+            // Use this flag to allow transmission of a single zero-length buffer
+            boolean firstLoop = true;
+
+            while (firstLoop || dataLen > 0) {
+
+                // The number of regular data bytes to write into this packet
+                bytesToWrite = dataLen > maxUdpPayload ? maxUdpPayload : dataLen;
+
+                // Is this the very last packet for buffer?
+                if (bytesToWrite == dataLen) {
+                    veryLastPacket = true;
+                }
+
+                if (debug) System.out.println("Send " + bytesToWrite +
+                        " bytes, very first = " + veryFirstPacket +
+                        ", very last = " + veryLastPacket +
+                        ", total packets = " + totalPackets +
+                        ", packet counter = " + packetCounter +
+                        ", writeToIndex = " + writeToIndex);
+
+                // Write LB meta data into buffer
+                try {
+                    // Write LB meta data into byte array
+    //logger.info("    DataChannel UDP stream: LB header: tick = " + tick + ", entropy = " + entropy);
+                    writeLbHeader(packetStorage, writeToIndex, tick, lbVersion, lbProtocol, entropy);
+
+                    // Write RE meta data into byte array
+                    writeErsapReHeaderV1(packetStorage, writeToIndex + LB_HEADER_BYTES,
+                            reVersion, veryFirstPacket, veryLastPacket, (short)dataId,
+                            packetCounter++, tick);
+                }
+                catch (Exception e) {/* never happen */}
+
+                if (firstLoop) {
+                    // Copy data for very first packet only
+                    System.arraycopy(dataBuffer, readFromIndex,
+                            packetStorage, writeToIndex + HEADER_BYTES,
+                            bytesToWrite);
+                }
+
+                // "UNIX Network Programming" points out that a connect call made on a UDP client side socket
+                // figures out and stores all the state about the destination socket address in advance
+                // (masking, selecting interface, etc.), saving the cost of doing so on every send call.
+                // This book claims that a connected socket can be up to 3x faster because of this reduced overhead -
+                // data can go straight to the NIC driver bypassing most IP stack processing.
+                // In our case, the calling function connected the socket.
+
+                // Send message to receiver
+                udpPacket.setData(packetStorage, writeToIndex, bytesToWrite + HEADER_BYTES);
+                clientSocket.send(udpPacket);
+
+                if (firstLoop) {
+                    // Switch from external array to writing from dataBuffer for rest of packets
+                    packetStorage = dataBuffer;
+                    writeToIndex = -1 * HEADER_BYTES;
+                }
+
+                sentPackets++;
+
+                // delay if any
+                if (delay > 0) {
+                    try {
+                        Thread.sleep(delay);
+                    }
+                    catch (InterruptedException e) {}
+                }
+
+                dataLen -= bytesToWrite;
+                writeToIndex += bytesToWrite;
+                readFromIndex += bytesToWrite;
+                veryFirstPacket = false;
+                firstLoop = false;
+
+                if (debug) System.out.println("Sent pkt " + (packetCounter - 1) +
+                        ", remaining bytes = " + dataLen + "\n");
+            }
+
+            packetsSent[0] = sentPackets;
+        }
+
 
 
 }
