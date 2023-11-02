@@ -27,6 +27,7 @@ public class Clas12DataSender {
     static final int RE_HEADER_BYTES = 20;
     /** Size of all headers. */
     static final int HEADER_BYTES = RE_HEADER_BYTES + LB_HEADER_BYTES;
+    static final int HEADER_BYTES_OLD = RE_HEADER_BYTES_OLD + LB_HEADER_BYTES;
     /** Default MTU to be used if it cannot be found programmatically. */
     static final int DEFAULT_MTU = 1400;
 
@@ -39,7 +40,7 @@ public class Clas12DataSender {
 
     private int sendBufSize = 25000000; // 50 MB UDP send buffer is default
     private int port = 0x4c42; // FPGA port is default
-    private String destHost = "172.19.22.241";
+    private String destHost = "129.57.177.11"; // ejfat-1's U280 Data plane
 
 
     /** FPGA Load Balancer reassembly protocol. */
@@ -177,12 +178,12 @@ public class Clas12DataSender {
 
         System.out.println("\nUsage:\n\n" +
                 "   java Clas12DataSender\n" +
-                "        [-file <filename>]              name of file to read events from\n" +
-                "        [-host <destination host>]      defaults to 172.19.22.241 (ejfat-1 U280)\n" +
-                "        [-sb <UDP send buffer size>]     size of UDP send buffer in bytes\n" +
-                "        [-r <repeat>]          repeat file read this many times, track avg rate\n" +
-                "        [-debug]               turn on printout\n" +
-                "        [-h]                   print this help\n");
+                "        [-file <filename>]            name of file to read events from\n" +
+                "        [-host <destination host>]    defaults to 129.57.177.11 (ejfat-1 U280)\n" +
+                "        [-sb <UDP send buffer size>]  size of UDP send buffer in bytes\n" +
+                "        [-r <repeat>]                 repeat file read this many times, track avg rate\n" +
+                "        [-debug]                      turn on printout\n" +
+                "        [-h]                          print this help\n");
     }
 
 
@@ -839,7 +840,7 @@ public class Clas12DataSender {
                 if (firstLoop) {
                     // Copy data for very first packet only
                     System.arraycopy(dataBuffer, readFromIndex,
-                            packetStorage, writeToIndex + HEADER_BYTES,
+                            packetStorage, writeToIndex + HEADER_BYTES_OLD,
                             bytesToWrite);
                 }
 
@@ -851,13 +852,13 @@ public class Clas12DataSender {
                 // In our case, the calling function connected the socket.
 
                 // Send message to receiver
-                udpPacket.setData(packetStorage, writeToIndex, bytesToWrite + HEADER_BYTES);
+                udpPacket.setData(packetStorage, writeToIndex, bytesToWrite + HEADER_BYTES_OLD);
                 clientSocket.send(udpPacket);
 
                 if (firstLoop) {
                     // Switch from external array to writing from dataBuffer for rest of packets
                     packetStorage = dataBuffer;
-                    writeToIndex = -1 * HEADER_BYTES;
+                    writeToIndex = -1 * HEADER_BYTES_OLD;
                 }
 
                 sentPackets++;
