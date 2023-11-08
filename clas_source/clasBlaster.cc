@@ -705,45 +705,46 @@ int main(int argc, char **argv) {
 
 
     // Socket for sending sync message to CP
-    if (useIPv6) {
-        struct sockaddr_in6 serverAddr6;
+    if (sendSync) {
+        if (useIPv6) {
+            struct sockaddr_in6 serverAddr6;
 
-        if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv6 sync socket");
-            return -1;
-        }
+            if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 sync socket");
+                return -1;
+            }
 
-        memset(&serverAddr6, 0, sizeof(serverAddr6));
-        serverAddr6.sin6_family = AF_INET6;
-        serverAddr6.sin6_port = htons(cp_port);
-        inet_pton(AF_INET6, cp_host, &serverAddr6.sin6_addr);
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            serverAddr6.sin6_family = AF_INET6;
+            serverAddr6.sin6_port = htons(cp_port);
+            inet_pton(AF_INET6, cp_host, &serverAddr6.sin6_addr);
 
-        int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
-        if (err < 0) {
-            if (debug) perror("Error connecting UDP sync socket:");
-            close(syncSocket);
-            exit(1);
-        }
-    }
-    else {
-        struct sockaddr_in serverAddr;
+            int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP sync socket:");
+                close(syncSocket);
+                exit(1);
+            }
+        } else {
+            struct sockaddr_in serverAddr;
 
-        if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv4 sync socket");
-            return -1;
-        }
+            if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 sync socket");
+                return -1;
+            }
 
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(cp_port);
-        serverAddr.sin_addr.s_addr = inet_addr(cp_host);
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(cp_port);
+            serverAddr.sin_addr.s_addr = inet_addr(cp_host);
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
-        int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
-        if (err < 0) {
-            if (debug) perror("Error connecting UDP sync socket:");
-            close(syncSocket);
-            return err;
+            int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP sync socket:");
+                close(syncSocket);
+                return err;
+            }
         }
     }
 
