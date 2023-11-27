@@ -68,14 +68,14 @@ static void printHelp(char *programName) {
             "        [-bufdelay] (delay between each buffer, not packet)",
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port, default 19522>]",
-            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
+            "        [-i <outgoing interface name (e.g. eth0, only used to find MTU)>]",
             "        [-nc (no connect on socket)]\n",
 
             "        [-sock <# of UDP sockets, 16 max>]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
             "        [-t <tick, default 0>]",
             "        [-ver <version, default 2>]",
-            "        [-id <data id, default 1>]",
+            "        [-id <data id, default 0>]",
             "        [-pro <protocol, default 1>]",
             "        [-e <entropy, default 0>]\n",
 

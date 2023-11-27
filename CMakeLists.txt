@@ -21,7 +21,7 @@
 # The installation will default to the CODA env variable if it's defined
 # This can be overridden on command line (in build dir) with:
 #   % cmake -DCODA_INSTALL=<my_dir> ..
-#   % make install
+#   % make DESTDIR="" install
 
 # This file came from evio-6.0 project
 
