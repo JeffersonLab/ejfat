@@ -41,6 +41,10 @@
 #include <pthread.h>
 #include <iostream>
 #include <cinttypes>
+
+#include <arpa/inet.h>
+#include <net/if.h>
+
 #include "ejfat_packetize.hpp"
 
 #ifdef __linux__
@@ -61,7 +65,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6] [-sync] [-direct]\n",
 
@@ -70,6 +74,9 @@ static void printHelp(char *programName) {
             "        [-p <destination UDP port, default 19522>]",
             "        [-i <outgoing interface name (e.g. eth0, only used to find MTU)>]",
             "        [-nc (no connect on socket)]\n",
+
+            "        [-cp_addr <CP IP address (default = none & no CP comm)>]",
+            "        [-cp_port <CP port for sync msgs (default 19523)>]",
 
             "        [-sock <# of UDP sockets, 16 max>]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
@@ -91,7 +98,7 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
-    fprintf(stderr, "        The -sync option will send a UDP message to LB every second with last tick sent.\n");
+    fprintf(stderr, "        The -sync option will send a UDP message to CP every second with last tick sent (needs cp_addr, cp_port).\n");
     fprintf(stderr, "        The -direct option will NOT put in LB headers and allows sending events directly to receiver.\n");
     fprintf(stderr, "        This program cycles thru the use of up to 16 UDP sockets for better switch performance.\n");
 }
@@ -99,7 +106,8 @@ static void printHelp(char *programName) {
 
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
-                      int *entropy, int *version, uint16_t *id, uint16_t* port,
+                      int *entropy, int *version,
+                      uint16_t *id, uint16_t* port, uint16_t* cp_port,
                       uint64_t* tick, uint32_t* delay,
                       uint64_t *bufSize, float *bufRate,
                       uint64_t *byteRate, uint32_t *sendBufSize,
@@ -107,7 +115,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint32_t *sockets, int *cores,
                       bool *debug, bool *useIPv6, bool *bufDelay,
                       bool *sendSync, bool *direct, bool *noConnect,
-                      char* host, char *interface) {
+                      char* host, char *cp_host, char *interface) {
 
     int c, i_tmp;
     int64_t tmp;
@@ -116,23 +124,25 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {{"mtu",   1, nullptr, 1},
-             {"host",  1, nullptr, 2},
-             {"ver",   1, nullptr, 3},
-             {"id",    1, nullptr, 4},
-             {"pro",   1, nullptr, 5},
-             {"sync",   0, nullptr, 6},
-             {"dpre",  1, nullptr, 9},
-             {"tpre",  1, nullptr, 10},
-             {"ipv6",  0, nullptr, 11},
-             {"bufdelay",  0, nullptr, 12},
-             {"cores",  1, nullptr, 13},
+            {{"mtu",      1, nullptr, 1},
+             {"host",     1, nullptr, 2},
+             {"ver",      1, nullptr, 3},
+             {"id",       1, nullptr, 4},
+             {"pro",      1, nullptr, 5},
+             {"sync",     0, nullptr, 6},
+             {"dpre",     1, nullptr, 9},
+             {"tpre",     1, nullptr, 10},
+             {"ipv6",     0, nullptr, 11},
+             {"bufdelay", 0, nullptr, 12},
+             {"cores",    1, nullptr, 13},
              {"bufrate",  1, nullptr, 14},
-             {"byterate",  1, nullptr, 15},
-             {"sock",  1, nullptr, 16},
-             {"direct",  0, nullptr, 17},
-             {"nc",  0, nullptr, 18},
-             {nullptr,       0, 0,    0}
+             {"byterate", 1, nullptr, 15},
+             {"sock",     1, nullptr, 16},
+             {"direct",   0, nullptr, 17},
+             {"nc",       0, nullptr, 18},
+             {"cp_port",  1, nullptr, 19},
+             {"cp_addr",  1, nullptr, 20},
+             {nullptr,    0, 0,    0}
             };
 
 
@@ -224,8 +234,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     // setting this to zero means use system default
                     *mtu = 0;
                 }
-                else if (i_tmp < 1200 || i_tmp > 9000) {
-                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be >= 1200 and <= 9000\n");
+                else if (i_tmp < 1200 || i_tmp > MAX_EJFAT_MTU) {
+                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be >= 1200 and <= %d\n", MAX_EJFAT_MTU);
                     exit(-1);
                 }
                 else {
@@ -366,6 +376,29 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 18:
                 // do we NOT connect socket?
                 *noConnect = true;
+                break;
+
+            case 19:
+                // CP PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 1023 && i_tmp < 65535) {
+                    *cp_port = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -cp_port, 1023 < port < 65536\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
+            case 20:
+                // CP HOST for sync messages
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -cp_host, name is too long\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                strcpy(cp_host, optarg);
                 break;
 
             case 13:
@@ -562,8 +595,10 @@ int main(int argc, char **argv) {
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
     float    bufRate = 0.F;
     uint64_t bufSize = 0L, byteRate = 0L;
-    uint16_t port = 0x4c42; // FPGA port is default
-    uint32_t sockCount = 1; // only use one outgoing socket by default, 16 max
+    uint16_t port    = 19522; // FPGA port is default
+    uint16_t cp_port = 19523; // default for CP port getting sync messages from sender
+    uint32_t sockCount = 1;   // only use one outgoing socket by default, 16 max
+    int syncSocket;
 
     uint64_t tick = 0;
     int cores[10];
@@ -577,8 +612,9 @@ int main(int argc, char **argv) {
     bool noConnect = false;
 
     char syncBuf[28];
-    char host[INPUT_LENGTH_MAX], interface[16];
+    char host[INPUT_LENGTH_MAX], cp_host[INPUT_LENGTH_MAX], interface[16];
     memset(host, 0, INPUT_LENGTH_MAX);
+    memset(cp_host, 0, INPUT_LENGTH_MAX);
     memset(interface, 0, 16);
     strcpy(host, "127.0.0.1");
     strcpy(interface, "lo0");
@@ -586,10 +622,11 @@ int main(int argc, char **argv) {
         cores[i] = -1;
     }
 
-    parseArgs(argc, argv, &mtu, &protocol, &entropy, &version, &dataId, &port, &tick,
+    parseArgs(argc, argv, &mtu, &protocol, &entropy,
+              &version, &dataId, &port, &cp_port, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale, &sockCount, cores, &debug,
-              &useIPv6, &bufDelay, &sendSync, &direct, &noConnect, host, interface);
+              &useIPv6, &bufDelay, &sendSync, &direct, &noConnect, host, cp_host, interface);
 
 #ifdef __linux__
 
@@ -624,8 +661,6 @@ int main(int argc, char **argv) {
 
 #endif
 
-    fprintf(stderr, "no connect = %s\n", btoa(noConnect));
-    fprintf(stderr, "send = %s\n", btoa(send));
 
     if (bufDelay) {
         packetDelay = 0;
@@ -643,6 +678,13 @@ int main(int argc, char **argv) {
         setBufRate = true;
     }
 
+    if (strlen(cp_host) < 1) {
+        sendSync = false;
+    }
+
+    fprintf(stderr, "no connect = %s\n", btoa(noConnect));
+    fprintf(stderr, "send sync = %s\n", btoa(sendSync));
+
     // Break data into multiple packets of max MTU size.
     // If the mtu was not set on the command line, get it progamatically
     if (mtu == 0) {
@@ -655,6 +697,53 @@ int main(int argc, char **argv) {
     // 20 bytes = normal IPv4 packet header (60 is max), 8 bytes = max UDP packet header
     // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
+
+
+    // Socket for sending sync message to CP
+    if (sendSync) {
+        if (useIPv6) {
+            struct sockaddr_in6 serverAddr6;
+
+            if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 sync socket");
+                return -1;
+            }
+
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            serverAddr6.sin6_family = AF_INET6;
+            serverAddr6.sin6_port = htons(cp_port);
+            inet_pton(AF_INET6, cp_host, &serverAddr6.sin6_addr);
+
+            int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP sync socket:");
+                close(syncSocket);
+                exit(1);
+            }
+        } else {
+            struct sockaddr_in serverAddr;
+
+            if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 sync socket");
+                return -1;
+            }
+
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(cp_port);
+            serverAddr.sin_addr.s_addr = inet_addr(cp_host);
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+            int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP sync socket:");
+                close(syncSocket);
+                return err;
+            }
+        }
+    }
+
+
 
     // Create UDP maxSocks sockets for efficient switch operation
     uint32_t portIndex = 0;
@@ -724,6 +813,18 @@ int main(int argc, char **argv) {
                 perror("creating IPv4 client socket");
                 return -1;
             }
+
+//
+//            struct ifreq ifr;
+//
+//            memset(&ifr, 0, sizeof(ifr));
+//            snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "enp193s0f1np1");
+//            if (setsockopt(clientSockets[i], SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
+//                perror("setsockopt");
+//                return -1;
+//            }
+//            fprintf(stderr, "UDP socket bound to enp193s0f1np1 interface\n");
+
 
             // Try to increase send buf size to 25 MB
             socklen_t size = sizeof(int);
@@ -867,7 +968,7 @@ int main(int argc, char **argv) {
     }
 
     uint32_t evtRate;
-    uint32_t byteCounterPerSock = 0;
+    uint64_t byteCounterPerSock = 0;
     uint64_t bufsSent = 0UL;
 
     while (true) {
@@ -966,7 +1067,7 @@ int main(int argc, char **argv) {
                 // Send sync message to same destination
 if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
                 setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
-                err = (int)send(clientSockets[portIndex], syncBuf, 28, 0);
+                err = (int)send(syncSocket, syncBuf, 28, 0);
                 if (err == -1) {
                     fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
@@ -979,13 +1080,13 @@ if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRat
 
         // Switching sockets for each buffer, if the buffer is relatively small,
         // causes performance problems on the receiving end. So, to mitigate that,
-        // only switch to a new after sending roughly 10MB on a single socket.
-//        byteCounterPerSock += bufSize;
+        // only switch to a new after sending roughly 10GB on a single socket.
+        byteCounterPerSock += bufSize;
 
-//        if (byteCounterPerSock > 10000000) {
-//            byteCounterPerSock = 0;
+        if (byteCounterPerSock > 1000000000) {
+            byteCounterPerSock = 0;
             portIndex = (portIndex + 1) % sockCount;
-//        }
+        }
 
         // delay if any
         if (bufDelay) {
