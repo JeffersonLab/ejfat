@@ -594,8 +594,8 @@ int main(int argc, char **argv) {
     uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
     uint64_t bufRate = 0L, avgBufSize = 0L;
 
-    uint16_t port = 19522; // FPGA port is default
-    uint16_t cp_port = 19523; // default for CP host getting sync messages from BE
+    uint16_t port    = 19522; // FPGA port is default
+    uint16_t cp_port = 19523; // default for CP port getting sync messages from sender
     int syncSocket;
 
     uint64_t tick = 0;
