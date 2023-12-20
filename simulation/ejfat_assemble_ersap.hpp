@@ -49,6 +49,8 @@
 // Reassembly (RE) header size in bytes
 #define HEADER_BYTES 20
 #define HEADER_BYTES_OLD 18
+// Max MTU that ejfat nodes' NICs can handle
+#define MAX_EJFAT_MTU 9978
 
 #define btoa(x) ((x)?"true":"false")
 
@@ -665,9 +667,9 @@ static inline uint64_t bswap_64(uint64_t x) {
                                       uint16_t* dataId, int* version, bool debug) {
 
             // Storage for packet
-            char pkt[9100];
+            char pkt[65536];
 
-            ssize_t bytesRead = recvfrom(udpSocket, pkt, 9100, 0, nullptr, nullptr);
+            ssize_t bytesRead = recvfrom(udpSocket, pkt, 65536, 0, nullptr, nullptr);
             if (bytesRead < 0) {
                 if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                 return(RECV_MSG);
@@ -728,9 +730,9 @@ static inline uint64_t bswap_64(uint64_t x) {
                                       bool *first, bool *last, bool debug) {
 
             // Storage for packet
-            char pkt[9100];
+            char pkt[65536];
 
-            ssize_t bytesRead = recvfrom(udpSocket, pkt, 9100, 0, NULL, NULL);
+            ssize_t bytesRead = recvfrom(udpSocket, pkt, 65536, 0, NULL, NULL);
             if (bytesRead < 0) {
                 if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                 return(RECV_MSG);
@@ -835,7 +837,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             int64_t discardedPackets = 0, discardedBytes = 0, discardedBufs = 0;
 
             // Storage for packet
-            char pkt[9100];
+            char pkt[65536];
 
             if (debug && takeStats) fprintf(stderr, "getCompletePacketizedBuffer: buf size = %lu, take stats = %d, %p\n",
                                             bufLen, takeStats, stats.get());
@@ -848,7 +850,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 }
 
                 // Read UDP packet
-                bytesRead = recvfrom(udpSocket, pkt, 9100, 0, nullptr, nullptr);
+                bytesRead = recvfrom(udpSocket, pkt, 65536, 0, nullptr, nullptr);
                 if (bytesRead < 0) {
                     if (debug) fprintf(stderr, "getCompletePacketizedBuffer: recvmsg failed: %s\n", strerror(errno));
                     return (RECV_MSG);
@@ -1096,15 +1098,15 @@ static inline uint64_t bswap_64(uint64_t x) {
                     // Use default len of 100kB
                     bufLen = 100000;
                 }
-                else if (bufLen < 9000) {
+                else if (bufLen < MAX_EJFAT_MTU) {
                     // Make sure we can at least read one JUMBO packet
-                    bufLen = 9000;
+                    bufLen = MAX_EJFAT_MTU;
                 }
                 allocateBuf = true;
             }
             else {
-                if (bufLen < 9000) {
-                    bufLen = 9000;
+                if (bufLen < MAX_EJFAT_MTU) {
+                    bufLen = MAX_EJFAT_MTU;
                     allocateBuf = true;
                 }
             }
@@ -1138,7 +1140,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             int64_t discardedPackets = 0, discardedBytes = 0, discardedBufs = 0;
 
             // Storage for packet
-            char pkt[9100];
+            char pkt[65536];
 
             if (debug && takeStats) fprintf(stderr, "getCompleteAllocatedBuffer: buf size = %lu, take stats = %d, %p\n",
                                             bufLen, takeStats, stats.get());
@@ -1151,7 +1153,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 }
 
                 // Read UDP packet
-                bytesRead = recvfrom(udpSocket, pkt, 9100, 0, nullptr, nullptr);
+                bytesRead = recvfrom(udpSocket, pkt, 65536, 0, nullptr, nullptr);
                 if (bytesRead < 0) {
                     if (debug) fprintf(stderr, "getCompleteAllocatedBuffer: recvmsg failed: %s\n", strerror(errno));
                     if (allocateBuf) {
@@ -1389,7 +1391,7 @@ static inline uint64_t bswap_64(uint64_t x) {
             uint32_t packetOffset, nextOffset, firstOffset;
 
             // Storage for packet
-            char pkt[9100];
+            char pkt[65536];
 
             // The offset arg is the next, expected offset
             firstOffset = nextOffset = *offset;
@@ -1398,13 +1400,13 @@ static inline uint64_t bswap_64(uint64_t x) {
 
             while (true) {
 
-                if (remainingLen < 9000) {
+                if (remainingLen < MAX_EJFAT_MTU) {
                     // Not enough room to read a full, jumbo packet so move on
                     break;
                 }
 
                 // Read in one packet
-                bytesRead = recvfrom(udpSocket, pkt, 9100, 0, nullptr, nullptr);
+                bytesRead = recvfrom(udpSocket, pkt, 65536, 0, nullptr, nullptr);
                 if (bytesRead < 0) {
                     if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                     return (RECV_MSG);
