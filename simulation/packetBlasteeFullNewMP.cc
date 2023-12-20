@@ -716,8 +716,8 @@ printf("Stats ROLLING OVER\n");
             int activeSources = 0;
             byteCount = pktCount = bufCount = 0;
             discardByteCount = discardPktCount = discardBufCount = 0;
-            long totalDiscardBufs = 0L, totalDiscardPkts = 0L, totalDiscardBytes = 0L;
-            long totalBytes = 0L, totalBuilt = 0L, totalMicro = 0L, totalPkts = 0L, avgMicroSec;
+            int64_t totalDiscardBufs = 0L, totalDiscardPkts = 0L, totalDiscardBytes = 0L;
+            int64_t totalBytes = 0L, totalBuilt = 0L, totalMicro = 0L, totalPkts = 0L, avgMicroSec;
 
             for (int i = 0; i < sourceCount; i++) {
                 // Data not coming in yet from this source so do NO calcs
@@ -767,7 +767,7 @@ printf("Stats ROLLING OVER\n");
                 // Event rates
                 evRate    = 1000000.0 * ((double) bufCount) / microSec;
                 evAvgRate = 1000000.0 * ((double) totalBuilt) / avgMicroSec;
-                printf(" Events:  %3.4g Hz,    %3.4g Avg, total %" PRIu64 "\n",
+                printf(" Events:  %3.4g Hz,    %3.4g Avg, total %" PRId64 "\n",
                         evRate, evAvgRate, totalBuilt);
 
                 printf("Discard:  %" PRId64 ", (%" PRId64 " total) evts,   pkts: %" PRId64 ", %" PRId64 " total\n\n",
@@ -1114,8 +1114,8 @@ static void *threadAssemble(void *arg) {
     bool restarted = false, fromSlowMap = false;
     size_t count;
 
-    int pktSizeMax = 9100;
-    char pkt[pktSizeMax];
+
+    char pkt[PacketStoreItem::size];
     reHeader hdr;
 
 
@@ -1320,14 +1320,14 @@ static void *threadAssemble(void *arg) {
                     // be deleted without having to publish or release back to the supply.
                     slowTickMap.erase(oldestSlowTick);
                     slowTimeMap.erase(oldestSlowTick);
-//std::cout << "D_" << slowTickMap.size() << " ";
+//std::cout << "D " << " ";
                 }
 
                 // Put copied bufItem into slow map
                 slowTickMap[oldestTick] = slowBufItem;
                 slowTimeMap.insert({oldestTick, microSec});
                 largestSlowTick = oldestTick;
-//std::cout << "M_" << slowTickMap.size() << " ";
+//std::cout << "SL_" << slowTickMap.size() << " ";
 
                 // Remove oldest entry from fast map
                 fastTickMap.erase(oldestTick);
@@ -1471,14 +1471,14 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
 
                         slowTickMap.erase(oldestSlowTick);
                         slowTimeMap.erase(oldestSlowTick);
-//std::cout << "D" << slowTickMap.size() << " ";
+//std::cout << "D-" << " ";
                     }
 
                     // Put copied bItem into slow map
                     slowTickMap[tik] = slowItem;
                     slowTimeMap[tik] = microSec;
                     largestSlowTick  = tik;
-//std::cout << "M" << slowTickMap.size() << " ";
+//std::cout << "S-" << slowTickMap.size() << " ";
 
                     // Erase the entry in fastTickMap associated with this tick
                     fastTickMap.erase(tik);
@@ -1500,7 +1500,7 @@ std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
             while (it != slowTimeMap.end()) {
                 if ((microSec - it->second)/1000 >= SLOW_STORE_MILLISEC) {
                     // Dump too old tick
-//std::cout << "D" << slowTimeMap.size() << " ";
+//std::cout << "D--" << slowTimeMap.size() << " ";
                     uint64_t tik = it->first;
                     auto bItem = slowTickMap[tik];
 
