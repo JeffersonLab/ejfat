@@ -41,7 +41,7 @@ namespace ejfat {
     class PacketStoreItem : public SupplyItem {
 
     public:
-        static const uint32_t size = 9100;
+        static const uint32_t size = 10000;
 
     private:
 
