@@ -852,7 +852,7 @@ static inline uint64_t bswap_64(uint64_t x) {
                 // Read UDP packet
                 bytesRead = recvfrom(udpSocket, pkt, 65536, 0, nullptr, nullptr);
                 if (bytesRead < 0) {
-                    if (debug) fprintf(stderr, "getCompletePacketizedBuffer: recvmsg failed: %s\n", strerror(errno));
+                    if (debug) fprintf(stderr, "getCompletePacketizedBuffer: recvfrom failed: %s\n", strerror(errno));
                     return (RECV_MSG);
                 }
                 else if (bytesRead < HEADER_BYTES) {
