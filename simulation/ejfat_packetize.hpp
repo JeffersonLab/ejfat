@@ -203,6 +203,8 @@ namespace ejfat {
             *(buffer+1) = 'B';
             *(buffer+2) = version;
             *(buffer+3) = protocol;
+            *(buffer+4) = 0;
+            *(buffer+5) = 0;
             // Put the data in network byte order (big endian)
             *((uint16_t *)(buffer + 6)) = htons(entropy);
             *((uint64_t *)(buffer + 8)) = htonll(tick);
@@ -308,6 +310,7 @@ namespace ejfat {
                                   uint64_t tick, int version, uint16_t dataId) {
 
             buffer[0] = version << 4;
+            buffer[1] = 0;
 
             *((uint16_t *)(buffer + 2))  = htons(dataId);
             *((uint32_t *)(buffer + 4))  = htonl(offset);
@@ -419,6 +422,7 @@ namespace ejfat {
             buffer[0] = 'L';
             buffer[1] = 'C';
             buffer[2] = version;
+            buffer[3] = 0;
 
             // Put the data in network byte order (big endian)
             *((uint32_t *)(buffer + 4))  = htonl(srcId);
