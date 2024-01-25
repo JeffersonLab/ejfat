@@ -89,7 +89,7 @@ static void printHelp(char *programName) {
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
             "        [-d <delay in microsec between packets>]");
 
-    fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
+    fprintf(stderr, "        EJFAT CLAS data UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
     fprintf(stderr, "        The -sync option will send a UDP message to LB every second with last tick sent.\n");
 }
@@ -933,6 +933,7 @@ int main(int argc, char **argv) {
 
     uint32_t evtRate;
     uint64_t bufsSent = 0UL;
+    clock_gettime(CLOCK_MONOTONIC, &tStart);
 
     while (true) {
 
