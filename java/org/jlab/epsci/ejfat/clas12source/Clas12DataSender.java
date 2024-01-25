@@ -385,10 +385,10 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + destHost +
                 }
 
                 if (connect) {
-                    udpPackets[i] = new DatagramPacket(packetStorage[i], 65536);
+                    udpPackets[i] = new DatagramPacket(packetStorage[i], 65535);
                 }
                 else {
-                    udpPackets[i] = new DatagramPacket(packetStorage[i], 65536, destAddr, port);
+                    udpPackets[i] = new DatagramPacket(packetStorage[i], 65535, destAddr, port);
                 }
             }
 
