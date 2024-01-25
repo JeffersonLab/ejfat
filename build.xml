@@ -2,7 +2,6 @@
 
 <project name="EJFAT" default="compile" basedir=".">
 
-
     <!-- environmental variables -->
     <property environment="env"/>
     
@@ -162,12 +161,6 @@
         <delete file="${jarPath}"/>
         <jar jarfile="${jarPath}" manifest="${src.dir}/org/jlab/epsci/ejfat/manifest.mf">
             <fileset dir="${build.classes}" excludes="*.class" >
-                <include name="org/jlab/epsci/**/*.class"/>
-                <include name="**/*.properties"/>
-                <include name="**/*.png"/>
-                <include name="**/*.jpg"/>
-                <include name="**/*.gif"/>
-                <include name="**/*.xml"/>
             </fileset>
         </jar>
     </target>
