@@ -41,6 +41,7 @@
 #include <pthread.h>
 #include <iostream>
 #include <cinttypes>
+#include <chrono>
 
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -961,10 +962,18 @@ int main(int argc, char **argv) {
                 bytesToWriteAtOnce, byteRate, buffersAtOnce, microSecItShouldTake);
     }
 
+    uint64_t startTimeNanos = 0UL;
+
     if (setByteRate || setBufRate || sendSync) {
         // Start the clock
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        tStart = t1;
+
+        // Let's try some C++ to do the rate calculation and sending of time in sync message
+        // Get the starting time point
+        auto startT = std::chrono::high_resolution_clock::now();
+        // Convert the time point to nanoseconds since the epoch
+        auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(startT.time_since_epoch()).count();
+        startTimeNanos = static_cast<uint64_t>(nano);
     }
 
     uint32_t evtRate;
@@ -1056,24 +1065,30 @@ int main(int argc, char **argv) {
         tick += tickPrescale;
 
         if (sendSync) {
-            clock_gettime(CLOCK_MONOTONIC, &tEnd);
-            syncTime = 1000000000UL * (tEnd.tv_sec - tStart.tv_sec) + (tEnd.tv_nsec - tStart.tv_nsec);
+            // Get the current time point
+            auto endT = std::chrono::high_resolution_clock::now();
+            // Convert the time point to nanoseconds since the epoch
+            auto tEnd = std::chrono::duration_cast<std::chrono::nanoseconds>(endT.time_since_epoch()).count();
+            uint64_t currentTimeNanos = static_cast<uint64_t>(tEnd);
+
+            // Calculate the time difference in nanoseconds
+            auto timeDiff = currentTimeNanos - startTimeNanos;
 
             // if >= 1 sec ...
-            if (syncTime >= 1000000000UL) {
+            if (timeDiff >= 1000000000UL) {
                 // Calculate buf or event rate in Hz
-                evtRate = bufsSent/(syncTime/1000000000);
+                evtRate = bufsSent/(timeDiff/1000000000UL);
 
                 // Send sync message to same destination
 if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
-                setSyncData(syncBuf, version, dataId, tick, evtRate, syncTime);
-                err = (int)send(syncSocket, syncBuf, 28, 0);
+                setSyncData(syncBuf, version, dataId, tick, evtRate, currentTimeNanos);
+                err = (int)send(clientSockets[portIndex], syncBuf, 28, 0);
                 if (err == -1) {
                     fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
                 }
 
-                tStart = tEnd;
+                startTimeNanos = currentTimeNanos;
                 bufsSent = 0;
             }
         }
