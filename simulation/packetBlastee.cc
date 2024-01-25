@@ -54,9 +54,10 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
+            "        [-nobuild]",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <listening UDP port>]",
             "        [-b <internal buffer byte sizez>]",
@@ -66,6 +67,7 @@ static void printHelp(char *programName) {
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
+    fprintf(stderr, "        The -nobuild option does NOT reassemble events and tests packet/data reception rates only.\n");
 }
 
 
@@ -81,13 +83,14 @@ static void printHelp(char *programName) {
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
+ * @param noBuild       filled with true if no reassembly of packets into events.
  * @param listenAddr    filled with IP address to listen on.
  * @param filename      filled with name of file in which to write stats.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
                       int *cores, uint16_t* port,
-                      bool *debug, bool *useIPv6,
+                      bool *debug, bool *useIPv6, bool *noBuild,
                       char *listenAddr, char *filename) {
 
     int c, i_tmp;
@@ -95,10 +98,11 @@ static void parseArgs(int argc, char **argv,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {             {"tpre",  1, nullptr, 1},
-                          {"ip6",  0, nullptr, 2},
-                          {"cores",  1, nullptr, 3},
-                          {nullptr,       0, nullptr,    0}
+            {             {"tpre",    1, nullptr, 1},
+                          {"ip6",     0, nullptr, 2},
+                          {"cores",   1, nullptr, 3},
+                          {"nobuild", 0, nullptr, 4},
+                          {nullptr,   0, nullptr, 0}
             };
 
 
@@ -185,6 +189,12 @@ static void parseArgs(int argc, char **argv,
                 // use IP version 6
                 fprintf(stderr, "SETTING TO IP version 6\n");
                 *useIPv6 = true;
+                break;
+
+            case 4:
+                // don't reassemble packets into events
+                fprintf(stderr, "SETTING TO IP version 6\n");
+                *noBuild = true;
                 break;
 
             case 3:
@@ -274,6 +284,7 @@ static int64_t discardedPackets, discardedBytes;
 static int32_t discardedTicks;
 
 typedef struct threadStruct_t {
+    bool noBuild;
     char filename[101];
 } threadStruct;
 
@@ -291,6 +302,7 @@ static void *thread(void *arg) {
     // File writing stuff
     bool writeToFile = false;
     auto *targ = static_cast<threadStruct *>(arg);
+    bool noBuild = targ->noBuild;
     char *filename = targ->filename;
     FILE *fp;
     if (strlen(filename) > 0) {
@@ -368,10 +380,18 @@ static void *thread(void *arg) {
             printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = 0?/everything? ", pktRate, pktAvgRate);
         }
         else {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = %" PRId64 ",  total %" PRId64 " ",
-                     pktRate, pktAvgRate, discardedPkts, totalDiscardedPkts);
+            if (noBuild) {
+                printf(" Packets:  %3.4g Hz,  %3.4g Avg\n", pktRate, pktAvgRate);
+            }
+            else {
+                printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = %" PRId64 ",  total %" PRId64 " ",
+                       pktRate, pktAvgRate, discardedPkts, totalDiscardedPkts);
+            }
         }
-        printf(": Dumped Ticks = %" PRId64 ", total = %" PRId64 "\n", discardedTiks, totalDiscardedTiks);
+
+        if (!noBuild) {
+            printf(": Dumped Ticks = %" PRId64 ", total = %" PRId64 "\n", discardedTiks, totalDiscardedTiks);
+        }
 
         // Actual Data rates (no header info)
         dataRate = ((double) byteCount) / time;
@@ -409,6 +429,7 @@ int main(int argc, char **argv) {
     int cores[10];
     bool debug = false;
     bool useIPv6 = false;
+    bool noBuild = false;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -421,7 +442,7 @@ int main(int argc, char **argv) {
 
     parseArgs(argc, argv, &bufSize, &recvBufSize,
               &tickPrescale, cores, &port, &debug,
-              &useIPv6, listeningAddr, filename);
+              &useIPv6, &noBuild, listeningAddr, filename);
 
 #ifdef __linux__
 
@@ -552,6 +573,7 @@ int main(int argc, char **argv) {
     if (strlen(filename) > 0) {
         std::memcpy(targ->filename, filename, sizeof(filename));
     }
+    targ->noBuild = noBuild;
 
     pthread_t thd;
     int status = pthread_create(&thd, nullptr, thread, (void *) targ);
@@ -585,22 +607,69 @@ int main(int argc, char **argv) {
     uint16_t dataId;
     bool firstLoop = true;
 
+    // For noBuild mode ...
+    // Storage for packet
+    char pkt[65536];
+    uint32_t offset, length;
+    ssize_t bytesRead;
+    int  version;
+    bool veryFirstRead = true;
+    uint16_t srcId = 65535;
+
+
 
     while (true) {
 
         clearStats(stats);
         uint64_t diff, prevTick = tick;
 
-        // Fill with data
-        nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
-                                             debug, &tick, &dataId, stats, tickPrescale);
+        if (noBuild) {
+            // Read UDP packet
+            bytesRead = recvfrom(udpSocket, pkt, 65536, 0, nullptr, nullptr);
+
+            if (bytesRead < 0) {
+                if (debug) fprintf(stderr, "packetBlastee: recvfrom failed: %s\n", strerror(errno));
+                nBytes = RECV_MSG;
+            }
+            else if (bytesRead < HEADER_BYTES) {
+                if (debug) fprintf(stderr, "packetBlastee: packet does not contain not enough data\n");
+                nBytes = INTERNAL_ERROR;
+            }
+            else {
+                nBytes = bytesRead - HEADER_BYTES;
+
+                // Parse header
+                parseReHeader(pkt, &version, &dataId, &offset, &length, &tick);
+
+                if (veryFirstRead) {
+                    // record data id of first packet of buffer
+                    srcId = dataId;
+                    veryFirstRead = false;
+                }
+
+                if (dataId != srcId) {
+                    // different data source, reject this packet
+                    stats->badSrcIdPackets++;
+                    if (debug) fprintf(stderr, "packetBlastee: reject pkt from src %hu\n", dataId);
+                    continue;
+                }
+
+                //stats->acceptedBytes += nBytes;
+                stats->acceptedPackets++;
+            }
+        }
+        else {
+            // Fill with data
+            nBytes = getCompletePacketizedBuffer(dataBuf, bufSize, udpSocket,
+                                                 debug, &tick, &dataId, stats, tickPrescale);
+        }
 
         if (nBytes < 0) {
             if (nBytes == BUF_TOO_SMALL) {
                 fprintf(stderr, "Receiving buffer is too small (%d)\n", bufSize);
             }
             else {
-                fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
+                fprintf(stderr, "Error in receiving data, %ld\n", nBytes);
             }
             return (0);
         }

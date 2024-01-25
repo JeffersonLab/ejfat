@@ -56,6 +56,9 @@
 #define HEADER_BYTES     36
 #define RE_HEADER_BYTES  20
 
+// Max MTU that ejfat nodes' NICs can handle
+#define MAX_EJFAT_MTU 9978
+
 
 #ifdef __linux__
     #define htonll(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
@@ -108,7 +111,7 @@ namespace ejfat {
 
     /**
      * Attempt to set the MTU value for UDP packets on the given interface.
-     * Miminum 500, maximum 9000.
+     * Miminum 500, maximum MAX_EJFAT_MTU.
      *
      * @param interfaceName name of network interface (e.g. eth0).
      * @param sock UDP socket on which to set mtu value.
@@ -121,8 +124,8 @@ namespace ejfat {
         if (mtu < 500) {
             mtu = 500;
         }
-        if (mtu > 9000) {
-            mtu = 9000;
+        if (mtu > MAX_EJFAT_MTU) {
+            mtu = MAX_EJFAT_MTU;
         }
 
         struct ifreq ifr;
@@ -200,6 +203,8 @@ namespace ejfat {
             *(buffer+1) = 'B';
             *(buffer+2) = version;
             *(buffer+3) = protocol;
+            *(buffer+4) = 0;
+            *(buffer+5) = 0;
             // Put the data in network byte order (big endian)
             *((uint16_t *)(buffer + 6)) = htons(entropy);
             *((uint64_t *)(buffer + 8)) = htonll(tick);
@@ -305,6 +310,7 @@ namespace ejfat {
                                   uint64_t tick, int version, uint16_t dataId) {
 
             buffer[0] = version << 4;
+            buffer[1] = 0;
 
             *((uint16_t *)(buffer + 2))  = htons(dataId);
             *((uint32_t *)(buffer + 4))  = htonl(offset);
@@ -416,6 +422,7 @@ namespace ejfat {
             buffer[0] = 'L';
             buffer[1] = 'C';
             buffer[2] = version;
+            buffer[3] = 0;
 
             // Put the data in network byte order (big endian)
             *((uint32_t *)(buffer + 4))  = htonl(srcId);
@@ -511,7 +518,7 @@ namespace ejfat {
         uint32_t localOffset = *offset;
 
         // The very first packet goes in here
-        char packetStorage[maxUdpPayload + HEADER_BYTES];
+        char packetStorage[65536 + HEADER_BYTES];
         char *writeHeaderTo = packetStorage;
 
         // If this packet is the very first packet sent in this series of data buffers(offset = 0)
@@ -676,7 +683,7 @@ namespace ejfat {
         size_t bytesToWrite;
 
         // The very first packet goes in here
-        char packetStorage[maxUdpPayload + HEADER_BYTES_OLD];
+        char packetStorage[65536 + HEADER_BYTES_OLD];
         char *writeHeaderTo = packetStorage;
 
         // If this packet is the very first packet sent in this series of data buffers(offset = 0)
@@ -855,7 +862,7 @@ namespace ejfat {
         const char *getDataFrom = dataBuffer;
         // Allocate something that'll hold one packet, possibly jumbo.
         // This will have LB and RE headers and the payload data.
-        char buffer[10000];
+        char buffer[65536];
 
         // If this packet is the very first packet sent in this series of data buffers(offset = 0)
         bool veryFirstPacket = false;
@@ -1087,7 +1094,7 @@ namespace ejfat {
         const char *getDataFrom = dataBuffer;
         // Allocate something that'll hold one packet, possibly jumbo.
         // This will have LB and RE headers and the payload data.
-        char buffer[10000];
+        char buffer[65536];
 
         // If this packet is the very first packet sent in this series of data buffers(offset = 0)
         bool veryFirstPacket = false;
@@ -1228,7 +1235,7 @@ namespace ejfat {
             const char *getDataFrom = dataBuffer;
             // Allocate something that'll hold one packet, possibly jumbo.
             // This will have LB and RE headers and the payload data.
-            char buffer[10000];
+            char buffer[65536];
 
             // If this packet is the very first packet sent in this series of data buffers(offset = 0)
             bool veryFirstPacket = false;
