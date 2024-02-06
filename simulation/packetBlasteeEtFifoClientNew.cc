@@ -1346,45 +1346,48 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         /* Start a couple threads */
         /**************************/
 
-        // Start thread to do PID "control"
-        threadStruct *targ = (threadStruct *)calloc(1, sizeof(threadStruct));
-        if (targ == nullptr) {
-            fprintf(stderr, "out of mem\n");
-            return -1;
-        }
+        if (reportToCP) {
 
-        targ->etId = id;
-        targ->fid = fid;
-        targ->cpServerPort = cpPort;
-        targ->cpServerIpAddr = cpAddr;
+            // Start thread to do PID "control"
+            threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
+            if (targ == nullptr) {
+                fprintf(stderr, "out of mem\n");
+                return -1;
+            }
 
-        targ->dataPort = port;
-        targ->dataIpAddr = listeningAddr;
-        targ->dataPortRange = range;
+            targ->etId = id;
+            targ->fid = fid;
+            targ->cpServerPort = cpPort;
+            targ->cpServerIpAddr = cpAddr;
 
-        targ->myName = beName;
-        targ->token = cpToken;
-        targ->setPoint = cpSetPoint;
-        targ->report = reportToCP;
+            targ->dataPort = port;
+            targ->dataIpAddr = listeningAddr;
+            targ->dataPortRange = range;
 
-        targ->Kp = Kp;
-        targ->Ki = Ki;
-        targ->Kd = Kd;
+            targ->myName = beName;
+            targ->token = cpToken;
+            targ->setPoint = cpSetPoint;
+            targ->report = reportToCP;
 
-        targ->fcount = fcount;
-        targ->reportTime = reportTime;
-        targ->sampleTime = stime;
+            targ->Kp = Kp;
+            targ->Ki = Ki;
+            targ->Kd = Kd;
 
-        targ->keepFillStats = keepLevelStats;
-        if (keepLevelStats) {
-            targ->statFile = stat_file_name;
-        }
+            targ->fcount = fcount;
+            targ->reportTime = reportTime;
+            targ->sampleTime = stime;
 
-        pthread_t thd1;
-        status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
-        if (status != 0) {
-            fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
-            return -1;
+            targ->keepFillStats = keepLevelStats;
+            if (keepLevelStats) {
+                targ->statFile = stat_file_name;
+            }
+
+            pthread_t thd1;
+            status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
+            if (status != 0) {
+                fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
+                return -1;
+            }
         }
     }
 
