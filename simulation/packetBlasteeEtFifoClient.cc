@@ -1239,46 +1239,49 @@ int main(int argc, char **argv) {
         /* Start a couple threads */
         /**************************/
 
-        // Start thread to do PID "control"
-        threadStruct *targ = (threadStruct *)calloc(1, sizeof(threadStruct));
-        if (targ == nullptr) {
-            fprintf(stderr, "out of mem\n");
-            return -1;
+        if (reportToCP) {
+            // Start thread to do PID "control"
+            threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
+            if (targ == nullptr) {
+                fprintf(stderr, "out of mem\n");
+                return -1;
+            }
+
+            targ->etId = id;
+            targ->fid = fid;
+            targ->cpServerPort = cpPort;
+            targ->cpServerIpAddr = cpAddr;
+
+            targ->dataPort = port;
+            targ->dataIpAddr = listeningAddr;
+            targ->dataPortRange = range;
+
+            targ->myName = beName;
+            targ->token = cpToken;
+            targ->setPoint = cpSetPoint;
+            targ->report = reportToCP;
+
+            targ->Kp = Kp;
+            targ->Ki = Ki;
+            targ->Kd = Kd;
+
+            targ->fcount = fcount;
+            targ->reportTime = reportTime;
+            targ->sampleTime = stime;
+
+            targ->keepFillStats = keepLevelStats;
+            if (keepLevelStats) {
+                targ->statFile = stat_file_name;
+            }
+
+            pthread_t thd1;
+            status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
+            if (status != 0) {
+                fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
+                return -1;
+            }
         }
-
-        targ->etId = id;
-        targ->fid = fid;
-        targ->cpServerPort = cpPort;
-        targ->cpServerIpAddr = cpAddr;
-
-        targ->dataPort = port;
-        targ->dataIpAddr = listeningAddr;
-        targ->dataPortRange = range;
-
-        targ->myName = beName;
-        targ->token = cpToken;
-        targ->setPoint = cpSetPoint;
-        targ->report = reportToCP;
-
-        targ->Kp = Kp;
-        targ->Ki = Ki;
-        targ->Kd = Kd;
-
-        targ->fcount = fcount;
-        targ->reportTime = reportTime;
-        targ->sampleTime = stime;
-
-        targ->keepFillStats = keepLevelStats;
-        if (keepLevelStats) {
-            targ->statFile = stat_file_name;
-        }
-
-        pthread_t thd1;
-        status = pthread_create(&thd1, NULL, pidThread, (void *) targ);
-        if (status != 0) {
-            fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
-            return -1;
-        }
+        
     }
 
     // Start with offset 0 in very first packet to be read
