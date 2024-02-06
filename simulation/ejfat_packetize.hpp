@@ -825,8 +825,8 @@ namespace ejfat {
      * @param version        version in reassembly header.
      * @param dataId         data id in reassembly header.
      * @param fullLen        size of full dataBuffer in bytes to be sent for this tick.
-     * @param offset         value-result parameter that passes in the sequence number of first packet
-     *                       and returns the sequence to use for next packet to be sent.
+     * @param offset         value-result parameter that passes in the offset into the full buffer of dataBuffer
+     *                       and returns the offset to use for next packets to be sent.
      * @param delay          delay in microsec between each packet being sent.
      * @param delayPrescale  prescale for delay (i.e. only delay every Nth time).
      * @param delayCounter   value-result parameter tracking when delay was last run.
@@ -882,7 +882,6 @@ namespace ejfat {
             veryFirstPacket = true;
         }
 
-        uint32_t packetCounter = *offset;
         // Use this flag to allow transmission of a single zero-length buffer
         bool firstLoop = true;
 
@@ -936,7 +935,6 @@ namespace ejfat {
                     // If this is still the first packet, we can try again. Try 20% reduction.
                     maxUdpPayload = maxUdpPayload * 8 / 10;
                     veryLastPacket = false;
-                    packetCounter--;
                     if (debug) fprintf(stderr, "\n******************  START AGAIN ********************\n\n");
                     goto startAgain;
                 }
@@ -968,8 +966,8 @@ namespace ejfat {
             getDataFrom        += bytesToWrite;
             veryFirstPacket     = false;
 
-            if (debug) fprintf(stderr, "Sent pkt %u, total %lu, remaining bytes = %lu\n\n",
-                               (packetCounter - 1), totalDataBytesSent, remainingBytes);
+            if (debug) fprintf(stderr, "Sent pkt, total bytes %lu, remaining bytes = %lu\n\n",
+                               totalDataBytesSent, remainingBytes);
         }
 
         *offset = localOffset;
@@ -1010,8 +1008,8 @@ namespace ejfat {
      * @param version        version in reassembly header.
      * @param dataId         data id in reassembly header.
      * @param fullLen        size of full dataBuffer in bytes to be sent for this tick.
-     * @param offset         value-result parameter that passes in the sequence number of first packet
-     *                       and returns the sequence to use for next packet to be sent.
+     * @param offset         value-result parameter that passes in the offset into the full buffer of dataBuffer
+     *                       and returns the offset to use for next packets to be sent.
      * @param delay          delay in microsec between each packet being sent.
      * @param delayPrescale  prescale for delay (i.e. only delay every Nth time).
      * @param delayCounter   value-result parameter tracking when delay was last run.
