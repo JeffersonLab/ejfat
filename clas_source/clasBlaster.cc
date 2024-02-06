@@ -64,7 +64,7 @@ static void printHelp(char *programName) {
             programName,
             "        -f <filename>",
             "        [-r <# repeat read-file cycles>]",
-            "        [-h] [-v] [-ip6] [-sync]",
+            "        [-h] [-v] [-ip6] [-sync] [-direct]",
             "        [-bufdelay] (delay between each buffer, not packet)",
 
             "        [-host <destination host (defaults to 127.0.0.1)>]",
@@ -107,7 +107,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *socks,
                       int *cores,
                       bool *debug,
-                      bool *useIPv6, bool *bufDelay, bool *sendSync,
+                      bool *useIPv6, bool *bufDelay,
+                      bool *sendSync, bool *direct,
                       char* host, char *cp_host,
                       char *interface, char *filename) {
 
@@ -118,23 +119,24 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
     bool gotFile = false;
 
     static struct option long_options[] =
-            {{"mtu",   1, NULL, 1},
-             {"host",  1, NULL, 2},
-             {"ver",   1, NULL, 3},
-             {"id",    1, NULL, 4},
-             {"pro",   1, NULL, 5},
-             {"sync",   0, NULL, 6},
-             {"sock",   1, NULL, 7},
-             {"dpre",  1, NULL, 9},
-             {"tpre",  1, NULL, 10},
-             {"ipv6",  0, NULL, 11},
-             {"bufdelay",  0, NULL, 12},
-             {"cores",  1, NULL, 13},
-             {"bufrate",  1, NULL, 14},
-             {"bufsize",  1, NULL, 15},
-             {"cp_port",  1, NULL, 16},
-             {"cp_addr",  1, NULL, 17},
-             {0,       0, 0,    0}
+            {{"mtu",       1, nullptr, 1},
+             {"host",      1, nullptr, 2},
+             {"ver",       1, nullptr, 3},
+             {"id",        1, nullptr, 4},
+             {"pro",       1, nullptr, 5},
+             {"sync",      0, nullptr, 6},
+             {"sock",      1, nullptr, 7},
+             {"dpre",      1, nullptr, 9},
+             {"tpre",      1, nullptr, 10},
+             {"ipv6",      0, nullptr, 11},
+             {"bufdelay",  0, nullptr, 12},
+             {"cores",     1, nullptr, 13},
+             {"bufrate",   1, nullptr, 14},
+             {"bufsize",   1, nullptr, 15},
+             {"cp_port",   1, nullptr, 16},
+             {"cp_addr",   1, nullptr, 17},
+             {"direct",    0, nullptr, 18},
+             {0, 0, 0, 0}
             };
 
 
@@ -399,6 +401,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 strcpy(cp_host, optarg);
                 break;
 
+            case 18:
+                // do we bypass the LB and go directly to backend?
+                *direct = true;
+                break;
+
             case 13:
                 // Cores to run on
                 if (strlen(optarg) < 1) {
@@ -608,6 +615,7 @@ int main(int argc, char **argv) {
     bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false;
     bool sendSync = true;
+    bool direct = false;
 
     char syncBuf[28];
     char host[INPUT_LENGTH_MAX], cp_host[INPUT_LENGTH_MAX], interface[16], filename[256];
@@ -626,7 +634,7 @@ int main(int argc, char **argv) {
             &dataId, &port, &cp_port, &tick,
               &delay, &bufRate, &avgBufSize, &sendBufSize,
               &delayPrescale, &tickPrescale,  &repeats, &socks, cores, &debug,
-              &useIPv6, &bufDelay, &sendSync,
+              &useIPv6, &bufDelay, &sendSync, &direct,
               host, cp_host, interface, filename);
 
 #ifdef __linux__
@@ -992,7 +1000,7 @@ int main(int argc, char **argv) {
                                        tick, protocol, entropy, version, dataId,
                                        (uint32_t) byteSize, &offset,
                                        packetDelay, delayPrescale, &delayCounter,
-                                       firstBuffer, lastBuffer, debug, false, &packetsSent);
+                                       firstBuffer, lastBuffer, debug, direct, &packetsSent);
 
         if (err < 0) {
             // Should be more info in errno
