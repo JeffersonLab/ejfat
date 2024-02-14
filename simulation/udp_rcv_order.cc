@@ -167,6 +167,9 @@ int main(int argc, char **argv) {
     getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufBytes, &size);
     fprintf(stderr, "UDP socket recv buffer = %d bytes\n", recvBufBytes);
 
+    int optval = 1;
+    setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+
     // Configure settings in address struct
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));

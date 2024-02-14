@@ -530,6 +530,9 @@ int main(int argc, char **argv) {
     // Create UDP socket
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
+    int optval = 1;
+    setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+
     // Configure settings in address struct
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
