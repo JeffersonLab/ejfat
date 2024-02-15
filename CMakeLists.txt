@@ -365,12 +365,14 @@ if (DEFINED MAKE_EXEC)
 
         add_library(${UTIL_LIB_NAME} SHARED ${UTIL_FILES})
         target_include_directories(${UTIL_LIB_NAME} PUBLIC
+                ${CMAKE_SOURCE_DIR}/simulation
                 ${CMAKE_SOURCE_DIR}/util
                 ${Boost_INCLUDE_DIRS}
                 ${DISRUPTOR_INCLUDE_DIRS})
 
         add_library(${UTIL_LIB_NAME_STATIC} STATIC ${UTIL_FILES})
         target_include_directories(${UTIL_LIB_NAME_STATIC} PUBLIC
+                ${CMAKE_SOURCE_DIR}/simulation
                 ${CMAKE_SOURCE_DIR}/util
                 ${Boost_INCLUDE_DIRS}
                 ${DISRUPTOR_INCLUDE_DIRS})
@@ -422,27 +424,14 @@ if (DEFINED INSTALL_DIR_DEFINED)
 endif()
 
 
-## Only install if installation directory has been defined
-#if (DEFINED INSTALL_DIR_DEFINED)
-#    # Installation defaulting to ${CMAKE_INSTALL_PREFIX}/lib or include
-#    install(TARGETS evio LIBRARY DESTINATION lib)
-#    install(FILES ${C_HEADER_FILES} DESTINATION include)
-#
-#    if (NOT DEFINED C_ONLY)
-#        install(TARGETS eviocc LIBRARY DESTINATION lib)
-#        install(FILES ${CPP_HEADER_FILES} DESTINATION include)
-#        install(FILES ${CPP_HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-#    endif()
-#endif()
 
+# Uninstall target
+if(NOT TARGET uninstall)
+    configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake" IMMEDIATE @ONLY)
 
-## Uninstall target
-#if(NOT TARGET uninstall)
-#    configure_file(
-#            "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
-#            "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake" IMMEDIATE @ONLY)
-#
-#    add_custom_target(uninstall
-#            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
-#endif()
-#
+    add_custom_target(uninstall
+            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+endif()
+
