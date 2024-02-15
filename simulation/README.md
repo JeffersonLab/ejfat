@@ -188,3 +188,8 @@ Other than that, this program is never used or run.
 ## THINGS TO DO:
 
 1) change the mixture of C and C++ into a nice, uniform C++.
+
+## THINGS NOT TO DO:
+
+1) Replacing recv with recvmmsg (on linux) only slows things down.
+
