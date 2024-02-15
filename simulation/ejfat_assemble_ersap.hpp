@@ -207,7 +207,8 @@ static inline uint64_t bswap_64(uint64_t x) {
 
 
         static void clearHeader(reHeader *hdr) {
-            std::memset(hdr, 0, sizeof(reHeader));
+            // initialize mem to 0s
+            *hdr = reHeader();
             hdr->version = 2;
         }
 
