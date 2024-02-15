@@ -89,28 +89,30 @@ static bool haveEtName = false;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
-            "        [-h] [-v] [-ip6]",
+            "        [-h] [-v] [-ip6]\n",
+
             "        [-p <data receiving port, 17750 default>]",
-            "        [-a <data receiving address>]",
+            "        [-a <data receiving address to register w/ CP>]",
+            "        [-baddr <bind data receiving socket to this address, default INADDR_ANY>]",
             "        [-token <authentication token (for CP registration, default token_<time>)>]",
-            "        [-range <data receiving port range, entropy of sender, default 0>]\n\n",
+            "        [-range <data receiving port range, entropy of sender, default 0>]\n",
 
             "        [-sfile <file name for stats>]",
-            "        [-stime <stat sample millisec (t >= 1 msec, default = 1)]\n\n",
+            "        [-stime <stat sample millisec (t >= 1 msec, default = 1)]\n",
 
             "        [-gaddr <CP IP address (default = none & no CP comm)>]",
             "        [-gport <CP port (default 18347)>]",
-            "        [-gname <name of this backend (default backend_<time>)>]\n\n",
+            "        [-gname <name of this backend (default backend_<time>)>]\n",
 
             "        [-kp <PID proportional constant, default 0.8>]",
             "        [-ki <PID integral constant, default 0.02>]",
             "        [-kd <PID differential constant, default 0.001>]\n",
 
             "        [-count <# of most recent fill values averaged, default 1000>]",
-            "        [-rtime <millisec for reporting fill to CP, default 1000>]\n\n",
+            "        [-rtime <millisec for reporting fill to CP, default 1000>]\n",
 
             "        [-s <PID fifo set point (default 0)>]",
             "        [-b <internal buffer byte size (default 150kB)>]",
@@ -144,7 +146,8 @@ static void printHelp(char *programName) {
  * @param stime         filled with time in millisec to sample stats.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
- * @param listenAddr    filled with IP address to listen on for LB data.
+ * @param dataAddr      filled with IP address to send to CP as data destination addr for this program.
+ * @param listenAddr    filled with IP address to listen on (bind to) for incoming data.
  * @param cpAddr        filled with control plane IP address.
  * @param etFilename    filled with name of ET file in which to write data.
  * @param beName        filled with name of this backend CP client.
@@ -158,7 +161,7 @@ static void parseArgs(int argc, char **argv,
                       int *cores, float *setPt,
                       uint16_t* port, uint16_t* cpPort, int *range,
                       uint32_t *fillCount, uint32_t *reportTime, uint32_t *stime,
-                      bool *debug, bool *useIPv6,
+                      bool *debug, bool *useIPv6, char *dataAddr,
                       char *listenAddr, char *cpAddr, char *cpToken,
                       char *etFilename, char *beName, std::string &statFileName,
                       float *kp, float *ki, float *kd) {
@@ -184,6 +187,7 @@ static void parseArgs(int argc, char **argv,
                           {"kd",        1, nullptr, 13},
                           {"count",     1, nullptr, 14},
                           {"rtime",     1, nullptr, 15},
+                          {"baddr",     1, nullptr, 16},
                           {0,       0, 0,    0}
             };
 
@@ -292,13 +296,23 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 'a':
+                // data receiving IP ADDRESS to report to CP
+                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
+                    fprintf(stderr, "data receiving IP address is bad\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                haveRecvAddr = true;
+                strcpy(dataAddr, optarg);
+                break;
+
+            case 16:
                 // LISTENING IP ADDRESS
                 if (strlen(optarg) > 15 || strlen(optarg) < 7) {
                     fprintf(stderr, "listening IP address is bad\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
-                haveRecvAddr = true;
                 strcpy(listenAddr, optarg);
                 break;
 
@@ -511,7 +525,7 @@ static void parseArgs(int argc, char **argv,
     }
 
     if (!haveEtName || !haveRecvAddr) {
-        fprintf(stderr, "Need to define ET system and receiving addr on cmd line\n\n");
+        fprintf(stderr, "Need to define ET system (-f) and receiving addr (-a) on cmd line\n\n");
         printHelp(argv[0]);
         exit(2);
     }
@@ -966,6 +980,9 @@ int main(int argc, char **argv) {
 
     std::string stat_file_name;
 
+    char dataAddr[16];
+    memset(dataAddr, 0, 16);
+
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
 
@@ -990,7 +1007,7 @@ int main(int argc, char **argv) {
               cores, &cpSetPoint,
               &port, &cpPort, &range,
               &fcount, &reportTime, &stime,
-              &debug, &useIPv6,
+              &debug, &useIPv6, dataAddr,
               listeningAddr, cpAddr, cpToken,
               et_filename, beName, stat_file_name,
               &Kp, &Ki, &Kd);
@@ -1259,7 +1276,7 @@ int main(int argc, char **argv) {
             targ->cpServerIpAddr = cpAddr;
 
             targ->dataPort = port;
-            targ->dataIpAddr = listeningAddr;
+            targ->dataIpAddr = dataAddr;
             targ->dataPortRange = range;
 
             targ->myName = beName;
