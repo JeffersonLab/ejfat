@@ -25,6 +25,11 @@ ESnet-JLab FPGA Accelerated Transport
         cmake -DINSTALL_DIR=<dir> ..
         make install
 
+## Uninstalling libraries, headers and executables:
+   
+        make uninstall
+
+
 ## Making all the executables
 
         setenv LD_LIBRARY_PATH=<ejfat-ersap installation dir>:$LD_LIBRARY_PATH
