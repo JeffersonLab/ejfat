@@ -76,7 +76,6 @@
 #include <errno.h>
 
 #include "BufferItem.h"
-#include "PacketRefItem.h"
 #include "PacketStoreItem.h"
 #include "SupplyItem.h"
 #include "Supplier.h"
