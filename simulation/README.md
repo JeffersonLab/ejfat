@@ -108,6 +108,11 @@ Duplicate packets will mess things up.
 The "New" version of this receiver uses the latest interactions with the control plane,
 developed when finishing work for the CHEP paper. It's yet untested.
 
+Neither of these programs use the sophisticated handling of out-of-order and
+duplicate packets that packetBlasteeFullNew(MP) use. They only call
+getCompletePacketizedBuffer(), but I believe that's an advantage since
+it's much faster reassembly code.
+
 
 
 #### packetBlastee.cc
