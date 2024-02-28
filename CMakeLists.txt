@@ -104,6 +104,11 @@ set(EMU_EXEC_FILES
 set(GRPC_EXEC_FILES
         simulation/packetBlasteeEtFifoClient.cc
         simulation/packetBlasteeEtFifoClientNew.cc
+        simulation/packetBlasteeEtMT.cc
+        )
+
+set(GRPC_SRC_FILES
+        simulation/EtFifoEntryItem.cpp
         )
 
 set(ET_EXEC_FILES
@@ -152,6 +157,7 @@ set(CPP_HEADER_FILES
         simulation/ejfat_packetize.hpp
         simulation/ejfat_assemble_ersap.hpp
         simulation/ejfat_assemble_ersap_et.hpp
+        simulation/EtFifoEntryItem.h
         util/ByteOrder.h
         util/ByteBuffer.h
         util/BufferSupplyItem.h
@@ -395,16 +401,21 @@ if (DEFINED MAKE_EXEC)
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
             message(STATUS "Create grpc-related executable " ${execName})
-            add_executable(${execName} ${fileName})
+            # UTIL_FILES and GRPC_SRC_FILES are only really needed for packetBlasteeEtMT
+            add_executable(${execName} ${fileName} ${UTIL_FILES} ${GRPC_SRC_FILES})
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
             target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                    ${CMAKE_SOURCE_DIR}/simulation
                     ${CMAKE_SOURCE_DIR}/util
                     ${GRPC_INCLUDE_DIRS}
-                    ${ET_INCLUDE_DIRS})
+                    ${ET_INCLUDE_DIRS}
+                    ${Boost_INCLUDE_DIRS}
+                    ${DISRUPTOR_INCLUDE_DIRS})
+
             # Needs these libs
-            target_link_libraries(${execName} pthread ${GRPC_LIBRARIES} ${ET_LIBRARY})
+            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)
