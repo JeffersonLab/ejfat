@@ -278,7 +278,7 @@ static void parseArgs(int argc, char **argv,
 
 
 // Statistics
-static volatile uint64_t totalBytes=0, totalPackets=0;
+static volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 static volatile int cpu=-1;
 static int64_t discardedPackets, discardedBytes;
 static int32_t discardedTicks;
@@ -292,9 +292,9 @@ typedef struct threadStruct_t {
 // Thread to send to print out rates
 static void *thread(void *arg) {
 
-    int64_t packetCount, byteCount;
-    int64_t prevTotalPackets, prevTotalBytes;
-    int64_t currTotalPackets, currTotalBytes;
+    int64_t packetCount, byteCount, eventCount;
+    int64_t prevTotalPackets, prevTotalBytes, prevTotalEvents;
+    int64_t currTotalPackets, currTotalBytes, currTotalEvents;
     // Ignore first rate calculation as it's most likely a bad value
     bool skipFirst = true;
 
@@ -320,7 +320,7 @@ static void *thread(void *arg) {
     }
 
 
-    double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate;
+    double pktRate, pktAvgRate, dataRate, dataAvgRate, totalRate, totalAvgRate, evRate, evAvgRate;
     int64_t totalT = 0, time, discardedPkts, totalDiscardedPkts = 0, discardedTiks, totalDiscardedTiks = 0;
     struct timespec t1, t2, firstT;
 
@@ -332,6 +332,7 @@ static void *thread(void *arg) {
 
         prevTotalBytes   = totalBytes;
         prevTotalPackets = totalPackets;
+        prevTotalEvents  = totalEvents;
 
         // Delay 4 seconds between printouts
         std::this_thread::sleep_for(std::chrono::seconds(4));
@@ -342,6 +343,7 @@ static void *thread(void *arg) {
         totalT = (1000000L * (t2.tv_sec - firstT.tv_sec)) + ((t2.tv_nsec - firstT.tv_nsec)/1000L);
 
         currTotalBytes   = totalBytes;
+        currTotalEvents  = totalEvents;
         currTotalPackets = totalPackets;
 
         if (skipFirst) {
@@ -350,17 +352,18 @@ static void *thread(void *arg) {
                 skipFirst = false;
             }
             firstT = t1 = t2;
-            totalT = totalBytes = totalPackets = 0;
+            totalT = totalBytes = totalPackets = totalEvents = 0;
             continue;
         }
 
         // Use for instantaneous rates
         byteCount   = currTotalBytes   - prevTotalBytes;
+        eventCount  = currTotalEvents  - prevTotalEvents;
         packetCount = currTotalPackets - prevTotalPackets;
 
         // Reset things if #s rolling over
         if ( (byteCount < 0) || (totalT < 0) )  {
-            totalT = totalBytes = totalPackets = 0;
+            totalT = totalBytes = totalPackets = totalEvents = 0;
             firstT = t1 = t2;
             continue;
         }
@@ -377,20 +380,23 @@ static void *thread(void *arg) {
         pktRate = 1000000.0 * ((double) packetCount) / time;
         pktAvgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
         if (packetCount == 0 && discardedPkts == 0) {
-            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = 0?/everything? ", pktRate, pktAvgRate);
+            printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped = 0?/everything?\n", pktRate, pktAvgRate);
         }
         else {
             if (noBuild) {
                 printf(" Packets:  %3.4g Hz,  %3.4g Avg\n", pktRate, pktAvgRate);
             }
             else {
-                printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped pkts = %" PRId64 ",  total %" PRId64 " ",
+                printf(" Packets:  %3.4g Hz,  %3.4g Avg, dumped = %" PRId64 ",  total %" PRId64 "\n",
                        pktRate, pktAvgRate, discardedPkts, totalDiscardedPkts);
             }
         }
 
         if (!noBuild) {
-            printf(": Dumped Ticks = %" PRId64 ", total = %" PRId64 "\n", discardedTiks, totalDiscardedTiks);
+            evRate = 1000000.0 * ((double) eventCount) / time;
+            evAvgRate = 1000000.0 * ((double) currTotalEvents) / totalT;
+            printf(" Events:   %3.4g ev/s,  %3.4g Avg, dumped = %" PRId64 ", total = %" PRId64 "\n",
+                    evRate, evAvgRate, discardedTiks, totalDiscardedTiks);
         }
 
         // Actual Data rates (no header info)
@@ -654,7 +660,7 @@ int main(int argc, char **argv) {
                     continue;
                 }
 
-                //stats->acceptedBytes += nBytes;
+                stats->acceptedBytes += nBytes;
                 stats->acceptedPackets++;
             }
         }
@@ -691,6 +697,7 @@ int main(int argc, char **argv) {
 
         totalBytes   += nBytes;
         totalPackets += stats->acceptedPackets;
+        totalEvents++;
 
         // stats
         discardedTicks   += stats->discardedBuffers;
@@ -701,12 +708,12 @@ int main(int argc, char **argv) {
         // Now give it the next expected tick.
         tick += tickPrescale;
 
-#ifdef __linux__
-        if (loopCount-- < 1) {
-            cpu = sched_getcpu();
-            loopCount = cpuLoops;
-        }
-#endif
+//#ifdef __linux__
+//        if (loopCount-- < 1) {
+//            cpu = sched_getcpu();
+//            loopCount = cpuLoops;
+//        }
+//#endif
 
     }
 
