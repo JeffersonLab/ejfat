@@ -146,7 +146,7 @@ int main(int argc,char **argv) {
         fprintf(stderr, "          -w    write out buffers into files\n");
         fprintf(stderr, "          -f    ET system's (memory-mapped file) name\n");
         fprintf(stderr, "          -v    verbose output (also prints data if reading with -read)\n");
-        fprintf(stderr, "          -d    delay between fifo gets in milliseconds\n");
+        fprintf(stderr, "          -d    delay between fifo gets in microseconds\n");
 
         fprintf(stderr, "          This consumer reads data written by ersap packet assembler into ET fifo system\n\n");
 
@@ -157,10 +157,10 @@ int main(int argc,char **argv) {
     timeout.tv_sec  = 2;
     timeout.tv_nsec = 0;
 
-    /* delay is in milliseconds */
+    /* delay is in microseconds */
     if (delay > 0) {
-        getDelay.tv_sec = delay / 1000;
-        getDelay.tv_nsec = (delay - (delay / 1000) * 1000) * 1000000;
+        getDelay.tv_sec = delay / 1000000;
+        getDelay.tv_nsec = (delay - (delay / 1000000) * 1000000) * 1000;
     }
 
     /*************************/
