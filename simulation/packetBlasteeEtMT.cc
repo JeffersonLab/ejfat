@@ -1473,7 +1473,7 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
 
         // One supply for ET fifo entries to try to mulththread some code
         EtFifoEntryItem::setEventFactorySettings(fid);
-        entrySupply = std::make_shared<Supplier<EtFifoEntryItem>>(4096, true);
+        entrySupply = std::make_shared<Supplier<EtFifoEntryItem>>(1024, true);
 
 
         /**************************/
