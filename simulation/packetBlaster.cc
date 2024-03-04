@@ -90,7 +90,7 @@ static void printHelp(char *programName) {
             "        [-b <buffer size, ~100kB default>]",
             "        [-bufrate <buffers sent per sec, float > 0>]",
             "        [-byterate <bytes sent per sec>]",
-            "        [-s <UDP send buffer size>]\n",
+            "        [-s <UDP send buffer size, default 25MB which gets doubled>]\n",
 
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
@@ -672,6 +672,8 @@ int main(int argc, char **argv) {
         bufferDelay = 0;
     }
 
+    fprintf(stderr, "Delays: packet = %u, buffer = %u microsec\n", packetDelay, bufferDelay);
+
     if (byteRate > 0) {
         setByteRate = true;
     }
@@ -873,7 +875,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    fprintf(stderr, "Setting max UDP payload size to %d bytes, MTU = %d\n", maxUdpPayload, mtu);
 
     // To avoid having file reads contaminate our performance measurements,
     // place some data into a buffer and repeatedly read it.
@@ -883,6 +884,9 @@ int main(int argc, char **argv) {
         bufSize = (100000 / maxUdpPayload + 1) * maxUdpPayload;
         fprintf(stderr, "internally setting buffer to %" PRIu64 " bytes\n", bufSize);
     }
+
+    fprintf(stderr, "Max packet payload = %d bytes, MTU = %d, packets/buf = %d\n",
+            maxUdpPayload, mtu, (int)(bufSize/maxUdpPayload + (bufSize % maxUdpPayload != 0)));
 
     char *buf = (char *) malloc(bufSize);
     if (buf == nullptr) {
