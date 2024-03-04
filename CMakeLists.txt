@@ -105,6 +105,7 @@ set(GRPC_EXEC_FILES
         simulation/packetBlasteeEtFifoClient.cc
         simulation/packetBlasteeEtFifoClientNew.cc
         simulation/packetBlasteeEtMT.cc
+        simulation/packetBlasteeFastMP.cc
         )
 
 set(GRPC_SRC_FILES
