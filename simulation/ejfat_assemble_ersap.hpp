@@ -95,6 +95,11 @@ static inline uint64_t bswap_64(uint64_t x) {
     return (((uint64_t)bswap_32(x&0xffffffffull))<<32) |
            (bswap_32(x>>32));
 }
+
+static inline int64_t ts_to_nano(struct timespec ts) {
+    return ((int64_t)ts.tv_sec * 1000000000LL) + ts.tv_nsec;
+}
+
 #endif
 
     namespace ejfat {
@@ -129,9 +134,9 @@ static inline uint64_t bswap_64(uint64_t x) {
          * The contained info relates to the reading/reassembly of a complete buffer.
          */
         typedef struct packetRecvStats_t {
-            volatile int64_t  endTime;          /**< Start time in microsec from clock_gettime. */
-            volatile int64_t  startTime;        /**< End time in microsec from clock_gettime. */
-            volatile int64_t  readTime;         /**< Microsec taken to read (all packets forming) one complete buffer. */
+            volatile int64_t  endTime;          /**< End time in nanosec from clock_gettime. */
+            volatile int64_t  startTime;        /**< Start time in nanosec from clock_gettime. */
+            volatile int64_t  readTime;         /**< Nanosec taken to read (all packets forming) one complete buffer. */
 
             volatile int64_t droppedPackets;   /**< Number of dropped packets. This cannot be known exactly, only estimate. */
             volatile int64_t acceptedPackets;  /**< Number of packets successfully read. */
@@ -783,6 +788,8 @@ static inline uint64_t bswap_64(uint64_t x) {
          * This assumes the new, version 2, RE header.
          * Data can only come from 1 source, which is returned in the dataId value-result arg.
          * Data from a source other than that of the first packet will be ignored.
+         * This differs from getCompletePacketizedBuffer in that a boolean controls
+         * whether to take time stats or not - which can be expensive.
          * </p>
          *
          * <p>
@@ -807,16 +814,17 @@ static inline uint64_t bswap_64(uint64_t x) {
          * @param dataId            to be filled with data ID from RE header (can be nullptr).
          * @param stats             to be filled packet statistics.
          * @param tickPrescale      add to current tick to get next expected tick.
+         * @param takeTimeStats     if true, store data of time when first packet arrived.
          *
          * @return total data bytes read (does not include RE header).
          *         If there error in recvfrom, return RECV_MSG.
          *         If buffer is too small to contain reassembled data, return BUF_TOO_SMALL.
          *         If a pkt contains too little data, return INTERNAL_ERROR.
          */
-        static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
-                                                   bool debug, uint64_t *tick, uint16_t *dataId,
-                                                   std::shared_ptr<packetRecvStats> stats,
-                                                   uint32_t tickPrescale) {
+        static ssize_t getCompletePacketizedBufferTime(char* dataBuf, size_t bufLen, int udpSocket,
+                                                       bool debug, uint64_t *tick, uint16_t *dataId,
+                                                       std::shared_ptr<packetRecvStats> stats,
+                                                       uint32_t tickPrescale, bool takeTimeStats) {
 
             uint64_t prevTick = UINT_MAX;
             uint64_t expectedTick = *tick;
@@ -835,6 +843,8 @@ static inline uint64_t bswap_64(uint64_t x) {
             // stats
             bool knowExpectedTick = expectedTick != 0xffffffffffffffffL;
             bool takeStats = stats != nullptr;
+            takeTimeStats &= takeStats;
+
             int64_t discardedPackets = 0, discardedBytes = 0, discardedBufs = 0;
 
             // Storage for packet
@@ -860,12 +870,20 @@ static inline uint64_t bswap_64(uint64_t x) {
                     if (debug) fprintf(stderr, "getCompletePacketizedBuffer: packet does not contain not enough data\n");
                     return (INTERNAL_ERROR);
                 }
+
+                if (veryFirstRead && takeTimeStats) {
+                    struct timespec start;
+                    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+                    stats->startTime = ts_to_nano(start);
+                }
+
                 dataBytes = bytesRead - HEADER_BYTES;
 
                 // Parse header
                 prevLength = length;
                 prevTotalPkts = totalPkts;
                 parseReHeader(pkt, &version, &packetDataId, &offset, &length, &packetTick);
+
                 if (veryFirstRead) {
                     // record data id of first packet of buffer
                     srcId = packetDataId;
@@ -1012,6 +1030,57 @@ static inline uint64_t bswap_64(uint64_t x) {
 
             return totalBytesRead;
         }
+
+
+
+        /**
+        * <p>
+        * Assemble incoming packets into the given buffer.
+        * It will read entire buffer or return an error.
+        * Will work best on small / reasonably sized buffers.
+        * This routine allows for out-of-order packets if they don't cross tick boundaries.
+        * This assumes the new, version 2, RE header.
+        * Data can only come from 1 source, which is returned in the dataId value-result arg.
+        * Data from a source other than that of the first packet will be ignored.
+        * </p>
+        *
+        * <p>
+        * If the given tick value is <b>NOT</b> 0xffffffffffffffff, then it is the next expected tick.
+        * And in this case, this method makes an attempt at figuring out how many buffers and packets
+        * were dropped using tickPrescale.
+        * </p>
+        *
+        * <p>
+        * A note on statistics. The raw counts are <b>ADDED</b> to what's already
+        * in the stats structure. It's up to the user to clear stats before calling
+        * this method if desired.
+        * </p>
+        *
+        * @param dataBuf           place to store assembled packets.
+        * @param bufLen            byte length of dataBuf.
+        * @param udpSocket         UDP socket to read.
+        * @param debug             turn debug printout on & off.
+        * @param tick              value-result parameter which gives the next expected tick
+        *                          and returns the tick that was built. If it's passed in as
+        *                          0xffff ffff ffff ffff, then ticks are coming in no particular order.
+        * @param dataId            to be filled with data ID from RE header (can be nullptr).
+        * @param stats             to be filled packet statistics.
+        * @param tickPrescale      add to current tick to get next expected tick.
+        *
+        * @return total data bytes read (does not include RE header).
+        *         If there error in recvfrom, return RECV_MSG.
+        *         If buffer is too small to contain reassembled data, return BUF_TOO_SMALL.
+        *         If a pkt contains too little data, return INTERNAL_ERROR.
+        */
+        static ssize_t getCompletePacketizedBuffer(char* dataBuf, size_t bufLen, int udpSocket,
+                                                   bool debug, uint64_t *tick, uint16_t *dataId,
+                                                   std::shared_ptr<packetRecvStats> stats,
+                                                   uint32_t tickPrescale) {
+
+            return getCompletePacketizedBufferTime(dataBuf, bufLen, udpSocket, debug,
+                                                   tick, dataId, stats, tickPrescale, false);
+        }
+
 
 
 ////////////////////////
