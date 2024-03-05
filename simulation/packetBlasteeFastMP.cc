@@ -879,6 +879,14 @@ printf("Stats ROLLING OVER\n");
                 latencyTotalAvg = ((double) totalReadTime) / totalBuilt;
                 printf("Latency:  %3.4g nanosec,   %3.4g Avg\n", (double)readTime/bufCount, latencyTotalAvg);
 
+                printf("Latency:  ");
+                for (int j=0; j < sourceCount; j++) {
+                    int src = sourceIds[j];
+                    double latencyAvg = ((double) currTotalBuildTime[j]) / currBuiltBufs[j];
+                    printf("(%d) %3.4g, ", src, latencyAvg);
+                }
+                printf("\n");
+
                 pktRate    = 1000000.0 * ((double) pktCount) / microSec;
                 pktAvgRate = 1000000.0 * ((double) totalPkts) / avgMicroSec;
 
