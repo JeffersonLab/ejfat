@@ -65,7 +65,7 @@ With 2 sources (each with 2 cores), the best total receiving rate (after a few m
 
 
 
-#### packetBlasteeEtFifoClient.cc  &   packtBlasteeEtFifoClientNew.cc
+#### packetBlasteeEtFifoClient.cc
 
 This data receiver reads UDP packets from clasBlaster.cc as an event source, reassembles it, then
 places it into an ET system which is configured to be used as a FIFO.
@@ -76,11 +76,8 @@ Because it uses a routine from ejfat_assemble_ersap.hpp to reassemble,
 it only accommodates out-of-order packets if they don't cross event boundaries.
 Duplicate packets will mess things up.
 
-The "New" version of this receiver uses the latest interactions with the control plane,
-developed when finishing work for the CHEP paper. It's yet untested.
-
-Neither of these programs use the sophisticated handling of out-of-order and
-duplicate packets that packetBlasteeFullNew(MP) use. They only call
+This program uses the sophisticated handling of out-of-order and
+duplicate packets that packetBlasteeFullNew(MP) use. It only calls
 getCompletePacketizedBuffer(), but I believe that's an advantage since
 it's much faster reassembly code.
 
