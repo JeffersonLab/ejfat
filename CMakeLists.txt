@@ -118,7 +118,6 @@ set(ET_EXEC_FILES
         )
 
 set(DIS_EXEC_FILES
-        simulation/packetBlasteeFullNew.cc
         simulation/packetBlasteeFullNewMP.cc
         )
 

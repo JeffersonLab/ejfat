@@ -65,35 +65,6 @@ With 2 sources (each with 2 cores), the best total receiving rate (after a few m
 
 
 
-#### packetBlasteeFullNew.cc
-
-Reads UDP packets in 2 thds for all sources, then passes packets to reassembly threads (3 per source).
-Events can be dumped after reassembly or passed on to process threads (1 per source).
-Accounts for out-of-order and duplicate packets.
-Very limited adjustment on time to wait for late packets.
-
-For a single sender:
-
- * 2.1 GB/s with ~0.002% loss
- * 2.2 GB/s with ~0.002% loss
- * 2.3 GB/s with ~0.003% loss
- * 2.4 GB/s with > 1.5%  loss, seems to be the end of the line
-
-
-With 2 sources, the best total receiving rate (after a few minutes) is:
-
-| Source | Data rate (GB/s) |rate |
----------|------------------|-----|
-| src #1 |  1.1 | 1.1  |
-| src #2 |  1.1 | 0.9  |
-|  total |  2.2 | 2.0  |
-| packet loss | 1.6%  |  0 |
-
-
-Doesn't make a diff if buffers dumped or examined.
-
-
-
 #### packetBlasteeEtFifoClient.cc  &   packtBlasteeEtFifoClientNew.cc
 
 This data receiver reads UDP packets from clasBlaster.cc as an event source, reassembles it, then
@@ -173,4 +144,9 @@ Other than that, this program is never used or run.
 ## THINGS NOT TO DO:
 
 1) Replacing recv with recvmmsg (on linux) only slows things down.
+2) Writing a packetBlastee in which 1 thread reads packets, and places
+each packet onto a ring associated with a single source. Then 1 or more
+build threads grab an empty buffer from a supply and build an event into
+it by reading from a ring with a source's packets in it. The single
+read thread is a real bottleneck.
 
