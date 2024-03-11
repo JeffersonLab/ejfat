@@ -139,30 +139,6 @@ General program used to send data to the various receiving programs. Lots of cmd
 
 
 
-#### udp_rcv_et.cc
-
-This program acts as a data receiver in testing the use of the ET system as a fifo.
-It receives data sent by multiple source ids (given on command line), and 
-places those in an ET system acting as a fifo.
-You'll have to coordinate the number of data sources, with the setting up of the ET system.
-For example, for 3 sources, run the ET with something like:
-
-    et_start_fifo -f /tmp/fifoEt -d -s 150000 -n 3 -e 1000
-
-You can then run this program like:
-
-    udp_rcv_et -et /tmp/fifoEt -ids 1,3,76 -p 17750 -core 80 -pinCnt 4
-
-This expects data sources 1,3, and 76. There will be room in each ET fifo entry to have
-3 buffers (ET events), one for each source, all the same event number. There will be 1000 entries.
-Each buffer will be 150kB. Max # of sources is 16 (can change that).
-
-You can run the data producing program like:
-
-    clas_source/clasBlasterIds -f /daqfs/java/clas_005038.1231.hipo -host 172.19.22.244 -p 19522 -mtu 9000 -s 25000000 -cores 60 -ids 1,3,76  -bufdelay -d 50000
-
-
-
 #### udp_send_order.cc
 
 Send a file, which is either read or piped-in, to udp_rcv_order.cc

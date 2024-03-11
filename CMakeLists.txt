@@ -113,7 +113,6 @@ set(GRPC_SRC_FILES
         )
 
 set(ET_EXEC_FILES
-        simulation/udp_rcv_et.cc
         simulation/ersap_et_consumer.cc
         ersap_engine/ejfat/legacy/src/main/cpp/ejfat_assemble_et_engine.cpp
         )
@@ -157,7 +156,6 @@ set(TEST_FILES
 set(CPP_HEADER_FILES
         simulation/ejfat_packetize.hpp
         simulation/ejfat_assemble_ersap.hpp
-        simulation/ejfat_assemble_ersap_et.hpp
         simulation/EtFifoEntryItem.h
         util/ByteOrder.h
         util/ByteBuffer.h
