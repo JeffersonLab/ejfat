@@ -170,7 +170,7 @@ static void printHelp(char *programName) {
  * @param cores         array of core ids on which to run assembly thread.
  * @param setPt         filled with the set point of PID loop used with fifo fill level.
  * @param port          filled with UDP receiving data port to listen on.
- * @param cpPort        filled wit hmain control plane port.
+ * @param cpPort        filled with main control plane port.
  * @param range         filled with range of ports in powers of 2 (entropy).
  * @param fillCount     filled with # of fill level measurements to average together before sending.
  * @param reportTime    filled with millisec between reports to CP.
@@ -180,6 +180,7 @@ static void printHelp(char *programName) {
  * @param dataAddr      filled with IP address to send to CP as data destination addr for this program.
  * @param listenAddr    filled with IP address to listen on (bind to) for incoming data.
  * @param cpAddr        filled with control plane IP address.
+ * @param cpToken       filled with token string used into connecting to CP.
  * @param etFilename    filled with name of ET file in which to write data.
  * @param beName        filled with name of this backend CP client.
  * @param statBaseName  filled with base name of files used to store 100 sec of ET fill level data.
@@ -1471,7 +1472,7 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
 
         fprintf(stderr, "Et fifo capacity = %d, idCount = %d\n", numRead, idCount);
 
-        // One supply for ET fifo entries to try to mulththread some code
+        // One supply for ET fifo entries to try to multithread some code
         EtFifoEntryItem::setEventFactorySettings(fid);
         entrySupply = std::make_shared<Supplier<EtFifoEntryItem>>(1024, true);
 

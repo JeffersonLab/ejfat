@@ -161,6 +161,8 @@ int main(int argc,char **argv) {
     if (delay > 0) {
         getDelay.tv_sec = delay / 1000000;
         getDelay.tv_nsec = (delay - (delay / 1000000) * 1000000) * 1000;
+        printf("%s: delay -> seconds = %d, nanosec = %ld\n",
+                argv[0], (int)(getDelay.tv_sec), (long) (getDelay.tv_nsec));
     }
 
     /*************************/
