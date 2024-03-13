@@ -56,8 +56,9 @@
 #define HEADER_BYTES     36
 #define RE_HEADER_BYTES  20
 
-// Max MTU that ejfat nodes' NICs can handle
-#define MAX_EJFAT_MTU 9978
+// Max MTU that ejfat nodes' NICs can handle is actually 9978
+//#define MAX_EJFAT_MTU 9978
+#define MAX_EJFAT_MTU 9000
 
 
 #ifdef __linux__
