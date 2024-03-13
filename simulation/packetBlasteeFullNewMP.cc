@@ -85,6 +85,10 @@
 
 #include "ejfat_assemble_ersap.hpp"
 
+// GRPC stuff
+#include "lb_cplane.h"
+
+
 #ifdef __linux__
      #ifndef _GNU_SOURCE
         #define _GNU_SOURCE
@@ -140,7 +144,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
 
@@ -148,6 +152,13 @@ static void printHelp(char *programName) {
             "        [-p <starting listening UDP port (increment for each source, 17750 default)>]",
             "        [-b <internal buffer byte size, 100kB default>]",
             "        [-r <UDP receive buffer byte size, system default>]\n",
+
+            "        [-addr  <data receiving address to register w/ CP>]",
+            "        [-token <authentication token (for CP registration, default token_<time>)>]",
+            "        [-range <data receiving port range, entropy of sender, default 0>]",
+            "        [-gaddr <CP IP address (default = none & no CP comm)>]",
+            "        [-gport <CP port (default 18347)>]",
+            "        [-gname <name of this backend (default backend_<time>)>]\n",
 
             "        [-f <file for stats>]",
             "        [-dump (no thd to get & merge buffers)]",
@@ -160,12 +171,16 @@ static void printHelp(char *programName) {
             "        [-pinBuf <starting core #, 1 for each buf collection thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
+    fprintf(stderr, "        If connecting to a CP by specifying -gaddr,\n");
+    fprintf(stderr, "        this client only reports 0%% fill and ready for data.\n\n");
+
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
-    fprintf(stderr, "        It can receive from multiple data sources simultaneously.\n");
+    fprintf(stderr, "        It can receive from multiple data sources simultaneously.\n\n");
+
     fprintf(stderr, "        By default, one thread started to \"process\" reassembled buffers for each source,\n");
-    fprintf(stderr, "          unless -dump or -lump arg used.\n");
+    fprintf(stderr, "        unless -dump or -lump arg used.\n");
     fprintf(stderr, "        The -norestart flag means sources that restart and have new, lower event numbers,\n");
-    fprintf(stderr, "          out of sync with other sources, will NOT be allowed\n");
+    fprintf(stderr, "        out of sync with other sources, will NOT be allowed\n");
 }
 
 
@@ -188,8 +203,14 @@ static void printHelp(char *programName) {
  * @param dump          don't have a thd which gets all buffers (for possible merging).
  * @param noRestart     exit program if sender restarts.
  * @param jointStats    display stats of all sources joined together.
- * @param listenAddr    filled with IP address to listen on.
- * @param filename      filled with name of file in which to write stats.
+ * @param listenAddr    IP address to listen on.
+ * @param filename      name of file in which to write stats.
+ * @param dataAddr      IP address to send to CP as data destination addr for this program.
+ * @param cpAddr        control plane IP address.
+ * @param cpToken       foken string used into connecting to CP.
+ * @param beName        name of this backend CP client.
+ * @param cpPort        main control plane port.
+ * @param range         range of ports in powers of 2 (entropy) for CP connection.
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
@@ -197,24 +218,35 @@ static void parseArgs(int argc, char **argv,
                       uint16_t* port,
                       bool *debug, bool *useIPv6, bool *keepStats,
                       bool *dump, bool *lump, bool *noRestart, bool *jointStats,
-                      char *listenAddr, char *filename) {
+                      char *listenAddr, char *filename,
+                      char *dataAddr, char *cpAddr, char *cpToken, char *beName,
+                      uint16_t* cpPort, int *range) {
 
     int c, i_tmp;
     bool help = false;
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {             {"tpre",  1, NULL, 1},
-                          {"ip6",  0, NULL, 2},
-                          {"pinRead",  1, NULL, 3},
-                          {"pinBuf",  1, NULL, 4},
-                          {"ids",  1, NULL, 5},
-                          {"stats",  0, NULL, 6},
-                          {"dump",  0, NULL, 7},
-                          {"lump",  0, NULL, 8},
-                          {"pinCnt",  1, NULL, 9},
-                          {"norestart",  0, NULL, 10},
-                          {"jointstats",  0, NULL, 11},
+            {             {"tpre",        1, nullptr, 1},
+                          {"ip6",         0, nullptr, 2},
+                          {"pinRead",     1, nullptr, 3},
+                          {"pinBuf",      1, nullptr, 4},
+                          {"ids",         1, nullptr, 5},
+                          {"stats",       0, nullptr, 6},
+                          {"dump",        0, nullptr, 7},
+                          {"lump",        0, nullptr, 8},
+                          {"pinCnt",      1, nullptr, 9},
+                          {"norestart",   0, nullptr, 10},
+                          {"jointstats",  0, nullptr, 11},
+
+                            // Control Plane
+
+                          {"addr",        1, nullptr, 12},
+                          {"gaddr",       1, nullptr, 13},
+                          {"gport",       1, nullptr, 14},
+                          {"gname",       1, nullptr, 15},
+                          {"token",       1, nullptr, 16},
+                          {"range",       1, nullptr, 17},
                           {0,       0, 0,    0}
             };
 
@@ -396,6 +428,72 @@ static void parseArgs(int argc, char **argv,
 
                 break;
 
+            case 12:
+                // data receiving IP ADDRESS to report to CP
+                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
+                    fprintf(stderr, "data receiving IP address is bad\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                strcpy(dataAddr, optarg);
+                break;
+
+            case 13:
+                // control plane IP ADDRESS
+                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
+                    fprintf(stderr, "grpc server IP address is bad\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                strcpy(cpAddr, optarg);
+                break;
+
+
+            case 14:
+                // control plane PORT
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp > 1023 && i_tmp < 65535) {
+                    *cpPort = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
+            case 15:
+                // this client name to control plane
+                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
+                    fprintf(stderr, "backend client name too long/short, %s\n\n", optarg);
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                strcpy(beName, optarg);
+                break;
+
+            case 16:
+                // backend authentication token with control plane
+                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
+                    fprintf(stderr, "authentication token length must be > 1 and < 33\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                strcpy(cpToken, optarg);
+                break;
+
+            case 17:
+                // LB port range
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0 && i_tmp <= 14) {
+                    *range = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -range, 0 <= port <= 14\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
 
             case 6:
                 // Keep stats
@@ -2154,6 +2252,23 @@ int main(int argc, char **argv) {
     bool noRestart = false;
     bool jointStats = false;
 
+    // CP stuff
+    int portRange = 0; // translates to PORT_RANGE_1 in proto enum
+    uint16_t cpPort = 18347;
+
+    char dataAddr[16];
+    memset(dataAddr, 0, 16);
+
+    char cpAddr[16];
+    memset(cpAddr, 0, 16);
+
+    char beName[33];
+    memset(beName, 0, 33);
+
+    char cpToken[33];
+    memset(cpToken, 0, 33);
+    //----------------------
+
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
     char filename[101];
@@ -2169,7 +2284,8 @@ int main(int argc, char **argv) {
               &startingPort, &debug, &useIPv6,
               &keepStats, &dumpBufs, &lumpBufs,
               &noRestart, &jointStats,
-              listeningAddr, filename);
+              listeningAddr, filename,
+              dataAddr, cpAddr, cpToken, beName, &cpPort, &portRange);
 
     pinCores = startingCore >= 0;
     pinBufCores = startingBufCore >= 0;
@@ -2372,10 +2488,75 @@ int main(int argc, char **argv) {
     }
 
 
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(7777));
-    }
+    // If using control plane, fake things since there is no internal fifo ...
+    if (std::strlen(cpAddr) > 0) {
+        // Convert integer range in PortRange enum
+        // Set port range according to sourceCount
+        switch (sourceCount) {
+            case 1:
+                portRange = 0;
+                break;
+            case 2:
+                portRange = 1;
+                break;
+            case 3:
+            case 4:
+                portRange = 2;
+                break;
+            case 5:
+            case 6:
+            case 7:
+            case 8:
+                portRange = 3;
+                break;
+            default:
+                // up to 16 inputs
+                portRange = 4;
+                break;
+        }
 
+        auto range = PortRange(portRange);
+        float setPoint = 0.F;
+        float fillPercent = 0.F;
+        float pidError = 0.F;
+        int eventSize = bufSize, numEvents = 1024;
+
+        LbControlPlaneClient client(cpAddr, cpPort,
+                                    dataAddr, startingPort, range,
+                                    beName, cpToken,
+                                    eventSize, numEvents, setPoint);
+
+        // Register this client with the grpc server &
+        // wait for server to send session token in return.
+        // Token stored internally in client.
+        int32_t err = client.Register();
+        if (err == 1) {
+            printf("GRPC client %s communication error with server when registering, exit\n", beName);
+            exit(1);
+        }
+
+        printf("GRPC client %s registered!\n", beName);
+
+
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+
+            // Update the changing variables
+            client.update(fillPercent, pidError);
+
+            // Send to server
+            err = client.SendState();
+            if (err == 1) {
+                printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
+                exit(1);
+            }
+        }
+    }
+    else {
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(7777));
+        }
+    }
 
 
     return 0;
