@@ -65,7 +65,7 @@ static void printHelp(char *programName) {
             "        -f <filename>",
             "        [-r <# repeat read-file cycles>]",
             "        [-h] [-v] [-ip6] [-sync] [-direct]",
-            "        [-bufdelay] (delay between each buffer, not packet)",
+            "        [-bufdelay] (delay between each buffer, not packet)\n",
 
             "        [-host <destination host (defaults to 127.0.0.1)>]",
             "        [-p <destination UDP port (default 19522)>]",
@@ -74,16 +74,19 @@ static void printHelp(char *programName) {
             "        [-cp_port <CP port for sync msgs (default 19523)>]",
 
             "        [-sock <# of UDP sockets, 16 max>]",
-            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]",
-            "        [-mtu <desired MTU size>]",
-            "        [-t <tick>]",
-            "        [-ver <version>]",
-            "        [-id <data id>]",
-            "        [-pro <protocol>]",
-            "        [-e <entropy>]",
+            "        [-i <outgoing interface name (e.g. eth0, currently only used to find MTU)>]\n",
+
+            "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
+            "        [-t <tick, default 0>]",
+            "        [-ver <version, default 2>]",
+            "        [-id <data id, default 0>]",
+            "        [-pro <protocol, default 1>]",
+            "        [-e <entropy, default 0>]\n",
+
             "        [-bufrate <buffers sent per sec>]",
             "        [-bufsize <if setting bufrate, AVERAGE byte size of a single buffer>]",
-            "        [-s <UDP send buffer size>]",
+            "        [-s <UDP send buffer size, default 25MB which gets doubled>]\n",
+
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
@@ -247,12 +250,17 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             case 1:
                 // MTU
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp < 100) {
-                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be > 100\n\n");
-                    printHelp(argv[0]);
+                if (i_tmp == 0) {
+                    // setting this to zero means use system default
+                    *mtu = 0;
+                }
+                else if (i_tmp < 1200 || i_tmp > MAX_EJFAT_MTU) {
+                    fprintf(stderr, "Invalid argument to -mtu. MTU buffer size must be >= 1200 and <= %d\n", MAX_EJFAT_MTU);
                     exit(-1);
                 }
-                *mtu = i_tmp;
+                else {
+                    *mtu = i_tmp;
+                }
                 break;
 
             case 2:
@@ -608,7 +616,7 @@ int main(int argc, char **argv) {
     uint64_t tick = 0;
     int cores[10];
     int socks = 1;
-    int mtu, version = 2, protocol = 1, entropy = 0;
+    int mtu=9000, version = 2, protocol = 1, entropy = 0;
     int rtPriority = 0;
     uint16_t dataId = 1;
     bool debug = false;
@@ -697,12 +705,6 @@ int main(int argc, char **argv) {
     // If the mtu was not set on the command line, get it progamatically
     if (mtu == 0) {
         mtu = getMTU(interface, true);
-    }
-
-    // Jumbo (> 1500) ethernet frames are 9000 bytes max.
-    // Don't exceed this limit.
-    if (mtu > 9000) {
-        mtu = 9000;
     }
 
     fprintf(stderr, "Using MTU = %d\n", mtu);
