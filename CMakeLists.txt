@@ -4,33 +4,34 @@
 #   % cmake ..
 #   % make (install)
 #
-# To build code that uses the ET system,
-#   % cmake .. -DBUILD_ET=1
 #
-# To build ERSAP engine/service code, define env var ERSAP_HOME and
-#   % cmake .. -DBUILD_ERSAP=1
+# To build ERSAP engine/service code
+# define where we put FindZeroMQ.cmake file so zmq can be found
+#   % cmake .. -DBUILD_ERSAP=1 -DBUILD_ET=1
+#
+# To build evenything in simulation and util directories
+#   % cmake .. -DBUILD_DIS=1 -DBUILD_ET=1 -DBUILD_GRPC=1
 #
 # These and other flags may be combined to do a complete build
 #  % cmake .. -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1
 #
 # After doing this once can do the following to recompile
-#  % cd <top level evio dir>
+#  % cd <top level dir>
 #  % cmake --build build (--target install)
 #
 #
-# The installation will default to the CODA env variable if it's defined
-# This can be overridden on command line (in build dir) with:
-#   % cmake -DCODA_INSTALL=<my_dir> ..
-#   % make DESTDIR="" install
+# The installation will default to the cmake flag INSTALL_DIR.
+# If that's not defined, it will use the env var EJFAT_ERSAP_INSTALL_DIR:
+#   % cmake -DINSTALL_dir=<my_dir> ..
 
-# This file came from evio-6.0 project
+# This file came from ejfat project
 
 cmake_minimum_required(VERSION 3.10)
 project(ejfat VERSION 0.1)
 
 
-# define where we put FindZeroMQ.cmake file so zmq can be found
-#set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
+# define where we put Find<*>.cmake files so various packages can be found
+# set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -105,6 +106,7 @@ set(GRPC_EXEC_FILES
         simulation/packetBlasteeEtFifoClient.cc
         simulation/packetBlasteeEtMT.cc
         simulation/packetBlasteeFastMP.cc
+        simulation/packetBlasteeFullNewMP.cc
         )
 
 set(GRPC_SRC_FILES
@@ -113,11 +115,6 @@ set(GRPC_SRC_FILES
 
 set(ET_EXEC_FILES
         simulation/ersap_et_consumer.cc
-        ersap_engine/ejfat/legacy/src/main/cpp/ejfat_assemble_et_engine.cpp
-        )
-
-set(DIS_EXEC_FILES
-        simulation/packetBlasteeFullNewMP.cc
         )
 
 set(UTIL_FILES
@@ -144,8 +141,6 @@ set(SIM_EXEC_FILES
 
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
-        clas_source/clasBlasterIds.cc
-        clas_source/clasBlasterEventFiles.cc
         )
 
 set(TEST_FILES
@@ -253,10 +248,10 @@ endif()
 
 
 # Ersap build is optional and set it to OFF by default.
-# Building this requires the ZMQ library.
+# Requires zmq lib.
 option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
 
-if (BUILD_ERSAP AND DEFINED ENV{ERSAP_HOME})
+if (BUILD_ERSAP)
     find_package(Ersap REQUIRED)
 
     add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
@@ -319,11 +314,9 @@ if (DEFINED MAKE_EXEC)
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
             target_include_directories(${execName} PUBLIC   ${HIPO_INCLUDE_DIRS}
-                    ${ET_INCLUDE_DIRS}
-                    ${CMAKE_SOURCE_DIR}/simulation
-                    ${CMAKE_SOURCE_DIR}/util)
+                    ${CMAKE_SOURCE_DIR}/simulation)
             # Needs these libs
-            target_link_libraries(${execName} pthread ${ET_LIBRARY} ${HIPO_LIBRARIES})
+            target_link_libraries(${execName} pthread ${HIPO_LIBRARIES})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)
