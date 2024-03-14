@@ -1,44 +1,140 @@
-## EJFAT
-ESnet-JLab FPGA Accelerated Transport
+# EJFAT
+**ESnet-JLab FPGA Accelerated Transport**
 
-## Making simple data sender & receiver executables
-
-#### Check out and build ejfat, esnet branch:
+## Check out ejfat, esnet branch
 
     git clone https://github.com/JeffersonLab/ejfat.git
             or 
     gh repo clone JeffersonLab/ejfat
     git checkout esnet
+    
+
+## Building ejfat
+
+Start by doing:
+
     mkdir build
     cd build
+    
+At this point, the user will need to decide what exactly needs to be compiled.
+
+#### Compiling executables with no external dependencies and a ***static*** Control Plane
+
     cmake ..
     make
 
-##### Executables can be installed by:
+The **emulation** directory, containing Mike Goodrich's old code,
+has receivers only configured to use the old, static CP (no grpc).
+The following programs will be created:
 
-- Defining the ERSAP_HOME environmental variable, and doing a
-   
-        make install
+- **lb_emu**     (emulates LB)
+- **pktzr_md**   (packetizes and sends)
+- **lb_rcv**     (reassembles to stdout)
+- **lb_rcv_roc** (reassembles to file)
+- **lb_send**    (sends to LB)
 
-- Or doing a
+
+From the **simulation** directory, the following will be created:
+
+- **packetBlaster** (packetizes and sends data)
+- **packetBlastee** (receives and reassembles data with static LB only)
+- **packetBlasterSmall** (For Debugging, sends really small packets to LB)
+- **packetAnalyzer** (For Debugging, receives pkts and prints RE and LB headers)
+- **udp_send_order** (sends file, which is read or piped-in, to udp_rcv_order)
+- **udp_rcv_order** (receives file sent by udp_send_order and reconstructs it)
+
+These executables will be created with every **make** no matter
+which cmake flags are used.
+
+
+#### Compiling everything
+
+    cmake -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1 ..
+    make
+
+
+
+#### Compiling disruptor-related utility libs
+Creating **libejfat_util.so** and **libejfat_util_st.a**.
+
+    cmake -DBUILD_DIS=1 ..
+    make
+
+
+
+#### Compiling everything in simulation and util directories
+
+Among other things, this will make all grpc-enabled reassembly code.
+
+    cmake -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_ET=1 ..
+    make
+
+
+
+#### Compiling clas_blaster
+
+    cmake -DBUILD_CLAS=1 ..
+    make
+
+
+#### Compiling ERSAP engines
+
+    cmake -DBUILD_ERSAP=1 -DBUILD_ET=1 ..
+    make
+
+
+
+
+## Installation of headers, libs, and executables:
+
+- Do
     
         cmake -DINSTALL_DIR=<dir> ..
         make install
 
-## Uninstalling libraries, headers and executables:
+- If INSTALL_DIR is not set as a flag,
+  Define the **EJFAT_ERSAP_INSTALL_DIR** environmental variable, and do
+   
+        make install
+
+
+
+## Uninstalling headers, libs, and executables:
    
         make uninstall
 
 
-## Making all the executables
+## Where to find dependencies
 
-        setenv LD_LIBRARY_PATH=<ejfat-ersap installation dir>:$LD_LIBRARY_PATH
-        setenv ERSAP_HOME <ERSAP installation directory (for engine)>
-        setenv EJFAT_ERSAP_INSTALL_DIR <ejfat-ersap installation directory>
-        cmake -DINSTALL_DIR=<dir> -DBUILD_ERSAP=1 -DBUILD_ET=1 -DBUILD_CLAS=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_ZMQ=1 ..
-        make install
+- **et**  at  https://github.com/JeffersonLab/et
+- **ejfat-grpc**  at  https://github.com/JeffersonLab/ersap-grpc
+- **Disruptor** at https://github.com/JeffersonLab/Disruptor-cpp
+- **boost** (commonly available)
+- **protobuf** can be obtained as follows:
 
-### This requires a number of libraries:
+On ubuntu
+
+    sudo apt install protobuf-compiler
+    sudo apt install libprotobuf-dev
+
+- **grpc** can be obtained as follows:
+
+
+On ubuntu
+
+    sudo apt search grpc
+    sudo apt install libgrpc-dev
+
+
+Download gRPC directly from the official website: https://grpc.io
+
+The source code for gRPC is hosted on GitHub:
+
+    git clone https://github.com/grpc/grpc.git
+
+
+
+### List of libraries that may be needed to build:
 
 #### From ET
 
@@ -50,15 +146,13 @@ ESnet-JLab FPGA Accelerated Transport
 
 - libdisruptor-cpp.so
 
-#### From (and for) ersap-cpp 
+#### For ersap-cpp, clas_blaster
 
-- libersap.so
-- libxmsg.so
+- libzmq.so
 - libhipo.so
 - liblz4.so
-- libzmq.so
 
-#### From (and for) grpc
+#### From grpc
 
 - libgrpc++.so
 - libgrpc++_reflection.so
@@ -71,10 +165,28 @@ ESnet-JLab FPGA Accelerated Transport
 #### Other necessary libs
 
 - boost libraries
+- libprotobuf
 
-#### Note: not all executables need all libs. Look into CMakeLists.txt for more details.
 
-## Using the ET system as a FIFO for ERSAP backend
+**Note: not all executables need all libs.
+Look into CMakeLists.txt or the README.md file in a specific
+directory for more details.**
+
+
+
+## Building clas12 data sender in java
+Do the following:
+
+    ant jar
+
+This will create jbuild/lib/ejfat-1.0.jar containing the 
+Clas12DataSender class. To run this and get its help output:
+
+    java -cp jbuild/lib/ejfat-1.0.jar org.jlab.epsci.ejfat.clas12source.Clas12DataSender -h
+
+
+
+## Using the ET system as a FIFO for EJFAT backend
 
 #### Create and run the ET system for ejfat reassembler by calling
 
@@ -82,182 +194,7 @@ ESnet-JLab FPGA Accelerated Transport
 
 ##### Use -h flag to see more options. The events/fifo  >= number of data sources.
 
-#### In ERSAP reassembly service/engine, do the following:
 
-- open ET system
-- create fifo object
-- use fifo object interact with events (get, put, etc)
-- close fifo and ET when finished
-
-#### Java code to access data in ET will look something like the following (see FifoConsumer.java for details):
-
-        try {
-            // Use config object to specify how to open ET system
-            EtSystemOpenConfig config = new EtSystemOpenConfig();
-
-            // Create ET system object with verbose debugging output
-            EtSystem sys = new EtSystem(config);
-            if (verbose) {
-                sys.setDebug(EtConstants.debugInfo);
-            }
-            sys.open();
-
-            //------------------------
-            // Use FIFO interface
-            // (takes care of attaching to proper station, etc.)
-            //------------------------
-            EtFifo fifo = new EtFifo(sys);
-
-            EtFifoEntry entry = new EtFifoEntry(sys, fifo);
-
-            // Max number of events per fifo entry
-            int entryCap = fifo.getEntryCapacity();
-            //------------------------
-
-            // Array of events
-            EtEvent[] mevs;
-            int idCount, bufId, len;
-
-            while (true) {
-                //----------------------------
-                // Get events from ET system
-                //----------------------------
-                fifo.getEntry(entry);
-                mevs = entry.getBuffers();
-
-                idCount = 0;
-
-                // Go through each event and do something with it
-                for (int i=0; i < entryCap; i++) {
-                    // Does this buffer have any data? (Set by producer). If not ...
-                    if (!mevs[i].hasFifoData()) {
-                        // Once we hit a buffer with no data, there is no further data
-                        break;
-                    }
-                    idCount++;
-
-                    // Source Id associated with this buffer in this fifo entry
-                    bufId = mevs[i].getFifoId();
-
-                    // Get event's data buffer
-                    ByteBuffer buf = mevs[i].getDataBuffer();
-                    
-                    // Or get the array backing the ByteBuffer
-                    byte[] data = mevs[i].getData();
-                    
-                   // Length of valid data
-                   len = mevs[i].getLength();
-                }
-
-               //----------------------------
-               // Put events back into ET system
-               //----------------------------
-               fifo.putEntry(entry);
-            }
-        
-            fifo.close();
-            sys.close();
-        
-        }
-        catch (Exception ex) {
-            ex.printStackTrace();
-        }
-
-#### C code to access data in ET will look something like the following (see et_fifoConsumer.c for details):
-
-    et_sys_id       id;
-    et_fifo_id      fid;
-    et_fifo_entry   *entry;
-    et_openconfig   openconfig;
-    char            et_name[ET_FILENAME_LENGTH];
-  
-    et_open_config_init(&openconfig);
-
-    if (et_open(&id, et_name, openconfig) != ET_OK) {
-        printf("et_open problems\n");
-        exit(1);
-    }
-
-    /* set level of debug output (everything) */
-    et_system_setdebug(id, debugLevel);
-
-    //-----------------------
-    // Use FIFO interface
-    // (takes care of attaching to proper station, etc.)
-    //-----------------------
-    int status = et_fifo_openConsumer(id, &fid);
-    if (status != ET_OK) {
-        printf("et_fifo_open problems\n");
-        exit(1);
-    }
-    
-    // Max number of buffers per fifo entry
-    numRead = et_fifo_getEntryCapacity(fid);
-
-    // Create a place to store fifo entry
-    entry = et_fifo_entryCreate(fid);
-    if (entry == NULL) {
-        printf("et_fifo_open out of mem\n");
-        exit(1);
-    }
-
-    int bufId, hasData, swap;
-    size_t len;
-    int *data;
-    
-    while (1) {
-        //-----------------
-        // get events
-        //-----------------
-    
-        // Get fifo entry
-        status = et_fifo_getEntry(fid, entry);
-        if (status != ET_OK) {
-            printf("error getting events\n");
-            goto error;
-        }
-    
-        // Access the new buffers
-        et_event** evts = et_fifo_getBufs(entry);
-    
-        int idCount = 0;
-
-        // Look at each event/buffer
-        for (j = 0; j < numRead; j++) {
-            // Does this buffer have any data? (Set by producer). If not ...
-            if (!et_fifo_hasData(evts[j])) {
-                // Once we hit a buffer with no data, there is no further data
-                break;
-            }
-            idCount++;
-
-            // Source Id associated with this buffer in this fifo entry
-            bufId = et_fifo_getId(evts[j]);
-
-            // Data associated with this event
-            et_event_getdata(evts[j], (void **) &data);
-            
-            // Length of data associated with this event
-            et_event_getlength(evts[j], &len);
-            
-            // Did this data originate on an opposite endian machine?
-            et_event_needtoswap(evts[j], &swap);
-        }
-
-        //-----------------
-        // put events
-        //-----------------
-
-        // Putting array of events
-        status = et_fifo_putEntry(entry);
-        if (status != ET_OK) {
-            printf("error getting events\n");
-            goto error;
-        }
-
-    } /* while(1) */
-
-    error:
-        et_fifo_freeEntry(entry);
-        et_fifo_close(fid);
-        et_close(id);
+- run ersap_et_consumer or copy and modify ersap_et_consumer.cc to
+  consume ET events.
+   
