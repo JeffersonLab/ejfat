@@ -94,7 +94,7 @@ time_t synchronizeWithNtpServer() {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(123);
-    server_addr.sin_addr.s_addr = inet_addr("129.6.15.28"); // Example NTP server
+    server_addr.sin_addr.s_addr = inet_addr("129.57.90.1"); // JLAB NTP server
 
     ntp_packet packet = {0};
     memset(&packet, 0, sizeof(ntp_packet));
