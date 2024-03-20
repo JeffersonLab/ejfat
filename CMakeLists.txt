@@ -141,6 +141,7 @@ set(SIM_EXEC_FILES
 
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
+        clas_source/clasBlasterNTP.cc
         )
 
 set(TEST_FILES
@@ -435,4 +436,3 @@ if(NOT TARGET uninstall)
     add_custom_target(uninstall
             COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 endif()
-
