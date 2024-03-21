@@ -1098,8 +1098,6 @@ int main(int argc, char **argv) {
         // tick as time that is sync with the NTP server
         tick = static_cast<uint64_t>(adjustedLocalTime_ns.count());
 
-        std::cout << "Event-ID: " << tick << std::endl;
-
         if (sendSync) {
             clock_gettime(CLOCK_MONOTONIC, &tEnd);
             syncTime = 1000000000UL * (tEnd.tv_sec - tStart.tv_sec) + (tEnd.tv_nsec - tStart.tv_nsec);
