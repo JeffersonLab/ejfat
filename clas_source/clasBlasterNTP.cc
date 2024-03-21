@@ -1091,14 +1091,14 @@ int main(int argc, char **argv) {
         offset = 0;
         //tick += tickPrescale; VG 03/20/24
 
-        auto now = high_resolution_clock::now(); // Get the current time point
+        auto now = std::chrono::high_resolution_clock::now(); // Get the current time point
         auto adjustedLocalTime = now + timeDifference;
-        auto adjustedLocalTime_ns = duration_cast<nanoseconds>(adjustedLocalTime.time_since_epoch()); // Convert to nanoseconds
+        auto adjustedLocalTime_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(adjustedLocalTime.time_since_epoch()); // Convert to nanoseconds
         time_t adjustedLocalTime_ns_t = std::chrono::system_clock::to_time_t(adjustedLocalTime_ns);
 
         // tick as time that is sync with the NTP server
         tick = static_cast<uint64_t>(adjustedLocalTime_t);
-    
+
         std::cout << "Event-ID: " << tick << std::endl;
 
         if (sendSync) {
