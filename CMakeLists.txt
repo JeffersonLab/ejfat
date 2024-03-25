@@ -175,10 +175,8 @@ option(BUILD_DIS "Build Disruptor-related code" OFF)
 
 if (BUILD_DIS)
     # Find where Disruptor libs and includes are installed for ejfat use
-    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
-    else()
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so Disruptor libs and includes can be found")
+    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{DISRUPTOR_CPP_HOME}))
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or DISRUPTOR_CPP_HOME env var so Disruptor libs and includes can be found")
     endif()
 
     find_package(DISRUPTOR)
@@ -208,9 +206,7 @@ option(BUILD_ET "Build ET-related code" OFF)
 
 if (BUILD_ET)
     # Find where ET libs and includes are installed for ejfat use
-    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
-    else()
+    if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
         message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so ET libs and includes can be found")
     endif()
 
@@ -230,10 +226,8 @@ option(BUILD_GRPC "Build grpc-related code" OFF)
 
 if (BUILD_GRPC)
     # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
-    if (DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(STATUS "EJFAT_ERSAP_INSTALL_DIR = " $ENV{EJFAT_ERSAP_INSTALL_DIR})
-    else()
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
+    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{GRPC_INSTALL_DIR}))
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or GRPC_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
     endif()
 
     find_package(GRPC)
@@ -259,11 +253,24 @@ if (BUILD_ERSAP)
 endif()
 
 
+# Simple API build is optional and set it to OFF by default.
+option(BUILD_SIMPLE "Build simple api library" OFF)
+
+if (BUILD_ERSAP)
+    add_subdirectory(simpleAPI)
+endif()
+
+
 # CLAS12 source build is optional and set it to OFF by default
 option(BUILD_CLAS "Build CLAS 12 source code" OFF)
 
 # if you tell cmake to have code use USE_CLAS preprocessor macro
 if (BUILD_CLAS)
+    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
+    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{HIPO_HOME}))
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or HIPO_HOME env var so HIPO backend libs and includes can be found")
+    endif()
+
     find_package(HIPO)
     if (NOT HIPO_FOUND)
         message(STATUS "Hipo cannot be found, compile without it")

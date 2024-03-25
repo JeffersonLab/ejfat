@@ -47,6 +47,50 @@ These executables will be created with every **make** no matter
 which cmake flags are used.
 
 
+#### Where to look for libs & headers
+
+Be sure to define the following environmental variables, depending on what
+you're compiling:
+
+- **et**
+
+        export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
+        
+- **grpc**, **protobuf**
+
+        # first look here
+        export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
+        # then here
+        export GRPC_INSTALL_DIR=<installation dir>
+        
+- **hipo**, **lz4**
+
+        # first look here
+        export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
+        # then here
+        export HIPO_HOME=<installation dir>
+        
+- **disruptor**
+
+        # first look here
+        export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
+        # then here
+        export DISRUPTOR_CPP_HOME=<disruptor dir>
+        
+        
+- **zeroMQ**
+
+        # first look here
+        export ZeroMQ_DIR=<zmq dir>
+        # then here
+        export PC_LIBZMQ_LIBDIR=<>
+        # then here
+        export PC_LIBZMQ_LIBRARY_DIRS=<>
+        # then here
+        /usr/lib/x86_64-linux-gnu
+        
+
+
 #### Compiling everything
 
     cmake -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1 ..
@@ -165,7 +209,6 @@ The source code for gRPC is hosted on GitHub:
 #### Other necessary libs
 
 - boost libraries
-- libprotobuf
 
 
 **Note: not all executables need all libs.
