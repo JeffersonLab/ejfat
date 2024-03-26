@@ -144,6 +144,10 @@ set(CLAS_EXEC_FILES
         clas_source/clasBlasterNTP.cc
         )
 
+set(DAOS_EXEC_FILES
+        simulation/packetBlasteeDaosClientNOGRPC.cc
+        )
+
 set(TEST_FILES
         )
 
@@ -247,6 +251,21 @@ else()
     message(STATUS "Compile without GRPC")
 endif()
 
+# DAOS build is optional and set it to OFF by default
+option(BUILD_DAOS "Build DAOS-related code" OFF)
+
+if (BUILD_DAOS)
+    # if (NOT BUILD_GRPC)
+    #     message(FATAL_ERROR "BUILD_DAOS=1 requires BUILD_GRPC=1")
+    # endif()
+
+    find_package(DAOS)
+    if (NOT DAOS_FOUND)
+        message(FATAL_ERROR "DAOS cannot be found")
+    else()
+        message(STATUS "DAOS_LIBRARIES = " ${DAOS_LIBRARIES})
+    endif()
+endif()
 
 # Ersap build is optional and set it to OFF by default.
 # Requires zmq lib.
@@ -381,6 +400,34 @@ if (DEFINED MAKE_EXEC)
             # Install headers into include dir
         endif()
 
+    endif()
+
+    if (BUILD_DAOS AND DAOS_FOUND)
+        message(STATUS "TRY DAOS CODE:")
+
+        # This files need util files added to executable
+        foreach(fileName ${DAOS_EXEC_FILES})
+            # Get file name with no directory or extension as executable name
+            get_filename_component(execName ${fileName} NAME_WE)
+            # Create executable from file
+            message(STATUS "Create daos-related executable " ${execName})
+            # UTIL_FILES and GRPC_SRC_FILES are only really needed for packetBlasteeEtMT
+            add_executable(${execName} ${fileName})
+            # Put debug extension on if applicable
+            set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+            # Location of include files
+            target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                    ${DAOS_INCLUDE_DIRS})
+
+            # Needs these libs
+            target_link_libraries(${execName} pthread ${DAOS_LIBRARIES})
+
+            # Only install if installation directory has been defined
+            if (DEFINED INSTALL_DIR_DEFINED)
+                # Install into bin dir
+                install(TARGETS ${execName} RUNTIME DESTINATION bin)
+            endif()
+        endforeach(fileName)
     endif()
 
     if (BUILD_GRPC AND GRPC_FOUND)
