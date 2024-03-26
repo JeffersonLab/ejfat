@@ -10,8 +10,14 @@ _*
 # ignore generated files/dirs
 *.class
 cmake-*
-cmake_install.cmake
+*.cmake
+CMakeCache.txt
+CMakeFiles/
+Makefile
 build/
 jbuild/
 doxyerrors.log
 config.log
+
+# GTest
+Testing/
