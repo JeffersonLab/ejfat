@@ -404,7 +404,6 @@ if (DEFINED MAKE_EXEC)
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
             target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
-                    ${CMAKE_SOURCE_DIR}/simulation
                     ${CMAKE_SOURCE_DIR}/util
                     ${GRPC_INCLUDE_DIRS}
                     ${ET_INCLUDE_DIRS}

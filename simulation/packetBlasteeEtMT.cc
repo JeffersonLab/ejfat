@@ -624,7 +624,7 @@ static void *getEtEntryThread(void *arg) {
 }
 
 
-// Thread to take reassembled buffers, copy them into ET evets, and put back into ET system.
+// Thread to take reassembled buffers, copy them into ET events, and put back into ET system.
 // The idea is to have many available buffers to reassemble in. This means no waiting for
 // them while the ET mapped-memory file is being written to.
 static void *writeToEtThread(void *arg) {
