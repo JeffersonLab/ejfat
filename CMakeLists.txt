@@ -256,7 +256,30 @@ endif()
 # Simple API build is optional and set it to OFF by default.
 option(BUILD_SIMPLE "Build simple api library" OFF)
 
-if (BUILD_ERSAP)
+if (BUILD_SIMPLE)
+    # Need boost libs for disruptor
+    find_package(Boost REQUIRED system thread chrono)
+
+    if (Boost_FOUND)
+        message(STATUS "Boost Found: libs = " ${Boost_LIBRARIES} ", include dirs = " ${Boost_INCLUDE_DIRS})
+        link_directories(${Boost_LIBRARY_DIRS})
+    else()
+        message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
+    endif()
+
+    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
+    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{GRPC_INSTALL_DIR}))
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or GRPC_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
+    endif()
+
+    find_package(GRPC)
+    if (NOT GRPC_FOUND)
+        message(STATUS "GRPC cannot be found, compile without it")
+    else()
+        message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
+    endif()
+
+
     add_subdirectory(simpleAPI)
 endif()
 

@@ -4,6 +4,7 @@ set(SIMPLE_SRC
    )
 
 set(EXECUTABLE_FILES
+        lbReserve.cpp
         simpleBlaster.cpp
    )
 
@@ -16,6 +17,8 @@ add_library(ejfat_simple SHARED ${SIMPLE_SRC})
 target_link_libraries(ejfat_simple PUBLIC)
 
 target_include_directories(ejfat_simple PUBLIC
+        ${Boost_INCLUDE_DIRS}
+        ${GRPC_INCLUDE_DIRS}
         ${CMAKE_SOURCE_DIR}/simulation
         )
 

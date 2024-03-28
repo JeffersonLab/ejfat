@@ -50,3 +50,116 @@ Please let me know what you think or if there is anything I should clarify.
 
 Thanks,
 Derek
+
+
+
+//---------------------------------------------------------------------
+
+
+
+I am using the google.protobuf.Timestamp type. https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp is the documentation, with C++ docs here: https://protobuf.dev/reference/cpp/api-docs/google.protobuf.util.time_util/ 
+
+According to ChatGPT, here's a minimal example of how to create that type in C++:
+
+    #include <iostream>
+    #include "google/protobuf/timestamp.pb.h" // Include the Timestamp definition
+    #include "google/protobuf/util/time_util.h" // Include the TimeUtil helper functions
+
+    int main() {
+        // Initialize the Google Protobuf library.
+        // Required for version 3.0 and later.
+        GOOGLE_PROTOBUF_VERIFY_VERSION;
+    
+        // Create a Timestamp object.
+        google::protobuf::Timestamp timestamp;
+    
+        // Get the current time and assign it to the timestamp.
+        timestamp = google::protobuf::util::TimeUtil::GetCurrentTime();
+    
+        // Print the timestamp. The TimeUtil::ToString() method converts the timestamp
+        // to a human-readable string in RFC 3339 format.
+        std::cout << "Current Timestamp: "
+                  << google::protobuf::util::TimeUtil::ToString(timestamp) << std::endl;
+    
+        // Optional: Clean up the Google Protobuf library's internal data structures.
+        // Not strictly necessary for short-lived programs.
+        google::protobuf::ShutdownProtobufLibrary();
+    
+        return 0;
+    }
+
+If you have an epoch time already, you can use timestamp.set_seconds() I believe.
+
+
+//---------------------------------------------------------------------
+
+
+Hi Carl,
+
+In the latest control plane, there is an updated protobuf. There is a new gRPC GetLoadBalancer for use by the sender to retrieve the dataplane/sync information. Now both the sender and receiver could use a URL in the following format:
+
+    ejfat://[token@]<host>:<port>/lb/<lb_id>
+
+and then the sender could use that to make the GetLoadBalancer RPC to fetch the other details it needs. The user should be able to pass the token another way, it should be optional to include the token in the URL. GetLoadBalancer returns the same response type as ReserveLoadBalancer, except the token cannot be retrieved again, so the user will need a token to make the request. The idea being that the ReserveLoadBalancer will return the data to create that URL like:
+
+    bash~$ ./bin/udplbd grpc-mockclient reserve
+    EJFAT_URL="ejfat://redactedtoken@192.0.0.1:18347/lb/5"
+
+
+then other programs will be able to use that EJFAT_URL environment variable to establish their connections, the receiver needs only the information in the URL, while the sender will need to fetch the other details.
+
+Thanks,
+Derek
+
+
+//---------------------------------------------------------------------
+
+
+
+Carl, Mike, and Vardan,
+
+I forgot to mention another difference between the new control plane and old - the control signals still affect the relative priority in an additive way like we changed while we were working on the simulation paper, but everything has been scaled by 1000, so your Kp, Ki, Kd should be multiplied by 1000. 
+
+This change is mostly aesthetic. I felt the decimal tunings made more sense for the multiplicative scheme, where a control signal of -0.5 would represent "send me half the work", but since we found that the adding/subtracting relative priority resulted in more stable behavior and this is no longer the case, I feel basing everything around 1000 gives us a nice amount of precision without needing to use decimals in our tunings compared to using 1. 
+
+So tl;dr, if you have a good tuning -Kp 0.1 -Ki 0.01 -Kd 0.05 you would now use -Kp 100 -Ki 10 -Kd 50 when running against the new control plane.
+
+
+//---------------------------------------------------------------------
+
+
+Hi Derek,
+I need some help sorting this out. This is what I think you're saying.
+
+We write a program to reserve an LB. This program will look something like:
+
+    lb_reserve --name <random_name> --host <cp_host> --port <cp_port> --until "2023-12-31T23:59:60Z" <ADMIN_token>
+
+It will call ReserveLoadBalancerRequest and get back the ReserveLoadBalancerReply. This reply will contain the lb_id of the reserved LB along with the instance token. So now this program creates an environmental variable containing a URL like:
+
+    EJFAT_URI= ejfat://<INSTANCE_token>@<cp_host>:<cp_port>/lb/<lb_id>
+
+This program actually does nothing with the data and sync IP addrs and ports it receives.
+
+
+      2) The sender can parse this URL to be able to send the GetLoadBalancerRequest command, get back the ReserveLoadBalancerReply, then send sync and data properly. It will, however, need to get the ADMIN token separately.
+
+      3) The receiver can also parse this to be able to communicate with the CP. It should have everything at that point.
+
+Did I get this right? Or am I missing something?
+Thanks,
+Carl
+
+
+Hi Carl,
+
+That is mostly correct, but the sender does not need to admin token,
+the instance token will be able to call GetLoadBalancer,
+though I may have accidentially not allowed that. Will fix.
+You also bring up a good point regarding "This program actually does
+nothing with the data and sync IP addrs and ports it receives.",
+if there's a better way to encode that in a single string,
+we could probably just put everything in the EJFAT_URL or equivalent. 
+
+Thanks,
+Derek

@@ -2878,12 +2878,12 @@ int main(int argc, char **argv) {
         float setPoint = 0.F;
         float fillPercent = 0.F;
         float pidError = 0.F;
-        int eventSize = bufSize, numEvents = 1024;
+        float weight = 1.F;
+        std::string lbId = "myLB";
 
         LbControlPlaneClient client(cpAddr, cpPort,
                                     dataAddr, startingPort, range,
-                                    beName, cpToken,
-                                    eventSize, numEvents, setPoint);
+                                    beName, cpToken, lbId, weight);
 
         // Register this client with the grpc server &
         // wait for server to send session token in return.

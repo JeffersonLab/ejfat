@@ -15,13 +15,11 @@
 
 /**
  * <p>
- * @file Send a single data buffer (full of random data) repeatedly
- * to an ejfat router (FPGA-based or simulated) which then passes it
- * to a receiving program (e.g. packetBlastee.cc).
- * </p>
- * <p>
+ * @file Send a single data buffer (full of sequential ints) repeatedly
+ * to an ejfat router which then passes it to a receiving program.
  * This program uses the new ejfat API, the libejfat_simple.so library
  * and the EjfatProducer class.
+ * </p>
  */
 
 
