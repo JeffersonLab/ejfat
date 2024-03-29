@@ -4,6 +4,7 @@ set(SIMPLE_SRC
    )
 
 set(EXECUTABLE_FILES
+        lbFree.cpp
         lbReserve.cpp
         simpleBlaster.cpp
    )

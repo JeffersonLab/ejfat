@@ -163,3 +163,29 @@ we could probably just put everything in the EJFAT_URL or equivalent.
 
 Thanks,
 Derek
+
+//------------------------------------------------------------
+
+Hi Carl,
+
+I think that's a good idea, but I think the optional info should use query parameters like
+
+ejfat://[<token>@]<cp_host>:<cp_port>/lb/<lb_id>[?data=<data_host>:<data_port>][&sync=<sync_host>:<sync_port>]
+
+Thanks,
+Derek
+
+    docker compose exec udplbd rm -f /data/udplbd.db
+    docker compose exec udplbd rudplbd restart
+    
+
+Hi Carl,
+
+I see, bash has a built-in command `export`, which will make an env var available to subsequent commands. So if you print it out in the format expected by bash (and most other shells), you could do the following
+
+```
+    bash~$ ejfat reserve --token abcef1234
+    EJFAT_URL="ejfat://abcef1234@0.0.0.0:18347/lb/1"
+    bash~$ export $(ejfat reserve --token abcef1234)
+    bash~$ echo $EJFAT_URL
+    ejfat://abcef1234@0.0.0.0:18347/lb/1
