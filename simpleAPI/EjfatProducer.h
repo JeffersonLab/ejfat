@@ -45,6 +45,7 @@ namespace ejfat {
     // Structure to hold each internal queue item
     typedef struct queueItem_t {
         uint32_t bytes;
+        uint64_t tick;
         char     *event;
         void     *cbArg;
         void* (*callback)(void *);
@@ -155,7 +156,6 @@ namespace ejfat {
         bool statThdStarted = false;
         bool sendThdStarted = false;
 
-        //       boost::lockfree::spsc_queue<int> unbounded_queue;
 
         // Why would you want a bounded queue? If you put data buffers on it faster than it can be
         // sent, you have a big problem, memory leak. If there's any kind of delay specified, then
@@ -171,16 +171,15 @@ namespace ejfat {
         // wait for it to be placed on the Q.
         static const size_t ARRAYSIZE = QSIZE + 1;
 
+        // Fast, lock-free, wait-free queue for single producer and single consumer
         boost::lockfree::spsc_queue<qItem*, boost::lockfree::capacity<QSIZE>> queue;
 
         // Array of these avalable to be stored on queue
         qItem qItemArray[ARRAYSIZE];
 
         // Track which element of qItemArray is currently being placed onto Q (0 - 2047);
-        int currentQItemOn = 0;
+        int currentQItem = 0;
 
-        // Track which element of qItemArray is current being taken off of Q;
-        int currentQItemOff = 0;
 
     public:
 
@@ -208,15 +207,20 @@ namespace ejfat {
         EjfatProducer & operator=(const EjfatProducer & other) = delete;
 
 
-        // Blocking call. Any core affinity needs to be done by caller
+        // Blocking call. Tick automatically set. Any core affinity needs to be done by caller
         void sendEvent(char *event, size_t bytes);
 
-        // Blocking call to place event on internal queue
-        void addToSendQueueBlocking(char *event, size_t bytes,
+        // Blocking call specifying tick.
+        void sendEvent(char *event, size_t bytes, uint64_t tick);
+
+
+        // Non-blocking call to place event on internal queue.
+        // Tick automatically set. Returns false if queue full.
+        bool addToSendQueue(char *event, size_t bytes,
                             void* (*callback)(void *) = nullptr, void *cbArg = nullptr);
 
-        // Non-blocking call to place event on internal queue. Returns false if queue full.
-        bool addToSendQueue(char *event, size_t bytes,
+        // Non-blocking call specifying tick.
+        bool addToSendQueue(char *event, size_t bytes, uint64_t tick,
                             void* (*callback)(void *) = nullptr, void *cbArg = nullptr);
 
 
@@ -232,7 +236,6 @@ namespace ejfat {
         void createDataSocket();
 
         void sendSyncMsg(uint64_t tick, uint64_t currentTimeNanos, uint32_t evtRate);
-        qItem* removeFromSendQueue();
 
     };
 

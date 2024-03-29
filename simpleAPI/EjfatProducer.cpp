@@ -316,8 +316,8 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
             spinCount = 0;
 
-            // Also a blocking call
-            sendEvent(item->event, item->bytes);
+            // A blocking call
+            sendEvent(item->event, item->bytes, item->tick);
 
             // Run the callback after sending, better not be blocking!!
             if (item->callback != nullptr) {
@@ -353,7 +353,6 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         }
 #endif
 
-
         void *arg;
         std::thread t(&EjfatProducer::sendThreadFunc, this, arg);
 
@@ -377,10 +376,18 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
 
     void EjfatProducer::sendEvent(char *event, size_t bytes) {
+        sendEvent(event, bytes, tick++);
+    }
+
+
+
+    void EjfatProducer::sendEvent(char *event, size_t bytes, uint64_t tick) {
 
         if (event == nullptr || bytes == 0) {
             return;
         }
+
+        this->tick = tick;
 
         uint32_t offset = 0;
         int64_t packetsSent;
@@ -424,7 +431,6 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         totalEvents++;
         totalBytes   += bytes;
         totalPackets += packetsSent;
-        tick++;
 
         //------------------------------------------------
         // Deal with sync message to CP
@@ -462,36 +468,42 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
     }
 
 
-    /**
-     * Turn this into a blocking push onto the internal queue of events to be sent.
-     *
-     * @param event
-     * @param bytes
-     * @param callback
-     * @param cbArg
-     */
-    void EjfatProducer::addToSendQueueBlocking(char *event, size_t bytes, void* (*callback)(void *), void *cbArg) {
 
-        qItem *item = &qItemArray[currentQItemOn];
+//    /**
+//     * Turn this into a blocking push onto the internal queue of events to be sent.
+//     *
+//     * @param event
+//     * @param bytes
+//     * @param callback
+//     * @param cbArg
+//     */
+//    void EjfatProducer::addToSendQueueBlocking(char *event, size_t bytes, uint64_t tick,
+//                                               void* (*callback)(void *), void *cbArg) {
+//
+//        qItem *item = &qItemArray[currentQItem];
+//
+//        this->tick     = tick;
+//        item->tick     = tick;
+//        item->event    = event;
+//        item->bytes    = bytes;
+//        item->cbArg    = cbArg;
+//        item->callback = callback;
+//
+//        int spinMax = 100, spinCount = 0;
+//        while (!queue.push(item)) {
+//            if (++spinCount > spinMax) {
+//                std::this_thread::sleep_for(std::chrono::nanoseconds(200));
+//            }
+//        }
+//
+//        currentQItem = (currentQItem + 1) % ARRAYSIZE;
+//    }
 
-        item->event    = event;
-        item->bytes    = bytes;
-        item->cbArg    = cbArg;
-        item->callback = callback;
-
-        int spinMax = 100, spinCount = 0;
-        while (!queue.push(item)) {
-            if (++spinCount > spinMax) {
-                std::this_thread::sleep_for(std::chrono::nanoseconds(200));
-            }
-        }
-
-        currentQItemOn = (currentQItemOn + 1) % ARRAYSIZE;
-    }
 
 
     /**
      * Non-blocking push onto the internal queue of events to be sent.
+     * Tick handled internally.
      *
      * @param event
      * @param bytes
@@ -500,35 +512,38 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
      * @return true if event placed on queue, else false.
      */
     bool EjfatProducer::addToSendQueue(char *event, size_t bytes, void* (*callback)(void *), void *cbArg) {
+        return addToSendQueue(event, bytes, tick++, callback, cbArg);
+    }
 
-        qItem *item = &qItemArray[currentQItemOn];
 
+    /**
+     * Non-blocking push onto the internal queue of events to be sent. Specifies tick.
+     *
+     * @param event
+     * @param bytes
+     * @param tick
+     * @param callback
+     * @param cbArg
+     * @return true if event placed on queue, else false.
+     */
+    bool EjfatProducer::addToSendQueue(char *event, size_t bytes, uint64_t tick,
+                                       void* (*callback)(void *), void *cbArg) {
+
+        qItem *item = &qItemArray[currentQItem];
+
+        this->tick     = tick;
+        item->tick     = tick;
         item->event    = event;
         item->bytes    = bytes;
         item->cbArg    = cbArg;
         item->callback = callback;
 
         if (queue.push(item)) {
-            currentQItemOn = (currentQItemOn + 1) % ARRAYSIZE;
+            currentQItem = (currentQItem + 1) % ARRAYSIZE;
             return true;
         }
 
         return false;
-    }
-
-
-    /**
-     * Turn this into a blocking pop.
-     * @return next available queue entry.
-     */
-    qItem* EjfatProducer::removeFromSendQueue() {
-        qItem *item;
-
-        while (!queue.pop(item)) {
-            std::this_thread::yield();
-            // could put in a delay here
-        }
-        return item;
     }
 
 
