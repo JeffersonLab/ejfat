@@ -15,19 +15,17 @@
 
 /**
  * <p>
- * @file Send a single data buffer (full of random data) repeatedly
- * to an ejfat router (FPGA-based or simulated) which then passes it
- * to a receiving program (e.g. packetBlastee.cc).
+ * @file Reserve a load balancer for future use.
+ * This program is part of new ejfat API.
  * </p>
- * <p>
- * This program uses the new ejfat API, the libejfat_simple.so library
- * and the EjfatProducer class.
  */
 
 
 #include <unistd.h>
 #include <cstdlib>
+#include <cstdio>
 #include <ctime>
+#include <fstream>
 #include <iostream>
 #include <cinttypes>
 #include <chrono>
@@ -46,22 +44,21 @@
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ipv6]\n",
+            "        [-h] [-v] [-ipv6]",
+            "         -host <CP IP address>",
+            "        [-port <CP port, 18347 default)>]",
+            "        [-name  <name to give LB instance, \"Default_LB\" default>]",
+            "        [-until <end time of LB reservation, 20 min from now default>]",
+            "                 RFC 3339 format, e.g. 2024-03-28T23:59:22Z (+4 hours EDT, +5 EST)\n",
 
-            "        [-host <CP IP address>]",
-            "        [-port <CP port)>]\n",
-
-            "        [-name  <name to give LB instance>]",
-            "        [-until <end time of LB reservation (e.g. 2024-03-28T23:59:22Z / RFC 3339 / +4 hours EDT, +5 EST)>]\n",
-
-            "        admin_token");
+            "        [<admin_token> udplbd_default_change_me = default]");
 
     fprintf(stderr, "        For the specified host/port, reserve an LB assigned the given name until the given time.\n");
     fprintf(stderr, "        A URL, containing LB connection info is printed out and also stored in the EJFAT_URI env var.\n");
     fprintf(stderr, "        This URL can be parsed and used by both sender and receiver, and is in the format:\n");
-    fprintf(stderr, "            ejfat://<INSTANCE_token>@<cp_host>:<cp_port>/<data_host>:<data_port>/<sync_host>:<sync_port>/lb/<lb_id>\n");
+    fprintf(stderr, "            ejfat://[<token>@]<cp_host>:<cp_port>/lb/<lb_id>[?data=<data_host>:<data_port>][&sync=<sync_host>:<sync_port>]\n");
 }
 
 
@@ -73,8 +70,6 @@ static void parseArgs(int argc, char **argv,
                       char* until, char* adminToken) {
 
     int c, i_tmp;
-    int64_t tmp;
-    float f_tmp;
     bool help = false;
 
     /* multiple character command-line options */
@@ -110,8 +105,8 @@ static void parseArgs(int argc, char **argv,
 
             case 2:
                 // DESTINATION HOST
-                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
-                    fprintf(stderr, "Invalid argument to -host, host name is too long\n");
+                if (strlen(optarg) >= 15) {
+                    fprintf(stderr, "Invalid argument to -host, host name must be dotted-decimal format\n");
                     exit(-1);
                 }
                 strcpy(host, optarg);
@@ -174,60 +169,13 @@ static void parseArgs(int argc, char **argv,
         strcpy(adminToken, argv[optind]);
         std::cout << "First non-option argument: " << argv[optind] << std::endl;
     }
-    else {
-        fprintf(stderr, "Admin token must be specified\n\n");
-        printHelp(argv[0]);
-        exit(-1);
-    }
+//    else {
+//        fprintf(stderr, "Admin token must be specified\n\n");
+//        printHelp(argv[0]);
+//        exit(-1);
+//    }
 }
 
-
-
-//#include <iostream>
-//#include <sstream>
-//#include <iomanip>
-//#include <ctime>
-//
-//std::time_t parseRfc3339(const std::string& dateTimeString) {
-//    std::tm tm = {};
-//    std::istringstream iss(dateTimeString);
-//    std::string timezone;
-//
-//    // Parse the time string without the timezone first
-//    if (!(iss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S"))) {
-//        // Parsing failed
-//        return -1;
-//    }
-//
-//    // Check if there's a timezone offset
-//    if (!(iss >> timezone)) {
-//        // No timezone offset, use UTC
-//        return std::mktime(&tm);
-//    }
-//
-//    // Parse the timezone offset
-//    int hours = 0, minutes = 0;
-//    if (std::sscanf(timezone.c_str(), "%d:%d", &hours, &minutes) != 2) {
-//        // Invalid timezone format
-//        return -1;
-//    }
-//
-//    // Adjust the time by subtracting the timezone offset
-//    std::time_t epochTime = std::mktime(&tm);
-//    epochTime -= hours * 3600 + minutes * 60;
-//    return epochTime;
-//}
-//
-//int main() {
-//    std::string dateTimeString = "2024-03-07T12:30:45-05:00";
-//    std::time_t epochSeconds = parseRfc3339(dateTimeString);
-//    if (epochSeconds != -1) {
-//        std::cout << "Parsed RFC 3339 string into epoch seconds: " << epochSeconds << std::endl;
-//    } else {
-//        std::cout << "Failed to parse RFC 3339 string" << std::endl;
-//    }
-//    return 0;
-//}
 
 
 
@@ -244,8 +192,8 @@ int main(int argc, char **argv) {
     bool debug   = false;
     bool useIPv6 = false;
 
-    char cp_host[INPUT_LENGTH_MAX];
-    memset(cp_host, 0, INPUT_LENGTH_MAX);
+    char cp_host[16];
+    memset(cp_host, 0, 16);
 
     char name[INPUT_LENGTH_MAX];
     memset(name, 0, INPUT_LENGTH_MAX);
@@ -256,12 +204,18 @@ int main(int argc, char **argv) {
     char adminToken[INPUT_LENGTH_MAX];
     memset(adminToken, 0, INPUT_LENGTH_MAX);
 
+    char url[INPUT_LENGTH_MAX];
+    memset(url, 0, INPUT_LENGTH_MAX);
+
+    char url2[INPUT_LENGTH_MAX];
+    memset(url2, 0, INPUT_LENGTH_MAX);
+
 
     parseArgs(argc, argv, &cp_port, &debug, &useIPv6,
               cp_host, name, until, adminToken);
 
     if (strlen(name) == 0) {
-        strcpy(name, "Default_LB");
+        strcpy(name, "127.0.0.1:5000");
     }
 
 
@@ -274,8 +228,8 @@ int main(int argc, char **argv) {
 
 
     if (strlen(until) == 0) {
-        // If ending time not set, set it to 2 hours from now
-        untilSeconds = nowSeconds + 2*60*60;
+        // If ending time not set, set it to 10 min from now
+        untilSeconds = nowSeconds + 10*60;
     }
     else {
         // Convert date to epoch seconds.
@@ -288,24 +242,88 @@ int main(int argc, char **argv) {
 
             // Check to see if time already elapsed
             if (epochSeconds > nowSeconds) {
+                untilSeconds = epochSeconds;
                 badTime = false;
+            }
+            else {
+//                fprintf(stdout, "until time lapsed\n");
             }
         }
 
         if (badTime) {
-            // If until is bad, set for 2 hours from now
-            untilSeconds = nowSeconds + 2*60*60;
-            fprintf(stdout, "until is a bad time, set to = %d\n", (int)(untilSeconds));
+            // If until is bad, set for 10 min from now
+            untilSeconds = nowSeconds + 10*60;
+//            fprintf(stdout, "until is a bad time/format, set to = %d\n", (int)(untilSeconds));
         }
     }
 
+    //std::string instanceToken = "e3216cb5c7f927b88d0b8dcfc7377e12905edfa4e1f21ef2d9bf54607d4d0239";
+    std::string lbid = "1";
 
-    LbReservation reservation(cp_host, cp_port, name, adminToken, untilSeconds);
-    int err = reservation.ReserveLoadBalancer();
+    if (strlen(adminToken) == 0) {
+        std::strcpy(adminToken, "udplbd_default_change_me");
+    }
 
-    fprintf(stdout, "err = %d\n", err);
+//    fprintf(stdout, "cp_host = %s, port = %hu, name = %s, until = %d\nadmin token = %s\n", cp_host, cp_port, name, (int)(untilSeconds), adminToken);
 
 
+    LbReservation res(cp_host, cp_port, name, adminToken, untilSeconds);
+
+    int err = res.FreeLoadBalancer();
+    fprintf(stdout, "free err = %d\n", err);
+
+    err = res.ReserveLoadBalancer();
+    fprintf(stdout, "reserve err = %d\n", err);
+
+    if (err == 0) {
+        // Set environment variable
+        sprintf(url, "EJFAT_URI=ejfat://%s@%s:%hu/lb/%s?data=%s:%hu&sync=%s:%hu",
+                res.getInstanceToken().c_str(),
+                cp_host, cp_port, res.getLbId().c_str(),
+                res.getDataAddrV4().c_str(), res.getDataPort(),
+                res.getSyncAddr().c_str(), res.getSyncPort());
+
+//    // Set environment variable
+//    sprintf(url, "export EJFAT_URI=ejfat://%s@%s:%hu?data=%s:%hu&sync=%s:%hu",
+//            "instance_token", cp_host, cp_port,
+//            "129.57.155.5", 19522,
+//            "129.57.177.135", 19523);
+//
+//    sprintf(url2, "setenv EJFAT_URI ejfat://%s@%s:%hu?data=%s:%hu&sync=%s:%hu",
+//            "instance_token", cp_host, cp_port,
+//            "129.57.155.5", 19522,
+//            "129.57.177.135", 19523);
+
+        fprintf(stdout, "%s\n", url);
+//    fprintf(stdout, "url2 = %s\n", url2);
+
+//    int errr = setenv("EJFAT_URI", url, 1); // The third argument 1 indicates to overwrite if the variable already exists
+//    if (errr != 0) {
+//        perror("setenv");
+//    }
+//    else {
+//        fprintf(stdout, "success setting url\n");
+//    }
+
+
+        // Write it to a file
+
+        std::string fileName = "/tmp/ejfat_uri";
+        std::fstream file;
+        file.open(fileName, std::ios::trunc | std::ios::out);
+        if (file.fail()) {
+            std::cout << "error opening file " << fileName << std::endl;
+        }
+        else {
+            // Write this into a file
+            file.write(url,strlen(url));
+
+            if (file.fail()) {
+                std::cout << "error writing to file " << fileName << std::endl;
+            }
+            file.close();
+        }
+    }
 
     return 0;
 }
