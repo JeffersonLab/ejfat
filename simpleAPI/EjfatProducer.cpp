@@ -18,14 +18,60 @@
 namespace ejfat {
 
 
-    EjfatProducer::EjfatProducer(const std::string & uri) {
-        // parse uri
-    }
+    /**
+     * Constructor depending on first on the environmental variable EJFAT_URI.
+     * If that exists and can be read and parsed, it may provide the necessary
+     * info to send data to the LB and sync messages to the CP. If it does
+     * <b>NOT</b>, then the fileName arg is used to find a file in which
+     * this uri has been stored. If that exists and can be read and parsed, it
+     * may provide the needed info. If so, everything is fine, if not, throw
+     * an exception.
+     *
+     * @param fileName name of file with uri stored in it.
+     *                 If no file, provide blank string.
+     */
+    EjfatProducer::EjfatProducer(const std::string &fileName) {
 
+        bool foundUri = false;
+        ejfatURI uriInfo;
 
-    EjfatProducer::EjfatProducer(std::string dataAddress, std::string syncAddress) :
-            dataAddr(dataAddress), syncAddr(syncAddress) {
+        // First see if the EJFAT_URI environmental variable is defined, if so, parse it
+        const char* uriStr = std::getenv("EJFAT_URI");
+        if (uriStr != nullptr) {
+            std::string uri(uriStr);
+            bool parsed = parseURI(uri, uriInfo);
+            if (parsed) {
+                foundUri = true;
+            }
+        }
 
+        // If no luck with env var, look in to a local file
+        if (!foundUri && !fileName.empty()) {
+
+            std::ifstream file(fileName);
+            if (file.is_open()) {
+                std::string uriLine;
+                if (std::getline(file, uriLine)) {
+                    bool parsed = parseURI(uriLine, uriInfo);
+                    if (parsed) {
+                        foundUri = true;
+                    }
+                }
+
+                file.close();
+            }
+        }
+
+        if (!foundUri) {
+            // our luck ran out
+            throwEjfatLine("no LB/CP info in env var or in file");
+        }
+
+        // Set internal members from struct obtained by parsing URI
+        bool haveEverything = setFromURI(uriInfo);
+        if (!haveEverything) {
+            throwEjfatLine("URI did not have info to send data or sync msgs");
+        }
 
         // 20 bytes = normal IPv4 packet header (60 is max), 8 bytes = max UDP packet header
         // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
@@ -39,7 +85,21 @@ namespace ejfat {
     }
 
 
-    EjfatProducer::EjfatProducer(std::string dataAddress, std::string syncAddress,
+
+    EjfatProducer::EjfatProducer(const std::string &dataAddress, const std::string &syncAddress) :
+            dataAddr(dataAddress), syncAddr(syncAddress) {
+
+        maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
+
+        createSyncSocket();
+        createDataSocket();
+
+        startupSendThread();
+        startupStatisticsThread();
+    }
+
+
+    EjfatProducer::EjfatProducer(const std::string &dataAddress, const std::string &syncAddress,
                                  uint16_t dataPort, uint16_t syncPort, int mtu,
                                  std::vector<int> &cores,
                                  int delay, int delayPrescale, bool connect,
@@ -64,6 +124,26 @@ namespace ejfat {
 
 
 
+    /**
+     * Set this object internal member from the struct obtained from parsing an ejfat URI.
+     * @param uri ref to struct with CP/LB connection info.
+     * @return true if all need info is there, else false;
+     */
+    bool EjfatProducer::setFromURI(ejfatURI & uri) {
+
+        bool haveWhatsNeeded = uri.haveData && uri.haveSync;
+        if (!haveWhatsNeeded) return false;
+
+        dataAddr = uri.dataAddrV4;
+        dataPort = uri.dataPort;
+
+        syncAddr = uri.syncAddrV4;
+        syncPort = uri.syncPort;
+
+        return true;
+    }
+
+
     void EjfatProducer::createSyncSocket() {
         // Socket for sending sync message to CP
         if (ipv6) {
@@ -72,13 +152,13 @@ namespace ejfat {
                 throw EjfatException("error creating IPv6 sync socket");
             }
 
-            memset(&serverAddr6, 0, sizeof(serverAddr6));
-            serverAddr6.sin6_family = AF_INET6;
-            serverAddr6.sin6_port = htons(syncPort);
-            inet_pton(AF_INET6, syncAddr.c_str(), &serverAddr6.sin6_addr);
+            memset(&syncAddrStruct6, 0, sizeof(syncAddrStruct6));
+            syncAddrStruct6.sin6_family = AF_INET6;
+            syncAddrStruct6.sin6_port = htons(syncPort);
+            inet_pton(AF_INET6, syncAddr.c_str(), &syncAddrStruct6.sin6_addr);
 
             if (connectSocket) {
-                int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+                int err = connect(syncSocket, (const sockaddr *) &syncAddrStruct6, sizeof(struct sockaddr_in6));
                 if (err < 0) {
                     close(syncSocket);
                     if (debug) perror("Error connecting UDP sync socket:");
@@ -92,15 +172,15 @@ namespace ejfat {
                 throw EjfatException("error creating IPv4 sync socket");
             }
 
-            memset(&serverAddr, 0, sizeof(serverAddr));
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(syncPort);
-            serverAddr.sin_addr.s_addr = inet_addr(syncAddr.c_str());
-            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            memset(&syncAddrStruct, 0, sizeof(syncAddrStruct));
+            syncAddrStruct.sin_family = AF_INET;
+            syncAddrStruct.sin_port = htons(syncPort);
+            syncAddrStruct.sin_addr.s_addr = inet_addr(syncAddr.c_str());
+            memset(syncAddrStruct.sin_zero, '\0', sizeof syncAddrStruct.sin_zero);
 
             if (connectSocket) {
 fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(), syncPort);
-                int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+                int err = connect(syncSocket, (const sockaddr *) &syncAddrStruct, sizeof(struct sockaddr_in));
                 if (err < 0) {
                     close(syncSocket);
                     if (debug) perror("Error connecting UDP sync socket:");
@@ -118,20 +198,20 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         if (ipv6) {
             // Configure settings in address struct
             // Clear it out
-            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            memset(&sendAddrStruct6, 0, sizeof(sendAddrStruct6));
             // it is an INET address
-            serverAddr6.sin6_family = AF_INET6;
+            sendAddrStruct6.sin6_family = AF_INET6;
             // the port we are going to send to, in network byte order
-            serverAddr6.sin6_port = htons(dataPort);
+            sendAddrStruct6.sin6_port = htons(dataPort);
             // the server IP address, in network byte order
-            inet_pton(AF_INET6, dataAddr.c_str(), &serverAddr6.sin6_addr);
+            inet_pton(AF_INET6, dataAddr.c_str(), &sendAddrStruct6.sin6_addr);
         }
         else {
-            memset(&serverAddr, 0, sizeof(serverAddr));
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(dataPort);
-            serverAddr.sin_addr.s_addr = inet_addr(dataAddr.c_str());
-            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            memset(&sendAddrStruct, 0, sizeof(sendAddrStruct));
+            sendAddrStruct.sin_family = AF_INET;
+            sendAddrStruct.sin_port = htons(dataPort);
+            sendAddrStruct.sin_addr.s_addr = inet_addr(dataAddr.c_str());
+            memset(sendAddrStruct.sin_zero, '\0', sizeof sendAddrStruct.sin_zero);
         }
 
 
@@ -150,7 +230,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 #endif
 
             if (connectSocket) {
-                int err = connect(dataSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+                int err = connect(dataSocket, (const sockaddr *) &sendAddrStruct6, sizeof(struct sockaddr_in6));
                 if (err < 0) {
                     close(dataSocket);
                     if (debug) perror("Error connecting UDP sync socket:");
@@ -183,7 +263,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
             if (connectSocket) {
                 if (debug) fprintf(stderr, "Connection socket to host %s, port %hu\n", dataAddr.c_str(), dataPort);
-                int err = connect(dataSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+                int err = connect(dataSocket, (const sockaddr *) &sendAddrStruct, sizeof(struct sockaddr_in));
                 if (err < 0) {
                     close(dataSocket);
                     if (debug) perror("Error connecting UDP sync socket:");
@@ -366,7 +446,20 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
 
         setSyncData(syncBuf, version, id, tick, evtRate, currentTimeNanos);
-        int err = (int)send(syncSocket, syncBuf, 28, 0);
+        int err;
+        if (connectSocket) {
+            err = (int) send(syncSocket, syncBuf, 28, 0);
+        }
+        else {
+            if (ipv6) {
+                err = (int) sendto(syncSocket, syncBuf, 28, 0, (sockaddr * ) & syncAddrStruct6, sizeof(struct sockaddr_in6));
+            }
+            else {
+                err = (int) sendto(syncSocket, syncBuf, 28, 0,  (sockaddr * ) & syncAddrStruct, sizeof(struct sockaddr_in));
+            }
+        }
+
+
         if (err == -1) {
             perror("sendSyncMsg");
             throwEjfatLine(" error sending sync msg");
@@ -411,7 +504,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                                                   true, true, debug,
                                                   false, true,
                                                   &packetsSent, 0,
-                                                  (sockaddr * ) & serverAddr6, sizeof(struct sockaddr_in6));
+                                                  (sockaddr * ) & sendAddrStruct6, sizeof(struct sockaddr_in6));
             }
             else {
                 err = sendPacketizedBufferSendNew(event, bytes, maxUdpPayload,
@@ -422,7 +515,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                                                   true, true, debug,
                                                   false, true,
                                                   &packetsSent, 0,
-                                                  (sockaddr * ) & serverAddr, sizeof(struct sockaddr_in));
+                                                  (sockaddr * ) & sendAddrStruct, sizeof(struct sockaddr_in));
             }
         }
 

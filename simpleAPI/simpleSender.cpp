@@ -52,16 +52,17 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6]\n",
 
-            "        [-host <destination host (defaults to 127.0.0.1)>]",
-            "        [-p <destination UDP port, default 19522>]\n",
+            "        [-host <destination host (127.0.0.1 default)>]",
+            "        [-p <destination UDP port (19522 default)>]\n",
 
-            "        [-cp_addr <CP IP address (default = none & no CP comm)>]",
-            "        [-cp_port <CP port for sync msgs (default 19523)>]\n",
+            "        [-cp_addr <CP IP address (no default)>]",
+            "        [-cp_port <CP port for sync msgs (19523 default)>]\n",
 
+            "        [-file <file with URI info for sending syncs to CP>]",
             "        [-nc (no connect on socket)]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]\n",
 
@@ -74,7 +75,9 @@ static void printHelp(char *programName) {
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
             "        [-d <delay in microsec between packets or buffers depending on -bufdelay>]");
 
-    fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffers repeatedly and get stats\n");
+    fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffers repeatedly and keep stats.\n");
+    fprintf(stderr, "        There are 3 ways to know to send sync msgs to the CP: 1) specify -cp_addr & -cp_port,\n");
+    fprintf(stderr, "           2) read & parse EJFAT_URI env var, 3) read & parse URI info in given file (-file).\n");
 }
 
 
@@ -85,7 +88,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
                       uint64_t *bufSize,
                       int *delayPrescale, std::vector<int> &cores,
                       bool *debug, bool *useIPv6, bool *noConnect,
-                      char* host, char *cp_host) {
+                      char* host, char *cp_host, char *file) {
 
     int c, i_tmp;
     int64_t tmp;
@@ -103,6 +106,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
              {"nc",       0, nullptr, 7},
              {"cp_port",  1, nullptr, 8},
              {"cp_addr",  1, nullptr, 9},
+             {"file"   ,  1, nullptr, 10},
              {nullptr,    0, 0,    0}
             };
 
@@ -267,6 +271,16 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
                 strcpy(cp_host, optarg);
                 break;
 
+            case 10:
+                // FILE NAME
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -file, file name is too long\n");
+                    exit(-1);
+                }
+                strcpy(file, optarg);
+                break;
+
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -314,10 +328,15 @@ int main(int argc, char **argv) {
     bool useIPv6 = false;
     bool noConnect = false;
 
-    char host[INPUT_LENGTH_MAX], cp_host[INPUT_LENGTH_MAX];
+    char host[INPUT_LENGTH_MAX];
     memset(host, 0, INPUT_LENGTH_MAX);
-    memset(cp_host, 0, INPUT_LENGTH_MAX);
     strcpy(host, "127.0.0.1");
+
+    char cp_host[INPUT_LENGTH_MAX];
+    memset(cp_host, 0, INPUT_LENGTH_MAX);
+
+    char fileName[INPUT_LENGTH_MAX];
+    memset(fileName, 0, INPUT_LENGTH_MAX);
 
     std::vector<int> cores;
     size_t coreCount = 0;
@@ -327,7 +346,8 @@ int main(int argc, char **argv) {
               &dataId, &port, &cp_port, &tick,
               &delay, &bufSize,
               &delayPrescale, cores, &debug,
-              &useIPv6, &noConnect, host, cp_host);
+              &useIPv6, &noConnect,
+              host, cp_host, fileName);
 
 #ifdef __linux__
 

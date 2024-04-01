@@ -219,9 +219,9 @@ int main(int argc, char **argv) {
 
     char adminToken[INPUT_LENGTH_MAX];
     memset(adminToken, 0, INPUT_LENGTH_MAX);
-
-    char url[INPUT_LENGTH_MAX];
-    memset(url, 0, INPUT_LENGTH_MAX);
+//
+//    char url[INPUT_LENGTH_MAX];
+//    memset(url, 0, INPUT_LENGTH_MAX);
 
 
 
@@ -272,7 +272,7 @@ int main(int argc, char **argv) {
     }
 
     //std::string instanceToken = "e3216cb5c7f927b88d0b8dcfc7377e12905edfa4e1f21ef2d9bf54607d4d0239";
-    std::string lbid = "1";
+    //std::string lbid = "1";
 
     if (strlen(adminToken) == 0) {
         std::strcpy(adminToken, "udplbd_default_change_me");
@@ -281,29 +281,32 @@ int main(int argc, char **argv) {
 //    fprintf(stdout, "cp_host = %s, port = %hu, name = %s, until = %d\nadmin token = %s\n", cp_host, cp_port, name, (int)(untilSeconds), adminToken);
 
 
-    LbReservation res(cp_host, cp_port, name, adminToken, untilSeconds);
+//    LbReservation res(cp_host, cp_port, name, adminToken, untilSeconds);
 
-    int err = res.FreeLoadBalancer();
-    fprintf(stdout, "free err = %d\n", err);
+//    int err = res.FreeLoadBalancer();
+//    fprintf(stdout, "free err = %d\n", err);
 
-    err = res.ReserveLoadBalancer();
-    fprintf(stdout, "reserve err = %d\n", err);
+    std::string url = LbReservation::ReserveLoadBalancer(cp_host, cp_port, name, adminToken, untilSeconds, useIPv6);
 
-    if (err == 0) {
+    // If the returned string starts with "error" ...
+    if (url.compare(0, 5, "error") == 0) {
+        std::cout << "reserve err = " << url << std::endl;
+    }
+    else {
         // Set environment variable
-        sprintf(url, "EJFAT_URI=ejfat://%s@%s:%hu/lb/%s?data=%s:%hu&sync=%s:%hu",
-                res.getInstanceToken().c_str(),
-                cp_host, cp_port, res.getLbId().c_str(),
-                res.getDataAddrV4().c_str(), res.getDataPort(),
-                res.getSyncAddr().c_str(), res.getSyncPort());
+//        sprintf(url, "EJFAT_URI=ejfat://%s@%s:%hu/lb/%s?data=%s:%hu&sync=%s:%hu",
+//                res.getInstanceToken().c_str(),
+//                cp_host, cp_port, res.getLbId().c_str(),
+//                res.getDataAddrV4().c_str(), res.getDataPort(),
+//                res.getSyncAddr().c_str(), res.getSyncPort());
 
-//    // Set environment variable
-//    sprintf(url, "export EJFAT_URI=ejfat://%s@%s:%hu?data=%s:%hu&sync=%s:%hu",
-//            "instance_token", cp_host, cp_port,
-//            "129.57.155.5", 19522,
-//            "129.57.177.135", 19523);
+        //    // Set environment variable
+        //    sprintf(url, "export EJFAT_URI=ejfat://%s@%s:%hu?data=%s:%hu&sync=%s:%hu",
+        //            "instance_token", cp_host, cp_port,
+        //            "129.57.155.5", 19522,
+        //            "129.57.177.135", 19523);
 
-        fprintf(stdout, "%s\n", url);
+        std::cout << url << std::endl;
 
         // Write it to a file
 
@@ -314,16 +317,10 @@ int main(int argc, char **argv) {
 
         std::fstream file;
         file.open(fileName, std::ios::trunc | std::ios::out);
-        if (file.fail()) {
-            std::cout << "error opening file " << fileName << std::endl;
-        }
-        else {
-            // Write this into a file (without the EJFAT_URI=")
-            file.write(url+10,strlen(url)-10);
-
-            if (file.fail()) {
-                std::cout << "error writing to file " << fileName << std::endl;
-            }
+        if (!file.fail()) {
+            // Write this url into a file (without the EJFAT_URI=")
+            file.write(url.c_str(), url.size());
+            file.write("\n", 1);
             file.close();
         }
     }

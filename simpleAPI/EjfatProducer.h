@@ -15,6 +15,7 @@
 #define EJFAT_EJFATPRODUCER_H
 
 #include <cstdint>
+#include <cstdlib>
 #include <cinttypes>
 #include <unistd.h>
 #include <cstring>
@@ -22,11 +23,14 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <fstream>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 
+
+#include "ejfat.hpp"
 #include "ejfat_packetize.hpp"
 #include "EjfatException.h"
 
@@ -67,9 +71,6 @@ namespace ejfat {
         // Statistics
         volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 
-        // In
-        std::string EjfatUri;
-
 
         /** IP address (dotted-decimal form) to send data to. */
         std::string dataAddr;
@@ -81,8 +82,12 @@ namespace ejfat {
         /** UDP port to send sync message to. */
         uint16_t syncPort = 19523;
 
-        /** If true, use IP version 6, else use version 4. */
-        bool ipv6 = false;
+
+        /** If true, use IP version 6 for LB data address, else use version 4. */
+        bool ipv6Data = false;
+        /** If true, use IP version 6 for CP sync address, else use version 4. */
+        bool ipv6Sync = false;
+
 
         /** If true, call connect() for both sync and data sockets. */
         bool connectSocket = false;
@@ -92,9 +97,17 @@ namespace ejfat {
         /** UDP socket for sending sync message to CP. */
         int syncSocket;
 
-        // This host for IPv4 and 6
-        struct sockaddr_in  serverAddr;
-        struct sockaddr_in6 serverAddr6;
+
+        /** Structure for socket connection, IPv4. */
+        struct sockaddr_in  sendAddrStruct;
+        /** Structure for socket connection, IPv6. */
+        struct sockaddr_in6 sendAddrStruct6;
+
+
+        /** Structure for sync connection, IPv4. */
+        struct sockaddr_in  syncAddrStruct;
+        /** Structure for sync connection, IPv6. */
+        struct sockaddr_in6 syncAddrStruct6;
 
 
         /** If true, print out debugging info to console. */
@@ -181,21 +194,19 @@ namespace ejfat {
         int currentQItem = 0;
 
 
+
     public:
 
-        EjfatProducer(const std::string & Ejfat_uri);
+        EjfatProducer(const std::string &fileName = "/tmp/ejfat_uri");
 
-        // Bare minimum constructor.
-        EjfatProducer(std::string dataAddress, std::string syncAddress);
+        EjfatProducer(const std::string &dataAddress, const std::string &syncAddress);
 
-        EjfatProducer(std::string dataAddress, std::string syncAddress,
+        EjfatProducer(const std::string &dataAddress, const std::string &syncAddress,
                       uint16_t dataPort, uint16_t syncPort, int mtu,
                       std::vector<int> &cores,
                       int delay = 0, int delayPrescale = 1, bool connect = false,
                       uint16_t id = 0, int entropy = 0, int version = 2, int protocol = 1);
 
-        // No zero-arg constructor
-        EjfatProducer() = delete;
 
         // No copy constructor
         EjfatProducer(const EjfatProducer & item) = delete;
@@ -225,6 +236,8 @@ namespace ejfat {
 
 
     private:
+
+        bool setFromURI(ejfatURI & uri);
 
         void statisticsThreadFunc(void *arg);
         void startupStatisticsThread();
