@@ -4,9 +4,9 @@ set(SIMPLE_SRC
    )
 
 set(EXECUTABLE_FILES
-        lbFree.cpp
-        lbReserve.cpp
-        simpleBlaster.cpp
+        lbfree.cpp
+        lbreserve.cpp
+        simpleSender.cpp
    )
 
 add_library(ejfat_simple SHARED ${SIMPLE_SRC})
