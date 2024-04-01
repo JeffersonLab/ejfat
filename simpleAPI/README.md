@@ -183,9 +183,19 @@ Hi Carl,
 
 I see, bash has a built-in command `export`, which will make an env var available to subsequent commands. So if you print it out in the format expected by bash (and most other shells), you could do the following
 
-```
+
     bash~$ ejfat reserve --token abcef1234
     EJFAT_URL="ejfat://abcef1234@0.0.0.0:18347/lb/1"
     bash~$ export $(ejfat reserve --token abcef1234)
     bash~$ echo $EJFAT_URL
     ejfat://abcef1234@0.0.0.0:18347/lb/1
+
+From Mike:
+
+    docker compose exec udplbd rm -f /data/udplbd.db
+
+    (for you include the   -f ~goodrich/esnet/udplbd/docker-compose.yml  I supppose)
+
+    also the correct restart command is:
+
+    docker compose -f ~/esnet/udplbd/docker-compose.yml restart udplbd
