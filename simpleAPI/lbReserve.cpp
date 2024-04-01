@@ -44,20 +44,22 @@
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6]",
             "         -host <CP IP address>",
             "        [-port <CP port, 18347 default)>]",
             "        [-name  <name to give LB instance, \"Default_LB\" default>]",
+            "        [-file  <file to store URI, /tmp/ejfat_uri default>]",
             "        [-until <end time of LB reservation, 20 min from now default>]",
             "                 RFC 3339 format, e.g. 2024-03-28T23:59:22Z (+4 hours EDT, +5 EST)\n",
 
             "        [<admin_token> udplbd_default_change_me = default]");
 
     fprintf(stderr, "        For the specified host/port, reserve an LB assigned the given name until the given time.\n");
-    fprintf(stderr, "        A URL, containing LB connection info is printed out and also stored in the EJFAT_URI env var.\n");
-    fprintf(stderr, "        This URL can be parsed and used by both sender and receiver, and is in the format:\n");
+    fprintf(stderr, "        A URI, containing LB connection info is printed out, stored in the EJFAT_URI env var,\n");
+    fprintf(stderr, "        and written into a file.\n");
+    fprintf(stderr, "        This URI can be parsed and used by both sender and receiver, and is in the format:\n");
     fprintf(stderr, "            ejfat://[<token>@]<cp_host>:<cp_port>/lb/<lb_id>[?data=<data_host>:<data_port>][&sync=<sync_host>:<sync_port>]\n");
 }
 
@@ -66,7 +68,7 @@ static void printHelp(char *programName) {
 static void parseArgs(int argc, char **argv,
                       uint16_t* port,
                       bool* debug, bool* useIPv6,
-                      char* host, char* name,
+                      char* host, char* name, char *file,
                       char* until, char* adminToken) {
 
     int c, i_tmp;
@@ -77,8 +79,9 @@ static void parseArgs(int argc, char **argv,
             {{"port",     1, nullptr, 1},
              {"host",     1, nullptr, 2},
              {"name",     1, nullptr, 3},
-             {"until",    1, nullptr, 4},
-             {"ipv6",     0, nullptr, 5},
+             {"file",     1, nullptr, 4},
+             {"until",    1, nullptr, 5},
+             {"ipv6",     0, nullptr, 6},
              {nullptr,    0, 0,       0}
             };
 
@@ -124,6 +127,16 @@ static void parseArgs(int argc, char **argv,
 
 
             case 4:
+                // FILE NAME
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -file, file name is too long\n");
+                    exit(-1);
+                }
+                strcpy(file, optarg);
+                break;
+
+
+            case 5:
                 // UNTIL TIME
                 if (strlen(optarg) >= INPUT_LENGTH_MAX) {
                     fprintf(stderr, "Invalid argument to -until, time string is too long\n");
@@ -133,7 +146,7 @@ static void parseArgs(int argc, char **argv,
                 break;
 
 
-            case 5:
+            case 6:
                 // use IP version 6
                 *useIPv6 = true;
                 break;
@@ -198,6 +211,9 @@ int main(int argc, char **argv) {
     char name[INPUT_LENGTH_MAX];
     memset(name, 0, INPUT_LENGTH_MAX);
 
+    char fileName[INPUT_LENGTH_MAX];
+    memset(fileName, 0, INPUT_LENGTH_MAX);
+
     char until[INPUT_LENGTH_MAX];
     memset(until, 0, INPUT_LENGTH_MAX);
 
@@ -207,12 +223,10 @@ int main(int argc, char **argv) {
     char url[INPUT_LENGTH_MAX];
     memset(url, 0, INPUT_LENGTH_MAX);
 
-    char url2[INPUT_LENGTH_MAX];
-    memset(url2, 0, INPUT_LENGTH_MAX);
 
 
     parseArgs(argc, argv, &cp_port, &debug, &useIPv6,
-              cp_host, name, until, adminToken);
+              cp_host, name, fileName, until, adminToken);
 
     if (strlen(name) == 0) {
         strcpy(name, "127.0.0.1:5000");
@@ -288,35 +302,24 @@ int main(int argc, char **argv) {
 //            "instance_token", cp_host, cp_port,
 //            "129.57.155.5", 19522,
 //            "129.57.177.135", 19523);
-//
-//    sprintf(url2, "setenv EJFAT_URI ejfat://%s@%s:%hu?data=%s:%hu&sync=%s:%hu",
-//            "instance_token", cp_host, cp_port,
-//            "129.57.155.5", 19522,
-//            "129.57.177.135", 19523);
 
         fprintf(stdout, "%s\n", url);
-//    fprintf(stdout, "url2 = %s\n", url2);
-
-//    int errr = setenv("EJFAT_URI", url, 1); // The third argument 1 indicates to overwrite if the variable already exists
-//    if (errr != 0) {
-//        perror("setenv");
-//    }
-//    else {
-//        fprintf(stdout, "success setting url\n");
-//    }
-
 
         // Write it to a file
 
-        std::string fileName = "/tmp/ejfat_uri";
+        if (std::strlen(fileName) < 1) {
+            // Default file name
+            std::strcpy(fileName, "/tmp/ejfat_uri");
+        }
+
         std::fstream file;
         file.open(fileName, std::ios::trunc | std::ios::out);
         if (file.fail()) {
             std::cout << "error opening file " << fileName << std::endl;
         }
         else {
-            // Write this into a file
-            file.write(url,strlen(url));
+            // Write this into a file (without the EJFAT_URI=")
+            file.write(url+10,strlen(url)-10);
 
             if (file.fail()) {
                 std::cout << "error writing to file " << fileName << std::endl;
