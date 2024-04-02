@@ -12,7 +12,8 @@
 /**
  * @file
  * Contains definitions and routines common to both packetizing
- * and reassembling events.
+ * and reassembling. Mainly stuff to handle the placing of info
+ * into a URI when reserving an LB and the parsing of the URI.
  */
 #ifndef EJFAT_H
 #define EJFAT_H
@@ -136,12 +137,17 @@ namespace ejfat {
         }
 
         if (!uri.dataAddrV6.empty()) {
-            out << "Data host:           " << uri.dataAddrV6 << std::endl;
+            out << "Data host V6:        " << uri.dataAddrV6 << std::endl;
             out << "Data port:           " << uri.dataPort << std::endl;
         }
 
         if (!uri.syncAddrV4.empty()) {
             out << "Sync host:           " << uri.syncAddrV4 << std::endl;
+            out << "Sync port:           " << uri.syncPort << std::endl;
+        }
+
+        if (!uri.syncAddrV6.empty()) {
+            out << "Sync host V6:        " << uri.syncAddrV6 << std::endl;
             out << "Sync port:           " << uri.syncPort << std::endl;
         }
     }
@@ -173,6 +179,7 @@ namespace ejfat {
      * Token is optional, data_host and data_port are optional, sync_host, and sync_port are optional.
      * The order of data= and sync= must be kept, data first, sync second.
      * If data= is not there, &sync must become ?sync.
+     * Distinction is made between ipV6 and ipV4 addresses.
      *
      * @param uri URI to parse.
      * @param uriInfo ref to ejfatURI struct to fill with parsed values.
@@ -195,31 +202,40 @@ namespace ejfat {
                 uriInfo.haveInstanceToken = false;
             }
 
-            uriInfo.cpAddrV4 = match[2];
-            uriInfo.cpPort = std::stoi(match[3]);
-            uriInfo.lbId = match[4];
-            uriInfo.syncPort = 19523;
-            uriInfo.dataPort = 19522;
-            uriInof.useIPv6Sync = false;
-            uriInof.syncAddV6.clear();
+            uriInfo.cpAddrV4    = match[2];
+            uriInfo.cpPort      = std::stoi(match[3]);
+            uriInfo.lbId        = match[4];
+            uriInfo.syncPort    = 19523;
+            uriInfo.dataPort    = 19522;
+            uriInfo.useIPv6Data = false;
+            uriInfo.useIPv6Sync = false;
+            uriInfo.syncAddrV6.clear();
 
             // in this case only syncAddr and syncPort defined
             if (!match[9].str().empty()) {
-                uriInfo.syncAddrV4 = match[9];
+                // Decide if this is IPv4 or IPv6
+                if (isIPv6(match[9])) {
+                    uriInfo.syncAddrV6  = match[9];
+                    uriInfo.useIPv6Sync = true;
+                }
+                else {
+                    uriInfo.syncAddrV4  = match[9];
+                    uriInfo.useIPv6Sync = false;
+                }
                 uriInfo.syncPort = std::stoi(match[10]);
                 uriInfo.haveSync = true;
                 uriInfo.haveData = false;
             }
             else {
+                // if dataAddr and dataPort defined
                 if (!match[5].str().empty()) {
-                    // Decide if this is IPv4 or IPv6
                     if (isIPv6(match[5])) {
-                        uriInfo.dataAddrV6 = match[5];
-                        uriInfo.useIPv6 = true;
+                        uriInfo.dataAddrV6  = match[5];
+                        uriInfo.useIPv6Data = true;
                     }
                     else {
-                        uriInfo.dataAddrV4 = match[5];
-                        uriInfo.useIPv6 = false;
+                        uriInfo.dataAddrV4  = match[5];
+                        uriInfo.useIPv6Data = false;
                     }
 
                     uriInfo.dataPort = std::stoi(match[6]);
@@ -229,8 +245,17 @@ namespace ejfat {
                     uriInfo.haveData = false;
                 }
 
+                // if syncAddr and syncPort defined
                 if (!match[7].str().empty()) {
-                    uriInfo.syncAddrV4 = match[7];
+                    if (isIPv6(match[7])) {
+                        uriInfo.syncAddrV6  = match[7];
+                        uriInfo.useIPv6Sync = true;
+                    }
+                    else {
+                        uriInfo.syncAddrV4  = match[7];
+                        uriInfo.useIPv6Sync = false;
+                    }
+
                     uriInfo.syncPort = std::stoi(match[8]);
                     uriInfo.haveSync = true;
                 }

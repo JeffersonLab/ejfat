@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 #include <fstream>
+#include <atomic>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -40,7 +41,7 @@ namespace ejfat {
 
 
     // Example callback function
-    void* callbackFunc(void *arg) {
+    void* callbackFuncExample(void *arg) {
         std::cout << "Callback function called" << std::endl;
         return arg;
     }
@@ -151,9 +152,9 @@ namespace ejfat {
         int entropy = 0;
 
 
-
         /** Last time a sync message sent to CP in nanosec since epoch. */
         uint64_t lastSyncTimeNanos;
+        /** Number of events sent since last sync message sent to CP. */
         uint64_t eventsSinceLastSync;
 
         /** Buffer in which to create and store the sync message to the CP. */
@@ -162,35 +163,49 @@ namespace ejfat {
         /** Vector used to store the numbers of the cores to run this sender on. */
         std::vector<int> cores;
 
-
+        /** Thread to do statistics. */
         std::thread statThread;
+        /** Thread to take things from internal queue (if any) and send. */
         std::thread sendThread;
 
-        bool statThdStarted = false;
-        bool sendThdStarted = false;
+        /** Has the statistics thread been started? */
+        volatile bool statThdStarted = false;
+        /** Has the send thread been started? */
+        volatile bool sendThdStarted = false;
 
+        /** Flag used to stop threads. */
+        std::atomic_bool endThreads;
 
+        //------------------------------------------------------------------
+        // Queue stuff
+        //------------------------------------------------------------------
         // Why would you want a bounded queue? If you put data buffers on it faster than it can be
-        // sent, you have a big problem, memory leak. If there's any kind of delay specified, then
-        // you'll need to throttle putting items on the Q.
-        // How do you know if what you put on the Q has been sent and its pointer made available?
-        // Use the addToSendQueue() method and specify a callback to be run when it's been sent.
-        //boost::lockfree::spsc_queue<qItem *> queue{2048};
+        // sent, you have a big problem, a memory leak. If there's any kind of delay specified, then
+        // you'll need to throttle putting items onto the Q.
+        //
+        // Question: How do you know if what you put on the Q has been sent and its pointer made
+        // available for possible reuse?
+        // Answer: Use the addToSendQueue() method and specify a callback and arg to be run when
+        // it's been sent.
 
+        /** Max size of internal queue holding events to be sent. */
         static const size_t QSIZE = 2047;
 
-        // We want the array to be bigger than the Q since if the Q is full, we still want
-        // access to at least one unused array element which the caller can fill and
-        // wait for it to be placed on the Q.
+        /**
+         * Size of array containing elements that can be placed on the queue.
+         * We want the array to be bigger than the Q since if the Q is full, we still want
+         * access to at least one unused array element which the caller can fill and
+         * wait for it to be placed on the Q.
+         */
         static const size_t ARRAYSIZE = QSIZE + 1;
 
-        // Fast, lock-free, wait-free queue for single producer and single consumer
+        /** Fast, lock-free, wait-free queue for single producer and single consumer. */
         boost::lockfree::spsc_queue<qItem*, boost::lockfree::capacity<QSIZE>> queue;
 
-        // Array of these avalable to be stored on queue
+        /** Array of qItems available to be stored on queue. Allocate ahead of time. */
         qItem qItemArray[ARRAYSIZE];
 
-        // Track which element of qItemArray is currently being placed onto Q (0 - 2047);
+        /** Track which element of qItemArray is currently being placed onto Q (0 - 2047). */
         int currentQItem = 0;
 
 
@@ -211,27 +226,32 @@ namespace ejfat {
         // No copy constructor
         EjfatProducer(const EjfatProducer & item) = delete;
 
-        // No destructor necessary? Shutdown threads?
-        // ~EjfatProducer();
+        // Destructor to shutdown threads
+        ~EjfatProducer();
 
         // No assignment operator
         EjfatProducer & operator=(const EjfatProducer & other) = delete;
 
 
-        // Blocking call. Tick automatically set. Any core affinity needs to be done by caller
+        static std::string getUri(const std::string &envVar = "EJFAT_URI",
+                                  const std::string &fileName = "/tmp/ejfat_uri");
+
+
+        // Blocking call. Event number automatically set.
+        // Any core affinity needs to be done by caller.
         void sendEvent(char *event, size_t bytes);
 
-        // Blocking call specifying tick.
-        void sendEvent(char *event, size_t bytes, uint64_t tick);
+        // Blocking call specifying event number.
+        void sendEvent(char *event, size_t bytes, uint64_t eventNumber);
 
 
         // Non-blocking call to place event on internal queue.
-        // Tick automatically set. Returns false if queue full.
+        // Event number automatically set. Returns false if queue full.
         bool addToSendQueue(char *event, size_t bytes,
                             void* (*callback)(void *) = nullptr, void *cbArg = nullptr);
 
-        // Non-blocking call specifying tick.
-        bool addToSendQueue(char *event, size_t bytes, uint64_t tick,
+        // Non-blocking call specifying event number.
+        bool addToSendQueue(char *event, size_t bytes, uint64_t eventNumber,
                             void* (*callback)(void *) = nullptr, void *cbArg = nullptr);
 
 
@@ -249,6 +269,7 @@ namespace ejfat {
         void createDataSocket();
 
         void sendSyncMsg(uint64_t tick, uint64_t currentTimeNanos, uint32_t evtRate);
+        void createSocketsAndStartThreads();
 
     };
 

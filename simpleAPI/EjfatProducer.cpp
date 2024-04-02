@@ -17,20 +17,32 @@
 
 namespace ejfat {
 
+    
+    /** Destructor that ends threads. */
+    EjfatProducer::~EjfatProducer() {
+        endThreads = true;
+    }
+
+
 
     /**
-     * Constructor depending on first on the environmental variable EJFAT_URI.
+     * Constructor which depends first on the environmental variable EJFAT_URI.
      * If that exists and can be read and parsed, it may provide the necessary
      * info to send data to the LB and sync messages to the CP. If it does
-     * <b>NOT</b>, then the fileName arg is used to find a file in which
+     * <b>NOT</b>, then fileName is used to open a file in which
      * this uri has been stored. If that exists and can be read and parsed, it
      * may provide the needed info. If so, everything is fine, if not, throw
      * an exception.
      *
-     * @param fileName name of file with uri stored in it.
-     *                 If no file, provide blank string.
+     * @param fileName  name of file with URI stored in it.
+     *                  If there is no such file, you can:
+     *                    1) ignore this arg as a default (/tmp/ejfat_uri) is provided, or
+     *                    2) pass a blank string in which case files are ignored.
+     *
+     * @throws EjfatException if no data address and port or no sync address and port
+     *                        in EJFAT_URI environmental variable or given file.
      */
-    EjfatProducer::EjfatProducer(const std::string &fileName) {
+    EjfatProducer::EjfatProducer(const std::string &fileName) : endThreads(false) {
 
         bool foundUri = false;
         ejfatURI uriInfo;
@@ -73,6 +85,80 @@ namespace ejfat {
             throwEjfatLine("URI did not have info to send data or sync msgs");
         }
 
+        createSocketsAndStartThreads();
+    }
+
+
+
+    /**
+     * Constructor which specifies the IP address to send data to and
+     * the IP address to send the sync messages to. Everything else is
+     * set to their defaults, including port numbers.
+     *
+     * @param dataAddress IP address (either ipv6 or ipv4) to send data to.
+     * @param syncAddress IP address (currently only ipv4) to send sync msgs to.
+     */
+    EjfatProducer::EjfatProducer(const std::string& dataAddress,
+                                 const std::string& syncAddress) :
+            dataAddr(dataAddress), syncAddr(syncAddress), endThreads(false) {
+
+        ipv6Data = isIPv6(dataAddress);
+        ipv6Sync = isIPv6(syncAddress);
+
+        createSocketsAndStartThreads();
+    }
+
+
+    /**
+     * Constructor which specifies the IP address to send data to and
+     * the IP address to send the sync messages to. Everything else is
+     * set to their defaults, including port numbers.
+     *
+     * @param dataAddress    IP address (either ipv6 or ipv4) to send data to.
+     * @param syncAddress    IP address (currently only ipv4) to send sync msgs to.
+     * @param dataPort       UDP port to send data to.
+     * @param syncPort       UDP port to send sync msgs to.
+     * @param mtu            max # of bytes to send in a single UDP packet.
+     * @param cores          comma-separated list of cores to run the sending code on.
+     * @param delay          delay in microseconds between each event sent (defaults to 0).
+     * @param delayPrescale  (1,2, ... N), a delay is taken after every Nth event (defaults to 1).
+     * @param connect        if true, call connect() on each UDP socket, both for data and syncs.
+     *                       This speeds up communication, but requires the receiving socket
+     *                       to be up and runnin. Defaults to false.
+     * @param id             id number of this sender (defaults to 0).
+     * @param entropy        number to add to the base destination port for a given destination host.
+     *                       Used on receiving end to read different sources on different UDP ports
+     *                       for multithreading and ease of programming purposes. Defaults to 0.
+     * @param version        version number of ejfat software repo (defaults to 2).
+     * @param protocol       version number of ejfat communication protocol (defaults to 1).
+     */
+    EjfatProducer::EjfatProducer(const std::string& dataAddress,
+                                 const std::string& syncAddress,
+                                 uint16_t dataPort, uint16_t syncPort, int mtu,
+                                 std::vector<int> & cores,
+                                 int delay, int delayPrescale, bool connect,
+                                 uint16_t id, int entropy, int version, int protocol) :
+
+            dataAddr(dataAddress), syncAddr(syncAddress),
+            dataPort(dataPort), syncPort(syncPort),
+            mtu(mtu), delay(delay), delayPrescale(delayPrescale),
+            cores(cores), connectSocket(connect),
+            id(id), entropy(entropy), version(version), protocol(protocol),
+            endThreads(false)
+
+    {
+        delayCounter = delayPrescale;
+
+        ipv6Data = isIPv6(dataAddress);
+        ipv6Sync = isIPv6(syncAddress);
+
+        createSocketsAndStartThreads();
+    }
+
+
+
+    /** Method to set max UDP packet payload, create sockets, and startup threads. */
+    void EjfatProducer::createSocketsAndStartThreads() {
         // 20 bytes = normal IPv4 packet header (60 is max), 8 bytes = max UDP packet header
         // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
         maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
@@ -86,67 +172,85 @@ namespace ejfat {
 
 
 
-    EjfatProducer::EjfatProducer(const std::string &dataAddress, const std::string &syncAddress) :
-            dataAddr(dataAddress), syncAddr(syncAddress) {
+    /**
+     * STATIC Method to get the URI produced when reserving a load balancer.
+     * This can be accomplished by running lbreserve.
+     *
+     * @param envVar    name of environmental variable containing URI (default EJFAT_URI).
+     * @param fileName  name of environmental variable containing URI (default /tmp/ejfat_uri).
+     * @return string containing URI if successful, else blank string.
+     */
+    std::string EjfatProducer::getUri(const std::string& envVar,
+                                      const std::string& fileName) {
 
-        maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
+        // First see if the EJFAT_URI environmental variable is defined, if so, parse it
+        const char* uriStr = std::getenv(envVar.c_str());
+        if (uriStr != nullptr) {
+            return std::string(uriStr);
+        }
 
-        createSyncSocket();
-        createDataSocket();
+        // If no luck with env var, look into file (should contain only one line)
+        if (!fileName.empty()) {
+            std::ifstream file(fileName);
+            if (file.is_open()) {
+                std::string uriLine;
+                if (std::getline(file, uriLine)) {
+                    file.close();
+                    return std::string(uriLine);
+                }
 
-        startupSendThread();
-        startupStatisticsThread();
-    }
+                file.close();
+            }
+        }
 
-
-    EjfatProducer::EjfatProducer(const std::string &dataAddress, const std::string &syncAddress,
-                                 uint16_t dataPort, uint16_t syncPort, int mtu,
-                                 std::vector<int> &cores,
-                                 int delay, int delayPrescale, bool connect,
-                                 uint16_t id, int entropy, int version, int protocol) :
-
-            dataAddr(dataAddress), syncAddr(syncAddress),
-            dataPort(dataPort), syncPort(syncPort),
-            mtu(mtu), delay(delay), delayPrescale(delayPrescale),
-            cores(cores), connectSocket(connect),
-            id(id), entropy(entropy), version(version), protocol(protocol)
-
-    {
-        maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
-        delayCounter = delayPrescale;
-
-        createSyncSocket();
-        createDataSocket();
-
-        startupSendThread();
-        startupStatisticsThread();
-    }
-
+        return std::string("");
+     }
 
 
     /**
-     * Set this object internal member from the struct obtained from parsing an ejfat URI.
+     * Set this object's internal members from the struct
+     * obtained from parsing an ejfat URI.
+     *
      * @param uri ref to struct with CP/LB connection info.
-     * @return true if all need info is there, else false;
+     * @return true if all needed info is there, else false;
      */
     bool EjfatProducer::setFromURI(ejfatURI & uri) {
 
         bool haveWhatsNeeded = uri.haveData && uri.haveSync;
         if (!haveWhatsNeeded) return false;
 
-        dataAddr = uri.dataAddrV4;
+        // data address and port
+        if (uri.useIPv6Data) {
+            dataAddr = uri.dataAddrV6;
+            ipv6Data = true;
+        }
+        else {
+            dataAddr = uri.dataAddrV4;
+            ipv6Data = false;
+        }
         dataPort = uri.dataPort;
 
-        syncAddr = uri.syncAddrV4;
+        // sync address and port
+        if (uri.useIPv6Sync) {
+            syncAddr = uri.syncAddrV6;
+            ipv6Sync = true;
+        }
+        else {
+            syncAddr = uri.syncAddrV4;
+            ipv6Sync = false;
+        }
         syncPort = uri.syncPort;
 
         return true;
     }
 
 
+    /**
+     * Method to create a UDP socket for sending sync messages to a control plane.
+     */
     void EjfatProducer::createSyncSocket() {
         // Socket for sending sync message to CP
-        if (ipv6) {
+        if (ipv6Sync) {
             if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
                 if (debug) perror("creating IPv6 sync socket");
                 throw EjfatException("error creating IPv6 sync socket");
@@ -192,10 +296,14 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
 
 
+    /**
+     * Method to create a UDP socket for sending data to an LB
+     * (load balancer's data plane).
+     */
     void EjfatProducer::createDataSocket() {
         // Socket for sending data message to LB
 
-        if (ipv6) {
+        if (ipv6Data) {
             // Configure settings in address struct
             // Clear it out
             memset(&sendAddrStruct6, 0, sizeof(sendAddrStruct6));
@@ -215,7 +323,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         }
 
 
-        if (ipv6) {
+        if (ipv6Data) {
             // create a DGRAM (UDP) socket in the INET/INET6 protocol
             if ((dataSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
                 if (debug) perror("creating IPv6 sync socket");
@@ -282,8 +390,10 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
     }
 
 
-    //-----------------------------------------------------------
-    // Statistics printout thread
+    /**
+     * Method implementing a statics keeping and printing thread.
+     * Null pointer passed as an arg.
+     */
     void EjfatProducer::statisticsThreadFunc(void *arg) {
 
         uint64_t packetCount, byteCount, eventCount;
@@ -302,6 +412,10 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         firstT = t1;
 
         while (true) {
+
+            if (endThreads) {
+                return;
+            }
 
             prevTotalBytes   = totalBytes;
             prevTotalPackets = totalPackets;
@@ -363,12 +477,15 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
     }
 
 
+    /**
+     * Method to start up the statistics thread.
+     * It won't start up more than one.
+     */
     void EjfatProducer::startupStatisticsThread() {
         // Only want one of these threads running
         if (statThdStarted) return;
 
-        void *arg;
-        std::thread t(&EjfatProducer::statisticsThreadFunc, this, arg);
+        std::thread t(&EjfatProducer::statisticsThreadFunc, this, nullptr);
 
         // Move the thread to object member
         statThread = std::move(t);
@@ -379,8 +496,10 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
     }
 
 
-    //-----------------------------------------------------------
-    // Event sending thread
+    /**
+     * Method implementing a thread to take events off an internal queue
+     * and send them to the LB. Null pointer passed as an arg.
+     */
     void EjfatProducer::sendThreadFunc(void *arg) {
 
         qItem *item;
@@ -388,15 +507,24 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
         while (true) {
 
+            if (endThreads) {
+                return;
+            }
+
+            // Dequeue event
             while (!queue.pop(item)) {
+                // Spin 100X before using delays
                 if (++spinCount > spinMax) {
                     std::this_thread::sleep_for(std::chrono::nanoseconds(200));
+                    if (endThreads) {
+                        return;
+                    }
                 }
             }
 
             spinCount = 0;
 
-            // A blocking call
+            // A blocking call to send
             sendEvent(item->event, item->bytes, item->tick);
 
             // Run the callback after sending, better not be blocking!!
@@ -407,6 +535,10 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
     }
 
 
+    /**
+     * Method to start up the sending thread.
+     * It won't start up more than one.
+     */
     void EjfatProducer::startupSendThread() {
         if (sendThdStarted) return;
 
@@ -433,25 +565,32 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         }
 #endif
 
-        void *arg;
-        std::thread t(&EjfatProducer::sendThreadFunc, this, arg);
+        std::thread t(&EjfatProducer::sendThreadFunc, this, nullptr);
 
         sendThread = std::move(t);
         sendThdStarted = true;
     }
 
 
-    void EjfatProducer::sendSyncMsg(uint64_t tick, uint64_t currentTimeNanos, uint32_t evtRate) {
+     /**
+      * Method to send a sync message from the data sender to the control plane.
+      *
+      * @param eventNum          event number of the last event to be sent.
+      * @param currentTimeNanos  current time in nanoseconds past epoch.
+      * @param evtRate           events/sec (Hz) since the last sync message sent.
+      * @throws EjfatException   if error in sending sync message.
+      */
+    void EjfatProducer::sendSyncMsg(uint64_t eventNum, uint64_t currentTimeNanos, uint32_t evtRate) {
 
-        if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
+        if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", eventNum, evtRate);
 
-        setSyncData(syncBuf, version, id, tick, evtRate, currentTimeNanos);
+        setSyncData(syncBuf, version, id, eventNum, evtRate, currentTimeNanos);
         int err;
         if (connectSocket) {
             err = (int) send(syncSocket, syncBuf, 28, 0);
         }
         else {
-            if (ipv6) {
+            if (ipv6Sync) {
                 err = (int) sendto(syncSocket, syncBuf, 28, 0, (sockaddr * ) & syncAddrStruct6, sizeof(struct sockaddr_in6));
             }
             else {
@@ -468,13 +607,41 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
 
 
+    /**
+     * Method to send an event to the LB's data plane.
+     * This method blocks until the data is sent.
+     * This method also sends a sync message to the LB's control plane
+     * once every second. And if a delay is defined, it will execute
+     * that delay after the event and sync are sent.
+     *
+     * @param event pointer to data to send.
+     * @param bytes number of bytes to send.
+     */
     void EjfatProducer::sendEvent(char *event, size_t bytes) {
         sendEvent(event, bytes, tick++);
     }
 
 
+    // TODO: problem if data is sent at less than 1 Hz!!!
 
-    void EjfatProducer::sendEvent(char *event, size_t bytes, uint64_t tick) {
+
+    /**
+     * Method to send an event to the LB's data plane.
+     * This method blocks until the data is sent.
+     * This method also sends a sync message to the LB's control plane
+     * once every second. And if a delay is defined, it will execute
+     * that delay after the event and sync are sent.
+     *
+     * @param event pointer to data to send.
+     * @param bytes number of bytes to send.
+     * @param eventNumber number of event to send. This number is written into the EJFAT
+     *                    header of each UDP packet sent and is used by the LB to ensure
+     *                    it's delivery to the correct backend reassembler. This number
+     *                    must be monotonically increasing. For example, it can be a
+     *                    simple sequential count or it can be the time in milliseconds
+     *                    or nanoseconds past epoch.
+     */
+    void EjfatProducer::sendEvent(char *event, size_t bytes, uint64_t eventNumber) {
 
         if (event == nullptr || bytes == 0) {
             return;
@@ -495,7 +662,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                                               true, true, debug, false, &packetsSent);
         }
         else {
-            if (ipv6) {
+            if (ipv6Data) {
                 err = sendPacketizedBufferSendNew(event, bytes, maxUdpPayload,
                                                   dataSocket,
                                                   tick, protocol, entropy, version, id,
@@ -563,20 +730,21 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
 
 //    /**
-//     * Turn this into a blocking push onto the internal queue of events to be sent.
+//     * Turn adding event to be sent onto internal queue into a blocking push.
 //     *
 //     * @param event
 //     * @param bytes
+//     * @param eventNumber
 //     * @param callback
 //     * @param cbArg
 //     */
-//    void EjfatProducer::addToSendQueueBlocking(char *event, size_t bytes, uint64_t tick,
+//    void EjfatProducer::addToSendQueueBlocking(char *event, size_t bytes, uint64_t eventNumber,
 //                                               void* (*callback)(void *), void *cbArg) {
 //
 //        qItem *item = &qItemArray[currentQItem];
 //
-//        this->tick     = tick;
-//        item->tick     = tick;
+//        this->tick     = eventNumber;
+//        item->tick     = eventNumber;
 //        item->event    = event;
 //        item->bytes    = bytes;
 //        item->cbArg    = cbArg;
@@ -595,13 +763,14 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
 
     /**
-     * Non-blocking push onto the internal queue of events to be sent.
-     * Tick handled internally.
+     * Non-blocking add of event onto internal queue to be sent by separate thread.
+     * Event number handled internally.
      *
-     * @param event
-     * @param bytes
-     * @param callback
-     * @param cbArg
+     * @param event     pointer to data to send.
+     * @param bytes     number of bytes to send.
+     * @param callback  routine to be called after event is dequeued and sent (default nullptr).
+     * @param cbArg     arg to be passed to callback when executed (default nullptr).
+     *
      * @return true if event placed on queue, else false.
      */
     bool EjfatProducer::addToSendQueue(char *event, size_t bytes, void* (*callback)(void *), void *cbArg) {
@@ -610,22 +779,28 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
 
     /**
-     * Non-blocking push onto the internal queue of events to be sent. Specifies tick.
+     * Non-blocking add of event onto internal queue to be sent by separate thread.
      *
-     * @param event
-     * @param bytes
-     * @param tick
-     * @param callback
-     * @param cbArg
+     * @param event       pointer to data to send.
+     * @param bytes       number of bytes to send.
+     * @param eventNumber number of event to send. This number is written into the EJFAT
+     *                    header of each UDP packet sent and is used by the LB to ensure
+     *                    it's delivery to the correct backend reassembler. This number
+     *                    must be monotonically increasing. For example, it can be a
+     *                    simple sequential count or it can be the time in milliseconds
+     *                    or nanoseconds past epoch.
+     * @param callback    routine to be called after event is dequeued and sent (default nullptr).
+     * @param cbArg       arg to be passed to callback when executed (default nullptr).
+     *
      * @return true if event placed on queue, else false.
      */
-    bool EjfatProducer::addToSendQueue(char *event, size_t bytes, uint64_t tick,
+    bool EjfatProducer::addToSendQueue(char *event, size_t bytes, uint64_t eventNumber,
                                        void* (*callback)(void *), void *cbArg) {
 
         qItem *item = &qItemArray[currentQItem];
 
-        this->tick     = tick;
-        item->tick     = tick;
+        this->tick     = eventNumber;
+        item->tick     = eventNumber;
         item->event    = event;
         item->bytes    = bytes;
         item->cbArg    = cbArg;
