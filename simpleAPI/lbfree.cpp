@@ -15,7 +15,7 @@
 
 /**
  * <p>
- * @file Reserve a load balancer for future use.
+ * @file Free up a load balancer for future use.
  * This program is part of new ejfat API.
  * </p>
  */
