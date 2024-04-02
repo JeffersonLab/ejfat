@@ -419,14 +419,12 @@ int main(int argc, char **argv) {
         producer.sendEvent(buf, bufSize);
 
         // We're sending the same buffer over and over.
-        // The "buf" ends up on an internal queue, 2047X,
+        // For the non-blocking send,
+        // the exact same "buf" can end up on an internal queue, 2047x,
         // but that doesn't matter as data never changes.
-        //producer.addToSendQueueBlocking(buf, bufSize);
-
-
-//        // Non-blocking
 //        bool added = producer.addToSendQueue(buf, bufSize);
 //        if (!added) {
+//            // If not added to queue, because it's full, delay and try again later
 //            std::this_thread::sleep_for(std::chrono::nanoseconds(200));
 //        }
     }
