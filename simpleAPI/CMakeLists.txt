@@ -4,6 +4,8 @@ set(SIMPLE_SRC
    )
 
 set(EXECUTABLE_FILES
+#        lbtest.cpp
+        lbmonitor.cpp
         lbfree.cpp
         lbreserve.cpp
         simpleSender.cpp
