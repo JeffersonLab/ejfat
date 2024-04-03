@@ -188,26 +188,27 @@ static inline int64_t ts_to_nano(struct timespec ts) {
          * @param stats shared pointer to structure to be cleared.
          */
         static void clearStats(std::shared_ptr<packetRecvStats> stats) {
-            stats->endTime = 0;
-            stats->startTime = 0;
-            stats->readTime = 0;
-
-            stats->droppedPackets = 0;
-            stats->acceptedPackets = 0;
-            stats->discardedPackets = 0;
-            stats->badSrcIdPackets = 0;
-
-            stats->droppedBytes = 0;
-            stats->acceptedBytes = 0;
-            stats->discardedBytes = 0;
-
-            stats->droppedBuffers = 0;
-            stats->discardedBuffers = 0;
-            stats->builtBuffers = 0;
-
-            stats->cpuPkt = -1;
-            stats->cpuBuf = -1;
-            stats->cpuBuf = -1;
+            clearStats(stats.get());
+//            stats->endTime = 0;
+//            stats->startTime = 0;
+//            stats->readTime = 0;
+//
+//            stats->droppedPackets = 0;
+//            stats->acceptedPackets = 0;
+//            stats->discardedPackets = 0;
+//            stats->badSrcIdPackets = 0;
+//
+//            stats->droppedBytes = 0;
+//            stats->acceptedBytes = 0;
+//            stats->discardedBytes = 0;
+//
+//            stats->droppedBuffers = 0;
+//            stats->discardedBuffers = 0;
+//            stats->builtBuffers = 0;
+//
+//            stats->cpuPkt = -1;
+//            stats->cpuBuf = -1;
+//            stats->cpuBuf = -1;
         }
 
 
@@ -1150,11 +1151,11 @@ static inline int64_t ts_to_nano(struct timespec ts) {
          */
         static ssize_t getCompleteAllocatedBuffer(char** dataBufAlloc, size_t *pBufLen, int udpSocket,
                                                   bool debug, uint64_t *tick, uint16_t *dataId,
-                                                  std::shared_ptr<packetRecvStats> stats,
+                                                  packetRecvStats* stats,
                                                   uint32_t tickPrescale) {
 
             if (pBufLen == nullptr || dataBufAlloc == nullptr) {
-                fprintf(stderr, "getCompletePacketizedBufferNew: null arg(s)\n");
+                fprintf(stderr, "getCompleteAllocatedBuffer: null arg(s)\n");
                 return BAD_ARG;
             }
 
@@ -1213,7 +1214,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
             char pkt[65536];
 
             if (debug && takeStats) fprintf(stderr, "getCompleteAllocatedBuffer: buf size = %lu, take stats = %d, %p\n",
-                                            bufLen, takeStats, stats.get());
+                                            bufLen, takeStats, stats);
 
             while (true) {
 
@@ -1724,7 +1725,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                                                      debug, &tick, nullptr,
                                                      nullptr, 1);
                 if (nBytes < 0) {
-                    if (debug) fprintf(stderr, "Error in getCompletePacketizedBufferNew, %ld\n", nBytes);
+                    if (debug) fprintf(stderr, "Error in getCompletePacketizedBuffer, %ld\n", nBytes);
                     // Return the error (ssize_t)
                     return nBytes;
                 }
@@ -1734,7 +1735,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                                                     debug, &tick, nullptr,
                                                     nullptr, 1);
                 if (nBytes < 0) {
-                    if (debug) fprintf(stderr, "Error in getCompleteAllocatedBufferNew, %ld\n", nBytes);
+                    if (debug) fprintf(stderr, "Error in getCompleteAllocatedBuffer, %ld\n", nBytes);
                     // Return the error
                     return nBytes;
                 }
