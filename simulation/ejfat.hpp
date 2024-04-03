@@ -21,6 +21,7 @@
 
 
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <regex>
 
@@ -78,7 +79,7 @@ namespace ejfat {
      * Method to clear a ejfatURI structure.
      * @param uri reference to ejfatURI struct to clear.
      */
-    void clearUri(ejfatURI &uri) {
+    static void clearUri(ejfatURI &uri) {
         uri.haveInstanceToken = false;
         uri.haveData          = false;
         uri.haveSync          = false;
@@ -108,7 +109,7 @@ namespace ejfat {
      * @param out output stream.
      * @param uri reference to ejfatURI struct to print out.
      */
-    void printUri(std::ostream& out, ejfatURI &uri) {
+    static void printUri(std::ostream& out, ejfatURI &uri) {
 
         out << "Have data info:      " << btoa(uri.haveData) << std::endl;
         out << "Have sync info:      " << btoa(uri.haveSync) << std::endl;
@@ -158,7 +159,7 @@ namespace ejfat {
      * Function to determine if a string is an IPv4 address.
      * @param address string containing address to examine.
      */
-    bool isIPv4(const std::string& str) {
+    static bool isIPv4(const std::string& str) {
         std::regex ipv4_regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
         return std::regex_match(str, ipv4_regex);
     }
@@ -167,7 +168,7 @@ namespace ejfat {
      * Function to determine if a string is an IPv6 address.
      * @param address string containing address to examine.
      */
-    bool isIPv6(const std::string& str) {
+    static bool isIPv6(const std::string& str) {
         std::regex ipv6_regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$");
         return std::regex_match(str, ipv6_regex);
     }
@@ -185,7 +186,7 @@ namespace ejfat {
      * @param uriInfo ref to ejfatURI struct to fill with parsed values.
      * @return true if parse sucessful, else false;
      */
-    bool parseURI(const std::string uri, ejfatURI &uriInfo) {
+    static bool parseURI(const std::string uri, ejfatURI &uriInfo) {
 
         std::regex pattern(R"regex(ejfat://(?:([^@]+)@)?([^:]+):(\d+)/lb/([^?]+)(?:\?(?:(?:data=(.*?):(\d+)){1}(?:&sync=(.*?):(\d+))?|(?:sync=(.*?):(\d+)){1}))?)regex");
 
@@ -268,6 +269,42 @@ namespace ejfat {
 
         return false;
     }
+
+
+    /**
+     * Method to get the URI produced when reserving a load balancer.
+     * This can be accomplished by running lbreserve.
+     *
+     * @param envVar    name of environmental variable containing URI (default EJFAT_URI).
+     * @param fileName  name of environmental variable containing URI (default /tmp/ejfat_uri).
+     * @return string containing URI if successful, else blank string.
+     */
+    static std::string getURI(const std::string& envVar = "EJFAT_URI",
+                              const std::string& fileName = "/tmp/ejfat_uri") {
+
+        // First see if the EJFAT_URI environmental variable is defined, if so, parse it
+        const char* uriStr = std::getenv(envVar.c_str());
+        if (uriStr != nullptr) {
+            return std::string(uriStr);
+        }
+
+        // If no luck with env var, look into file (should contain only one line)
+        if (!fileName.empty()) {
+            std::ifstream file(fileName);
+            if (file.is_open()) {
+                std::string uriLine;
+                if (std::getline(file, uriLine)) {
+                    file.close();
+                    return std::string(uriLine);
+                }
+
+                file.close();
+            }
+        }
+
+        return std::string("");
+    }
+
 
 
 
