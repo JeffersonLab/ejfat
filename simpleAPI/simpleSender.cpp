@@ -66,7 +66,7 @@ static void printHelp(char *programName) {
             "        [-nc (no connect on socket)]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]\n",
 
-            "        [-t <tick, default 0>]",
+            "        [-t <starting event number (also tick), default 0>]",
             "        [-id <data id, default 0>]",
             "        [-e <entropy, default 0>]\n",
 
