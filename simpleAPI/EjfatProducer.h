@@ -37,25 +37,16 @@
 
 #include <boost/lockfree/spsc_queue.hpp>
 
+
+// Example callback function
+static void* callbackFuncExample(void *arg) {
+    std::cout << "Callback function called" << std::endl;
+    return arg;
+}
+
+
+
 namespace ejfat {
-
-
-    // Example callback function
-    void* callbackFuncExample(void *arg) {
-        std::cout << "Callback function called" << std::endl;
-        return arg;
-    }
-
-
-    // Structure to hold each internal queue item
-    typedef struct queueItem_t {
-        uint32_t bytes;
-        uint64_t tick;
-        char     *event;
-        void     *cbArg;
-        void* (*callback)(void *);
-    } qItem;
-
 
 
     /**
@@ -68,6 +59,17 @@ namespace ejfat {
 
 
     private:
+
+        // Structure to hold each send-queue item
+        typedef struct queueItem_t {
+            uint32_t bytes;
+            uint64_t tick;
+            char     *event;
+            void     *cbArg;
+            void* (*callback)(void *);
+        } qItem;
+
+
 
         // Statistics
         volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
@@ -218,7 +220,7 @@ namespace ejfat {
 
         EjfatProducer(const std::string &dataAddress, const std::string &syncAddress,
                       uint16_t dataPort, uint16_t syncPort, int mtu,
-                      std::vector<int> &cores,
+                      const std::vector<int> &cores,
                       int delay = 0, int delayPrescale = 1, bool connect = false,
                       uint16_t id = 0, int entropy = 0, int version = 2, int protocol = 1);
 
@@ -232,9 +234,6 @@ namespace ejfat {
         // No assignment operator
         EjfatProducer & operator=(const EjfatProducer & other) = delete;
 
-
-        static std::string getUri(const std::string &envVar = "EJFAT_URI",
-                                  const std::string &fileName = "/tmp/ejfat_uri");
 
 
         // Blocking call. Event number automatically set.

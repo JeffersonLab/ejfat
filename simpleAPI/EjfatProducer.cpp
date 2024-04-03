@@ -119,7 +119,7 @@ namespace ejfat {
      * @param dataPort       UDP port to send data to.
      * @param syncPort       UDP port to send sync msgs to.
      * @param mtu            max # of bytes to send in a single UDP packet.
-     * @param cores          comma-separated list of cores to run the sending code on.
+     * @param cores          vector of cores to run the sending code on.
      * @param delay          delay in microseconds between each event sent (defaults to 0).
      * @param delayPrescale  (1,2, ... N), a delay is taken after every Nth event (defaults to 1).
      * @param connect        if true, call connect() on each UDP socket, both for data and syncs.
@@ -135,7 +135,7 @@ namespace ejfat {
     EjfatProducer::EjfatProducer(const std::string& dataAddress,
                                  const std::string& syncAddress,
                                  uint16_t dataPort, uint16_t syncPort, int mtu,
-                                 std::vector<int> & cores,
+                                 const std::vector<int> & cores,
                                  int delay, int delayPrescale, bool connect,
                                  uint16_t id, int entropy, int version, int protocol) :
 
@@ -170,41 +170,6 @@ namespace ejfat {
         startupStatisticsThread();
     }
 
-
-
-    /**
-     * STATIC Method to get the URI produced when reserving a load balancer.
-     * This can be accomplished by running lbreserve.
-     *
-     * @param envVar    name of environmental variable containing URI (default EJFAT_URI).
-     * @param fileName  name of environmental variable containing URI (default /tmp/ejfat_uri).
-     * @return string containing URI if successful, else blank string.
-     */
-    std::string EjfatProducer::getUri(const std::string& envVar,
-                                      const std::string& fileName) {
-
-        // First see if the EJFAT_URI environmental variable is defined, if so, parse it
-        const char* uriStr = std::getenv(envVar.c_str());
-        if (uriStr != nullptr) {
-            return std::string(uriStr);
-        }
-
-        // If no luck with env var, look into file (should contain only one line)
-        if (!fileName.empty()) {
-            std::ifstream file(fileName);
-            if (file.is_open()) {
-                std::string uriLine;
-                if (std::getline(file, uriLine)) {
-                    file.close();
-                    return std::string(uriLine);
-                }
-
-                file.close();
-            }
-        }
-
-        return std::string("");
-     }
 
 
     /**
@@ -541,6 +506,9 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
      */
     void EjfatProducer::startupSendThread() {
         if (sendThdStarted) return;
+
+        // TODO: Core affinity needs to be set in the thread itself, not this thread!!!
+
 
 #ifdef __linux__
         size_t coreCount = cores.size();
