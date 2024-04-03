@@ -1,5 +1,6 @@
 
 set(SIMPLE_SRC
+        EjfatConsumer.cpp
         EjfatProducer.cpp
    )
 
