@@ -86,6 +86,36 @@ namespace ejfat {
 
         ipv6DataAddr = isIPv6(dataAddr);
 
+        // Need to give this back end a name,
+        // base part of it on least significant 6 digits of current time in microsec
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        int time = now.tv_nsec/1000L;
+        char name[256];
+        sprintf(name, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
+        myName = name;
+
+        // Based on the number of data sources, fill in maps with real objects
+
+        // For each source ...
+        for (size_t i = 0; i < ids.size(); ++i) {
+            int srcId = ids[i];
+
+            // Create a (shared pointer of a) queue for this source and place into map
+            queues.emplace(srcId, std::make_shared<boost::lockfree::spsc_queue<qItem*, boost::lockfree::capacity<QSIZE>>>());
+
+            // Create an vector of qItem objects.
+            // By using a vector we invoke the constructor qItem() for each element.
+            std::vector<qItem> items(VECTOR_SIZE);
+            // Move vector into map of all vectors - central storage
+            qItemVectors[srcId] = std::move(items);
+            // Element of items vector that will be placed onto Q, start with 0
+            currentQItems[srcId] = 0;
+            // Create a struct to hold stats & place into map
+            allStats.emplace(srcId, packetRecvStats());
+        }
+
+
         createSocketsAndStartThreads();
     }
 
@@ -314,11 +344,106 @@ namespace ejfat {
     }
 
 
+
+    /**
+     * Method implementing a thread to talk to the control plane.
+     */
+    void EjfatConsumer::grpcThreadFunc(recvThdArg *arg) {
+
+        recvThdArg *tArg = (recvThdArg *) arg;
+        int srcId = tArg->srcId;
+
+
+//    enum PortRange {
+//        PORT_RANGE_1 = 0;
+//        PORT_RANGE_2 = 1;
+//        PORT_RANGE_4 = 2;
+//        PORT_RANGE_8 = 3;
+//        PORT_RANGE_16 = 4;
+//        PORT_RANGE_32 = 5;
+//        PORT_RANGE_64 = 6;
+//        PORT_RANGE_128 = 7;
+//        PORT_RANGE_256 = 8;
+//        PORT_RANGE_512 = 9;
+//        PORT_RANGE_1024 = 10;
+//        PORT_RANGE_2048 = 11;
+//        PORT_RANGE_4096 = 12;
+//        PORT_RANGE_8192 = 13;
+//        PORT_RANGE_16384 = 14;
+//    }
+
+
+        int sourceCount = ids.size();
+        int portRange;
+
+        // Convert integer range in PortRange enum
+        // Set port range according to sourceCount
+        switch (sourceCount) {
+            case 1:
+                portRange = 0;
+                break;
+            case 2:
+                portRange = 1;
+                break;
+            case 3:
+            case 4:
+                portRange = 2;
+                break;
+            case 5:
+            case 6:
+            case 7:
+            case 8:
+                portRange = 3;
+                break;
+            default:
+                // up to 16 inputs
+                portRange = 4;
+                break;
+        }
+
+        auto range = PortRange(portRange);
+
+        LbControlPlaneClient client(cpAddr, cpPort,
+                                    dataAddr, dataPort, range,
+                                    myName, instanceToken, lbId, weight);
+
+        // Register this client with the grpc server &
+        // wait for server to send session token in return.
+        // Token stored internally in client.
+        int32_t err = client.Register();
+        if (err == 1) {
+            printf("GRPC client %s communication error with server when registering, exit\n", myName.c_str());
+            exit(1);
+        }
+
+        printf("GRPC client %s registered!\n", myName.c_str());
+
+//        size_t fill_level = queue.read_available();
+
+    }
+
+        /**
+         * Method to start up the grpc thread.
+         * It won't start up more than one.
+         */
+    void EjfatConsumer::startupGrpcThread() {
+        // Only want one of these threads running
+        if (grpcThdStarted) return;
+
+        std::thread t(&EjfatConsumer::grpcThreadFunc, this, nullptr);
+
+        // Move the thread to object member
+        grpcThread = std::move(t);
+
+        grpcThdStarted = true;
+    }
+
+
     /**
      * Method implementing a thread to read events from a socket,
      * sent by a single sender, and place them onto an internal queue.
      */
-    void EjfatConsumer::recvThreadFunc(void *arg) {
+    void EjfatConsumer::recvThreadFunc(recvThdArg *arg) {
 
         recvThdArg *tArg = (recvThdArg *)arg;
         int srcId = tArg->srcId;
@@ -353,22 +478,18 @@ namespace ejfat {
         bool restarted = false, firstLoop = true;
         uint16_t dataId;
 
-        auto & queue      = queues[srcId];
-        auto & qItemArray = qItemArrays[srcId];
+        auto queue        = queues[srcId];
+        auto & qItemVec   = qItemVectors[srcId];
         int currentQItem  = currentQItems[srcId];
         int dataSocket    = dataSockets[srcId];
-
-        // To start with zero out the qItems in array
-        memset((void *)qItemArray, 0, sizeof(qItemArray));
-
-        packetRecvStats* stats = &allStats[srcId];
-        bool takeStats = stats == nullptr;
+        auto stats        = &allStats[srcId];
+        bool takeStats    = stats == nullptr;
 
 
         while (true) {
 
             // Get empty buffer from array
-            qItem* item    = &qItemArray[currentQItem];
+            qItem* item    = &qItemVec[currentQItem];
             char*  dataBuf = item->event;
             size_t bufSize = item->bufBytes;
 
@@ -379,8 +500,15 @@ namespace ejfat {
             //-------------------------------------------------------------
             // Get reassembled buffer
             //-------------------------------------------------------------
+
+            //TODO: this calls recvfrom which is blocking since dataSocket is
+            // blocking. For nonblocking behavior one can modify the socket:
+            //        int enable = 1;
+            //        setsockopt(socket_fd, SOL_SOCKET, SO_NONBLOCK, &enable, sizeof(enable));
+            // Perhaps a timeout behavior can be implemented
+
             ssize_t nBytes = getCompleteAllocatedBuffer(&dataBuf, &bufSize, dataSocket,
-                                                       debug, &tick, &dataId, stats, 1);
+                                                        debug, &tick, &dataId, stats, 1);
 
             if (nBytes < 0) {
                 fprintf(stderr, "Error in receiving data, %ld\n", nBytes);
@@ -401,8 +529,8 @@ namespace ejfat {
             item->dataBytes = nBytes;
 
             // Place onto queue
-            if (queue.push(item)) {
-                currentQItem = (currentQItem + 1) % ARRAYSIZE;
+            if (queue->push(item)) {
+                currentQItem = (currentQItem + 1) % VECTOR_SIZE;
             }
             else {
                 // Failed to place item on queue since it's full
@@ -435,17 +563,13 @@ namespace ejfat {
                 // Tell stat thread when restart happened so that rates can be calculated within reason
                 struct timespec now;
                 clock_gettime(CLOCK_MONOTONIC, &now);
-                restartTime.tv_sec = now.tv_sec;
-                restartTime.tv_nsec = now.tv_nsec;
-
+                restartTime = now;
 
                 if (takeStats) {
                     clearStats(stats);
                 }
             }
         }
-
-
     }
 
 
@@ -454,13 +578,35 @@ namespace ejfat {
      * Will not start them up more than once.
      */
     void EjfatConsumer::startupRecvThreads() {
+
         if (recvThdsStarted) return;
 
-
-        // For each source ...
+        // For each source, start up a receiving thread
         for (size_t i = 0; i < ids.size(); ++i) {
             int srcId = ids[i];
-            std::thread t(&EjfatConsumer::recvThreadFunc, this, nullptr);
+
+            // Create an arg to pass to the thread
+            recvThdArg *targ = (recvThdArg *) calloc(1, sizeof(recvThdArg));
+            if (targ == nullptr) {
+                std::cerr << "out of mem" << std::endl;
+                exit(1);
+            }
+
+            targ->srcId = srcId;
+            if (startingCore == -1) {
+                // no core affinity
+                targ->core = -1;
+            }
+            else {
+                // each receiving thread uses different cores
+                targ->core = startingCore + i*coreCount;
+            }
+            targ->coreCount = coreCount;
+
+            // Start the thread
+            std::thread t(&EjfatConsumer::recvThreadFunc, this, targ);
+
+            // Store the thread object
             recvThreads[srcId] = std::move(t);
         }
 
@@ -471,6 +617,17 @@ namespace ejfat {
 
     /**
      * Non-blocking retrieval of event sent from the specified data source.
+     * Once an item is taken off the internal queue by this method, room is
+     * created for the receiving thread to place another item onto it. If
+     * long term access to the return event is desired, the caller
+     * must copy it.
+     * <p>
+     * Note: it's possible, but unlikely, that the user calls this method
+     * successively more times than the max number of simultaneously available
+     * events (511) while continuing to access the event returned by the first
+     * call. This will result in the receiving thread overwriting the event
+     * while it's being used.
+     * </p>
      *
      * @param event      pointer filled with pointer to event data.
      * @param bytes      pointer filled with event size in bytes.
@@ -482,28 +639,24 @@ namespace ejfat {
      */
     bool EjfatConsumer::getEvent(char **event, size_t *bytes, uint64_t* eventNum, int srcId) {
 
-        auto it = std::find(ids.begin(), ids.end(), srcId);
-        if (it == ids.end()) {
+        if (queues.count(srcId) == 0) {
             if (debug) std::cout << srcId << " is not a valid data source id for this consumer" << std::endl;
             return false;
         }
 
         qItem *item;
-        auto & queue = queues[srcId];
+        auto queue = queues[srcId];
         int currentQItem  = currentQItems[srcId];
 
         // Dequeue event
-        if (!queue.pop(item)) return false;
+        if (!queue->pop(item)) return false;
 
         if (bytes    != nullptr) *bytes    = item->bufBytes;
         if (eventNum != nullptr) *eventNum = item->tick;
         if (event != nullptr && *event != nullptr) *event = item->event;
 
-        currentQItems[srcId] = (currentQItem + 1) % ARRAYSIZE;
-
         return true;
     }
-
 
 
 }
