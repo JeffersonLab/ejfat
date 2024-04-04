@@ -18,7 +18,7 @@ add_library(ejfat_simple SHARED ${SIMPLE_SRC})
 #        ${CMAKE_SOURCE_DIR}/simulation
 #        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 #        )
-target_link_libraries(ejfat_simple PUBLIC)
+target_link_libraries(ejfat_simple PUBLIC pthread ${Boost_LIBRARIES} ${GRPC_LIBRARIES})
 
 target_include_directories(ejfat_simple PUBLIC
         ${Boost_INCLUDE_DIRS}
