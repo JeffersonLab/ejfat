@@ -119,6 +119,9 @@ namespace ejfat {
         float Kp = 0., Ki = 0., Kd = 0.; // 1000x normal
         float weight = 1.;
 
+        // Using shared_ptr makes it easier to declare object here and created it later
+        std::shared_ptr<LbControlPlaneClient> LbClient;
+
         //------------------------------------------------------------------
         // Stats stuff
         //------------------------------------------------------------------

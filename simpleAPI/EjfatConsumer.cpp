@@ -86,14 +86,6 @@ namespace ejfat {
 
         ipv6DataAddr = isIPv6(dataAddr);
 
-        // Need to give this back end a name,
-        // base part of it on least significant 6 digits of current time in microsec
-        struct timespec now;
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        int time = now.tv_nsec/1000L;
-        char name[256];
-        sprintf(name, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
-        myName = name;
 
         // Based on the number of data sources, fill in maps with real objects
 
@@ -114,6 +106,62 @@ namespace ejfat {
             // Create a struct to hold stats & place into map
             allStats.emplace(srcId, packetRecvStats());
         }
+
+
+        // Need to give this back end a name (no, not "horse's"),
+        // base part of it on least significant 6 digits of current time in microsec
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        int time = now.tv_nsec/1000L;
+        char name[256];
+        sprintf(name, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
+        myName = name;
+
+
+        // For more on portRange, look into loadbalancer.proto file in ersap-grpc git repo
+
+        int sourceCount = ids.size();
+        int portRange;
+
+        // Convert integer range in PortRange enum
+        // Set port range according to sourceCount
+        switch (sourceCount) {
+            case 1:
+                portRange = 0;
+                break;
+            case 2:
+                portRange = 1;
+                break;
+            case 3: case 4:
+                portRange = 2;
+                break;
+            case 5: case 6: case 7: case 8:
+                portRange = 3;
+                break;
+            case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
+                portRange = 4;
+                break;
+            default:
+                // up to 32 inputs
+                portRange = 5;
+                break;
+        }
+
+        auto range = PortRange(portRange);
+
+        LbClient = std::make_shared<LbControlPlaneClient> (cpAddr, cpPort,
+                                                           dataAddr, dataPort, range,
+                                                           myName, instanceToken, lbId, weight);
+
+        // Register this client with the control plane's grpc server &
+        // wait for server to send session token in return.
+        int32_t err = LbClient->Register();
+        if (err == 1) {
+            printf("GRPC client %s communication error with server when registering, exit\n", myName.c_str());
+            exit(1);
+        }
+
+        printf("GRPC client %s registered!\n", myName.c_str());
 
 
         createSocketsAndStartThreads();
@@ -354,69 +402,6 @@ namespace ejfat {
         int srcId = tArg->srcId;
 
 
-//    enum PortRange {
-//        PORT_RANGE_1 = 0;
-//        PORT_RANGE_2 = 1;
-//        PORT_RANGE_4 = 2;
-//        PORT_RANGE_8 = 3;
-//        PORT_RANGE_16 = 4;
-//        PORT_RANGE_32 = 5;
-//        PORT_RANGE_64 = 6;
-//        PORT_RANGE_128 = 7;
-//        PORT_RANGE_256 = 8;
-//        PORT_RANGE_512 = 9;
-//        PORT_RANGE_1024 = 10;
-//        PORT_RANGE_2048 = 11;
-//        PORT_RANGE_4096 = 12;
-//        PORT_RANGE_8192 = 13;
-//        PORT_RANGE_16384 = 14;
-//    }
-
-
-        int sourceCount = ids.size();
-        int portRange;
-
-        // Convert integer range in PortRange enum
-        // Set port range according to sourceCount
-        switch (sourceCount) {
-            case 1:
-                portRange = 0;
-                break;
-            case 2:
-                portRange = 1;
-                break;
-            case 3:
-            case 4:
-                portRange = 2;
-                break;
-            case 5:
-            case 6:
-            case 7:
-            case 8:
-                portRange = 3;
-                break;
-            default:
-                // up to 16 inputs
-                portRange = 4;
-                break;
-        }
-
-        auto range = PortRange(portRange);
-
-        LbControlPlaneClient client(cpAddr, cpPort,
-                                    dataAddr, dataPort, range,
-                                    myName, instanceToken, lbId, weight);
-
-        // Register this client with the grpc server &
-        // wait for server to send session token in return.
-        // Token stored internally in client.
-        int32_t err = client.Register();
-        if (err == 1) {
-            printf("GRPC client %s communication error with server when registering, exit\n", myName.c_str());
-            exit(1);
-        }
-
-        printf("GRPC client %s registered!\n", myName.c_str());
 
 //        size_t fill_level = queue.read_available();
 
