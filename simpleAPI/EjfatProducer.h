@@ -60,19 +60,64 @@ namespace ejfat {
 
     private:
 
-        // Structure to hold each send-queue item
-        typedef struct queueItem_t {
-            uint32_t bytes;
-            uint64_t tick;
-            char     *event;
-            void     *cbArg;
-            void* (*callback)(void *);
-        } qItem;
+        /** If true, print out debugging info to console. */
+        bool debug = false;
 
+        /** Id of this data source. */
+        uint16_t id = 0;
 
+        /** Starting event number for LB header in a UDP packet. */
+        uint64_t tick = 0;
 
-        // Statistics
+        /** Delay in microseconds between each event sent. */
+        int delay = 0;
+
+        /** The delay prescale (1,2, ... N). A delay is taken for every Nth event. */
+        int delayPrescale = 1;
+
+        /** Helps implement the delay prescale. */
+        int delayCounter = 1;
+
+        /** Version of Ejfat. */
+        int version = 2;
+
+        /** Version of the Ejfat protocol. */
+        int protocol = 1;
+
+        /**
+         * Entropy of this sender. The number to add to the destination port
+         * for a given destination host. Used on receiving end to read different sources
+         * on different UDP ports for multithreading and ease of programming purposes.
+         */
+        int entropy = 0;
+
+        /** Last time a sync message sent to CP in nanosec since epoch. */
+        uint64_t lastSyncTimeNanos;
+
+        /** Number of events sent since last sync message sent to CP. */
+        uint64_t eventsSinceLastSync;
+
+        /** Buffer in which to create and store the sync message to the CP. */
+        char syncBuf[28];
+
+        //------------------------------------------------------------------
+        // Statistics stuff
+        //------------------------------------------------------------------
+
         volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
+
+        //------------------------------------------------------------------
+        // Network stuff
+        //------------------------------------------------------------------
+
+        /** Size in bytes of UDP socket's send buffer. */
+        int udpSendBufSize = 25000000;
+
+        /** Maximum Transmission Unit (max byte size of each UDP packet. */
+        int mtu = 9000;
+
+        /** Max number of data bytes to store in a single UDP packet (depends on MTU). */
+        int maxUdpPayload = 9000 - 20 - 8 - HEADER_BYTES;
 
 
         /** IP address (dotted-decimal form) to send data to. */
@@ -112,55 +157,9 @@ namespace ejfat {
         /** Structure for sync connection, IPv6. */
         struct sockaddr_in6 syncAddrStruct6;
 
-
-        /** If true, print out debugging info to console. */
-        bool debug = false;
-
-        /** Id of this data source. */
-        uint16_t id = 0;
-
-        /** Starting event number for LB header in a UDP packet. */
-        uint64_t tick = 0;
-
-        /** Delay in microseconds between each event sent. */
-        int delay = 0;
-
-        /** The delay prescale (1,2, ... N). A delay is taken for every Nth event. */
-        int delayPrescale = 1;
-
-        /** Helps implement the delay prescale. */
-        int delayCounter = 1;
-
-        /** Size in bytes of UDP socket's send buffer. */
-        int udpSendBufSize = 25000000;
-
-        /** Maximum Transmission Unit (max byte size of each UDP packet. */
-        int mtu = 9000;
-
-        /** Max number of data bytes to store in a single UDP packet (depends on MTU). */
-        int maxUdpPayload = 9000 - 20 - 8 - HEADER_BYTES;
-
-        /** Version of Ejfat. */
-        int version = 2;
-
-        /** Version of the Ejfat protocol. */
-        int protocol = 1;
-
-        /**
-         * Entropy of this sender. The number to add to the destination port
-         * for a given destination host. Used on receiving end to read different sources
-         * on different UDP ports for multithreading and ease of programming purposes.
-         */
-        int entropy = 0;
-
-
-        /** Last time a sync message sent to CP in nanosec since epoch. */
-        uint64_t lastSyncTimeNanos;
-        /** Number of events sent since last sync message sent to CP. */
-        uint64_t eventsSinceLastSync;
-
-        /** Buffer in which to create and store the sync message to the CP. */
-        char syncBuf[28];
+        //------------------------------------------------------------------
+        // Thread stuff
+        //------------------------------------------------------------------
 
         /** Vector used to store the numbers of the cores to run this sender on. */
         std::vector<int> cores;
@@ -190,6 +189,17 @@ namespace ejfat {
         // Answer: Use the addToSendQueue() method and specify a callback and arg to be run when
         // it's been sent.
 
+
+        // Structure to hold each send-queue item
+        typedef struct queueItem_t {
+            uint32_t bytes;
+            uint64_t tick;
+            char     *event;
+            void     *cbArg;
+            void* (*callback)(void *);
+        } qItem;
+
+
         /** Max size of internal queue holding events to be sent. */
         static const size_t QSIZE = 2047;
 
@@ -214,15 +224,20 @@ namespace ejfat {
 
     public:
 
-        EjfatProducer(const std::string &fileName = "/tmp/ejfat_uri");
-
-        EjfatProducer(const std::string &dataAddress, const std::string &syncAddress);
-
-        EjfatProducer(const std::string &dataAddress, const std::string &syncAddress,
-                      uint16_t dataPort, uint16_t syncPort, int mtu,
-                      const std::vector<int> &cores,
+        EjfatProducer(const std::string& uri, const std::string& fileName,
+                      uint16_t id = 0, int entropy = 0,
                       int delay = 0, int delayPrescale = 1, bool connect = false,
-                      uint16_t id = 0, int entropy = 0, int version = 2, int protocol = 1);
+                      int mtu = 9000,
+                      const std::vector<int>& cores = {},
+                      int version = 2, int protocol = 1);
+
+        EjfatProducer(const std::string& dataAddress, const std::string& syncAddress,
+                      uint16_t dataPort, uint16_t syncPort,
+                      uint16_t id = 0, int entropy = 0,
+                      int delay = 0, int delayPrescale = 1,
+                      bool connect = false, int mtu = 9000,
+                      const std::vector<int>& cores = {},
+                      int version = 2, int protocol = 1);
 
 
         // No copy constructor

@@ -188,10 +188,16 @@ namespace ejfat {
      */
     static bool parseURI(const std::string uri, ejfatURI &uriInfo) {
 
+        // Start with a blank slate
+        clearUri(uriInfo);
+
+        // URI must match this regex pattern
         std::regex pattern(R"regex(ejfat://(?:([^@]+)@)?([^:]+):(\d+)/lb/([^?]+)(?:\?(?:(?:data=(.*?):(\d+)){1}(?:&sync=(.*?):(\d+))?|(?:sync=(.*?):(\d+)){1}))?)regex");
 
         std::smatch match;
         if (std::regex_match(uri, match, pattern)) {
+            // we're here if uri is in the proper format ...
+
             // optional token
             std::string token = match[1];
 
@@ -206,41 +212,73 @@ namespace ejfat {
             uriInfo.cpAddrV4    = match[2];
             uriInfo.cpPort      = std::stoi(match[3]);
             uriInfo.lbId        = match[4];
-            uriInfo.syncPort    = 19523;
-            uriInfo.dataPort    = 19522;
-            uriInfo.useIPv6Data = false;
-            uriInfo.useIPv6Sync = false;
-            uriInfo.syncAddrV6.clear();
 
             // in this case only syncAddr and syncPort defined
             if (!match[9].str().empty()) {
-                // Decide if this is IPv4 or IPv6
+                uriInfo.haveSync = true;
+                uriInfo.haveData = false;
+
+                // decide if this is IPv4 or IPv6 or neither
                 if (isIPv6(match[9])) {
                     uriInfo.syncAddrV6  = match[9];
                     uriInfo.useIPv6Sync = true;
                 }
-                else {
-                    uriInfo.syncAddrV4  = match[9];
-                    uriInfo.useIPv6Sync = false;
+                else if (isIPv4(match[9])) {
+                    uriInfo.syncAddrV4 = match[9];
                 }
-                uriInfo.syncPort = std::stoi(match[10]);
-                uriInfo.haveSync = true;
-                uriInfo.haveData = false;
+                else {
+                    // invalid IP addr
+                    uriInfo.haveSync = false;
+                }
+
+                try {
+                    // look at the sync port
+                    int port = std::stoi(match[10]);
+                    if (port < 1024 || port > 65535) {
+                        // port is out of range
+                        uriInfo.haveSync = false;
+                    }
+                    else {
+                        uriInfo.syncPort = port;
+                    }
+
+                } catch (const std::exception& e) {
+                    // string is not a valid integer
+                    uriInfo.haveSync = false;
+                }
             }
             else {
                 // if dataAddr and dataPort defined
                 if (!match[5].str().empty()) {
+                    uriInfo.haveData = true;
+
                     if (isIPv6(match[5])) {
                         uriInfo.dataAddrV6  = match[5];
                         uriInfo.useIPv6Data = true;
                     }
+                    else if (isIPv4(match[5])) {
+                        uriInfo.dataAddrV4 = match[5];
+                    }
                     else {
-                        uriInfo.dataAddrV4  = match[5];
-                        uriInfo.useIPv6Data = false;
+                        uriInfo.haveData = false;
                     }
 
-                    uriInfo.dataPort = std::stoi(match[6]);
-                    uriInfo.haveData = true;
+                    try {
+                        // look at the data port
+                        int port = std::stoi(match[6]);
+                        if (port < 1024 || port > 65535) {
+                            // port is out of range
+                            uriInfo.haveData = false;
+                        }
+                        else {
+                            uriInfo.dataPort = port;
+                        }
+
+                    } catch (const std::exception& e) {
+                        // string is not a valid integer
+                        uriInfo.haveData = false;
+                    }
+
                 }
                 else {
                     uriInfo.haveData = false;
@@ -248,17 +286,35 @@ namespace ejfat {
 
                 // if syncAddr and syncPort defined
                 if (!match[7].str().empty()) {
+                    uriInfo.haveSync = true;
+
+                    // decide if this is IPv4 or IPv6 or neither
                     if (isIPv6(match[7])) {
                         uriInfo.syncAddrV6  = match[7];
                         uriInfo.useIPv6Sync = true;
                     }
+                    else if (isIPv4(match[7])) {
+                        uriInfo.syncAddrV4 = match[7];
+                    }
                     else {
-                        uriInfo.syncAddrV4  = match[7];
-                        uriInfo.useIPv6Sync = false;
+                        uriInfo.haveSync = false;
                     }
 
-                    uriInfo.syncPort = std::stoi(match[8]);
-                    uriInfo.haveSync = true;
+                    try {
+                        // look at the sync port
+                        int port = std::stoi(match[8]);
+                        if (port < 1024 || port > 65535) {
+                            // port is out of range
+                            uriInfo.haveSync = false;
+                        }
+                        else {
+                            uriInfo.syncPort = port;
+                        }
+
+                    } catch (const std::exception& e) {
+                        // string is not a valid integer
+                        uriInfo.haveSync = false;
+                    }
                 }
                 else {
                     uriInfo.haveSync = false;

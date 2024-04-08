@@ -24,9 +24,9 @@
 #include <utility>
 #include <vector>
 #include <fstream>
-#include <atomic>
 #include <unordered_map>
 #include <array>
+#include <atomic>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -38,7 +38,7 @@
 #include "EjfatException.h"
 #include "lb_cplane.h"
 
-#include <boost/lockfree/spsc_queue.hpp>
+#include <boost/lockfree/queue.hpp>
 
 namespace ejfat {
 
@@ -68,11 +68,32 @@ namespace ejfat {
 
     private:
 
+
+        /** If true, print out debugging info to console. */
+        bool debug = false;
+
+        /** Ids of data sources sending to this consumer. */
+        std::vector<int> ids;
+
+        /** Starting core # to run receiving threads on. */
+        int startingCore = -1;
+
+        /** Number of cores per receiving thread. */
+        int coreCount = 1;
+
+
+        //------------------------------------------------------------------
+        // Network stuff
+        //------------------------------------------------------------------
+
         /** Local IP address (dotted-decimal form) to recv data on. */
         std::string dataAddr;
 
         /** Starting local UDP port to recv data on. Increase for each incoming data source. */
         uint16_t dataPort = 17750;
+
+        /** UDP sockets for receiving data from various sources. */
+        std::unordered_map<int, int> dataSockets;
 
         /**
          * IP address for UDP sockets to listen on.
@@ -84,24 +105,8 @@ namespace ejfat {
         /** If true, use IP version 6 for data address, else use version 4. */
         bool ipv6DataAddr = false;
 
-        /** UDP sockets for receiving data from various sources. */
-        std::unordered_map<int, int> dataSockets;
-
-        /** If true, print out debugging info to console. */
-        bool debug = false;
-
-        /** Ids of data sources sending to this consumer. */
-        std::vector<int> ids;
-
         /** Size in bytes of UDP data socket's recv buffer. */
         int udpRecvBufSize = 25000000;
-
-        /** Starting core # to run receiving threads on. */
-        int startingCore = -1;
-
-        /** Number of cores per receiving thread. */
-        int coreCount = 1;
-
 
         //------------------------------------------------------------------
         // Control Plane stuff
@@ -109,29 +114,81 @@ namespace ejfat {
 
         /** IP address (dotted-decimal form) to talk to CP with. */
         std::string cpAddr;
+
         /** UDP port to talk to CP with. */
         uint16_t cpPort = 18347;
 
+        /** Name of this consumer as given to CP, generated internally, */
         std::string myName;
+
+        /** Token with which to register with the CP. */
         std::string instanceToken;
+
+        /** Id of the LB reserved for use by this consumer. */
         std::string lbId;
 
-        float Kp = 0., Ki = 0., Kd = 0.; // 1000x normal
+        /**
+         * PID proportional constant set through trial and error. The PID loop is
+         * used to produce an error signal to the CP which allows the CP to distribute
+         * events in a balanced manner.
+         */
+        float Kp = 0.;
+
+        /**
+         * PID integral constant set through trial and error used to produce an error
+         * signal to the CP.
+         */
+        float Ki = 0.;
+
+        /**
+         * PID derivative constant set through trial and error used to produce an error
+         * signal to the CP.
+         */
+        float Kd = 0.; // 1000x normal
+
+        /**
+         * Initial weight of this consumer, compared to other consumers,
+         * which gives the CP a hint as to the initial distribution of events.
+         * The absolute value of the weight is not meaningful, only its value
+         * in relation to other consumers.
+         */
         float weight = 1.;
 
-        // Using shared_ptr makes it easier to declare object here and created it later
+        /** Set point of PID loop, goal of fifo level-setting. */
+        float setPoint = 0.;
+
+        /** Number of fill values to average when reporting to grpc. */
+        int fcount = 1000;
+
+        /** Time period in millisec for reporting to CP. */
+        int reportTime = 1000;
+
+        /** Stat sampling time in microsec. */
+        uint32_t sampleTime = 1000;
+
+        /**
+         * Object used to interact with the CP to register, update, and deregister.
+         * Using shared_ptr makes it easier to declare object here and created it later.
+         */
         std::shared_ptr<LbControlPlaneClient> LbClient;
 
         //------------------------------------------------------------------
-        // Stats stuff
+        // Statistics stuff
         //------------------------------------------------------------------
 
         // Statistics
         volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 
-        struct timespec restartTime;
+        volatile struct timespec restartTime;
         std::unordered_map<int, packetRecvStats> allStats;
 
+        bool jointStats = false;
+
+
+        /**
+         * If a source dies and restarts, get a handle on when it actually restarted
+         * so the stats/rates can be reset properly.
+         */
 
         //------------------------------------------------------------------
         // Thread stuff
@@ -174,6 +231,8 @@ namespace ejfat {
         class qItem {
 
           public:
+            /** Id of the source of this event. */
+            uint16_t srcId;
             /** Tick or event number of event contained. */
             uint64_t tick;
             /** Size in bytes of the complete buffer pointed to by event. */
@@ -184,15 +243,32 @@ namespace ejfat {
             char*    event;
 
             qItem() {
-                tick = 0;bufBytes=0;dataBytes=0;event=nullptr;
+                srcId=0;tick = 0;bufBytes=0;dataBytes=0;event=nullptr;
             }
         };
 
-        /** Max size of each internal queue for holding events (qItem) received for each data source. */
-        static const size_t QSIZE = 511;
+// For multiple recv queues:
+//        /**
+//         * <p>
+//         * Fast, lock-free, wait-free queue for single producer and single consumer.
+//         * One queue of qItem pointers for each data source. Map key = src id.
+//         * Each qItem essentially wraps an event and comes from a vector obtained
+//         * from the qItemVectors map using the same key.
+//         * </p>
+//         * <p>
+//         * The only way to get the spsc_queue into a map is by using a shared pointer of it.
+//         * Consuming must be from a single thread only (producer already single threaded).
+//         * </p>
+//         */
+//        std::unordered_map<int, std::shared_ptr<boost::lockfree::spsc_queue<qItem*, boost::lockfree::capacity<QSIZE>>>> queues;
+
+
+
+        /** Max size of internal queue for holding events (qItem) received from all data sources. */
+        static const size_t QSIZE = 1023;
 
         /**
-         * Size of vector containing elements that can be placed on the queue.
+         * Size of vector containing elements, from a single source, that can be placed on the queue.
          * We want the vector to be fixed in size and bigger than the Q.
          * If the Q is full, we still want access to at least one unused vector
          * element which the caller can fill and wait for it to be placed on the Q.
@@ -201,29 +277,29 @@ namespace ejfat {
 
         /**
          * <p>
-         * Fast, lock-free, wait-free queue for single producer and single consumer.
-         * One queue of qItem pointers for each data source. Map key = src id.
-         * Each qItem essentially wraps an event and comes from a vector obtained
-         * from the qItemVectors map using the same key.
-         * </p>
-         * <p>
-         * The only way to get the spsc_queue into a map is by using a shared pointer of it.
-         * Consuming must be from a single thread only (producer already single threaded).
+         * Fast, lock-free, queue for multiple producers and consumers.
+         * One queue shared by all data sources.
+         * Each qItem essentially wraps an event and comes from a vector of qItems.
          * </p>
          */
-        std::unordered_map<int, std::shared_ptr<boost::lockfree::spsc_queue<qItem*, boost::lockfree::capacity<QSIZE>>>> queues;
+        std::shared_ptr<boost::lockfree::queue<qItem*, boost::lockfree::capacity<QSIZE>>> queue;
 
         /**
-         * Each vector of qItems contains the items available to be stored on a single queue.
+         * Each vector of qItems contains the items available to be written into by a
+         * single receiving thread. Once written into, item is placed in the single queue.
          * One vector for each data source. Map key = src id.
          */
         std::unordered_map<int, std::vector<qItem>> qItemVectors;
 
         /**
-         * Track which element of a qItem vector is currently being placed onto Q (0 - (VECTOR_SIZE-1)).
+         * Track which element of a qItem vector, from a single source,
+         * is currently being placed onto Q (0 - (VECTOR_SIZE-1)).
          * One index for each data source. Map key = src id.
          */
         std::unordered_map<int, int> currentQItems;
+
+        /** The boost::lockfree::queue does NOT track its size (boo!) so do it manually. */
+        std::atomic_int queueSize;
 
 
 
@@ -244,7 +320,8 @@ namespace ejfat {
                       const std::string& fileName = "/tmp/ejfat_uri",
                       uint16_t dataPort = 17750, uint16_t cpPort = 18347,
                       int startingCore = -1, int coreCount = 1,
-                      float Kp=0., float Ki=0., float Kd=0., float weight=1.);
+                      float Kp=0., float Ki=0., float Kd=0.,
+                      float setPt=0., float weight=1.);
 
 
         // No copy constructor
@@ -257,18 +334,18 @@ namespace ejfat {
         EjfatConsumer & operator=(const EjfatConsumer & other) = delete;
 
         // Non-blocking call to get events
-        bool getEvent(char **event, size_t *bytes, uint64_t* eventNum = nullptr, int srcId = 0);
+        bool getEvent(char **event, size_t *bytes, uint64_t* eventNum, uint16_t *srcId);
 
 
     private:
 
         bool setFromURI(ejfatURI & uri);
 
-        void statisticsThreadFunc(void *arg);
+        void statisticsThreadFunc();
         void startupStatisticsThread();
 
         void startupGrpcThread();
-        void grpcThreadFunc(recvThdArg *arg);
+        void grpcThreadFunc();
 
         void recvThreadFunc(recvThdArg *arg);
         void startupRecvThreads();

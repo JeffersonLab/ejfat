@@ -24,41 +24,68 @@ namespace ejfat {
     }
 
 
-
     /**
-     * Constructor which depends first on the environmental variable EJFAT_URI.
-     * If that exists and can be read and parsed, it may provide the necessary
-     * info to send data to the LB and sync messages to the CP. If it does
-     * <b>NOT</b>, then fileName is used to open a file in which
-     * this uri has been stored. If that exists and can be read and parsed, it
-     * may provide the needed info. If so, everything is fine, if not, throw
-     * an exception.
+     * Constructor which specifies the URI created as part of reserving the LB and
+     * also specifies the name of the file containing the URI. At least one of the
+     * two must be specified and not empty. The URI receives first priority.
      *
-     * @param fileName  name of file with URI stored in it.
-     *                  If there is no such file, you can:
-     *                    1) ignore this arg as a default (/tmp/ejfat_uri) is provided, or
-     *                    2) pass a blank string in which case files are ignored.
+     * If the URI can be read and parsed, it may provide the necessary
+     * info to send data to the LB and sync messages to the CP. If it does,
+     * then everything is fine. If not, an exception is thrown.
+     *
+     * All other parameters else can either be set explicitly or left to their defaults.
+     *
+     * @param uri            URI created when the LB was reserved, can be empty if not known.
+     * @param fileName       name of file containing the URI created when LB was reserved,
+     *                       can be empty if not known.
+     * @param id             id number of this sender: 0,1,2 ... (defaults to 0).
+     * @param entropy        number (0,1,2, ...) to add to the base destination port for a given destination host.
+     *                       Used on receiving end to read different sources on different UDP ports
+     *                       for multithreading and ease of programming purposes. Defaults to 0.
+     * @param delay          delay in microseconds between each event sent (defaults to 0).
+     * @param delayPrescale  (1,2, ... N), a delay is taken after every Nth event (defaults to 1).
+     * @param connect        if true, call connect() on each UDP socket, both for data and syncs.
+     *                       This speeds up communication, but requires the receiving socket
+     *                       to be up and runnin. Defaults to false.
+     * @param mtu            max # of bytes to send in a single UDP packet (9000 &lt;= mtu &gt;= 500).
+     * @param cores          vector of cores to run the sending code on.
+     * @param version        version number of ejfat software repo (defaults to 2).
+     * @param protocol       version number of ejfat communication protocol (defaults to 1).
      *
      * @throws EjfatException if no data address and port or no sync address and port
-     *                        in EJFAT_URI environmental variable or given file.
+     *                        in the URI or the file.
      */
-    EjfatProducer::EjfatProducer(const std::string &fileName) : endThreads(false) {
+    EjfatProducer::EjfatProducer(const std::string& uri,
+                                 const std::string& fileName,
+                                 uint16_t id, int entropy,
+                                 int delay, int delayPrescale,
+                                 bool connect, int mtu,
+                                 const std::vector<int>& cores,
+                                 int version, int protocol):
 
-        bool foundUri = false;
+            id(id), entropy(entropy),
+            delay(delay), delayPrescale(delayPrescale),
+            connectSocket(connect), mtu(mtu),
+            cores(cores),
+            version(version), protocol(protocol),
+            endThreads(false)
+
+    {
         ejfatURI uriInfo;
+        bool haveEverything = false;
 
-        // First see if the EJFAT_URI environmental variable is defined, if so, parse it
-        const char* uriStr = std::getenv("EJFAT_URI");
-        if (uriStr != nullptr) {
-            std::string uri(uriStr);
+        // First see if the uri arg is defined, if so, parse it
+        if (!uri.empty()) {
             bool parsed = parseURI(uri, uriInfo);
             if (parsed) {
-                foundUri = true;
+                // URI is in correct format, so set internal members
+                // from struct obtained by parsing URI.
+                haveEverything = setFromURI(uriInfo);
             }
         }
 
-        // If no luck with env var, look in to a local file
-        if (!foundUri && !fileName.empty()) {
+        // If no luck with URI, look into file
+        if (!haveEverything && !fileName.empty()) {
 
             std::ifstream file(fileName);
             if (file.is_open()) {
@@ -66,7 +93,7 @@ namespace ejfat {
                 if (std::getline(file, uriLine)) {
                     bool parsed = parseURI(uriLine, uriInfo);
                     if (parsed) {
-                        foundUri = true;
+                        haveEverything = setFromURI(uriInfo);
                     }
                 }
 
@@ -74,36 +101,13 @@ namespace ejfat {
             }
         }
 
-        if (!foundUri) {
-            // our luck ran out
-            throwEjfatLine("no LB/CP info in env var or in file");
-        }
-
-        // Set internal members from struct obtained by parsing URI
-        bool haveEverything = setFromURI(uriInfo);
         if (!haveEverything) {
-            throwEjfatLine("URI did not have info to send data or sync msgs");
+            // our luck ran out
+            throwEjfatLine("no LB/CP info in URI or in file");
         }
 
-        createSocketsAndStartThreads();
-    }
-
-
-
-    /**
-     * Constructor which specifies the IP address to send data to and
-     * the IP address to send the sync messages to. Everything else is
-     * set to their defaults, including port numbers.
-     *
-     * @param dataAddress IP address (either ipv6 or ipv4) to send data to.
-     * @param syncAddress IP address (currently only ipv4) to send sync msgs to.
-     */
-    EjfatProducer::EjfatProducer(const std::string& dataAddress,
-                                 const std::string& syncAddress) :
-            dataAddr(dataAddress), syncAddr(syncAddress), endThreads(false) {
-
-        ipv6Data = isIPv6(dataAddress);
-        ipv6Sync = isIPv6(syncAddress);
+        if (mtu > 9000) mtu = 9000;
+        else if (mtu < 500) mtu = 500;
 
         createSocketsAndStartThreads();
     }
@@ -111,46 +115,71 @@ namespace ejfat {
 
     /**
      * Constructor which specifies the IP address to send data to and
-     * the IP address to send the sync messages to. Everything else is
-     * set to their defaults, including port numbers.
+     * the IP address to send the sync messages to along with their ports.
+     * All other parameters else can either be set explicitly or left to their defaults.
      *
-     * @param dataAddress    IP address (either ipv6 or ipv4) to send data to.
-     * @param syncAddress    IP address (currently only ipv4) to send sync msgs to.
+     * @param dataAddr       IP address (either ipv6 or ipv4) to send data to.
+     * @param syncAddr       IP address (currently only ipv4) to send sync msgs to.
      * @param dataPort       UDP port to send data to.
      * @param syncPort       UDP port to send sync msgs to.
-     * @param mtu            max # of bytes to send in a single UDP packet.
-     * @param cores          vector of cores to run the sending code on.
+     * @param id             id number of this sender: 0,1,2 ... (defaults to 0).
+     * @param entropy        number (0,1,2, ...) to add to the base destination port for a given destination host.
+     *                       Used on receiving end to read different sources on different UDP ports
+     *                       for multithreading and ease of programming purposes. Defaults to 0.
      * @param delay          delay in microseconds between each event sent (defaults to 0).
      * @param delayPrescale  (1,2, ... N), a delay is taken after every Nth event (defaults to 1).
      * @param connect        if true, call connect() on each UDP socket, both for data and syncs.
      *                       This speeds up communication, but requires the receiving socket
      *                       to be up and runnin. Defaults to false.
-     * @param id             id number of this sender (defaults to 0).
-     * @param entropy        number to add to the base destination port for a given destination host.
-     *                       Used on receiving end to read different sources on different UDP ports
-     *                       for multithreading and ease of programming purposes. Defaults to 0.
+     * @param mtu            max # of bytes to send in a single UDP packet (9000 &lt;= mtu &gt;= 500).
+     * @param cores          vector of cores to run the sending code on.
      * @param version        version number of ejfat software repo (defaults to 2).
      * @param protocol       version number of ejfat communication protocol (defaults to 1).
+     *
+     * @throws EjfatException if bad IP address or port arg(s).
      */
-    EjfatProducer::EjfatProducer(const std::string& dataAddress,
-                                 const std::string& syncAddress,
-                                 uint16_t dataPort, uint16_t syncPort, int mtu,
-                                 const std::vector<int> & cores,
-                                 int delay, int delayPrescale, bool connect,
-                                 uint16_t id, int entropy, int version, int protocol) :
+    EjfatProducer::EjfatProducer(const std::string& dataAddr,
+                                 const std::string& syncAddr,
+                                 uint16_t dataPort, uint16_t syncPort,
+                                 uint16_t id, int entropy,
+                                 int delay, int delayPrescale,
+                                 bool connect, int mtu,
+                                 const std::vector<int>& cores,
+                                 int version, int protocol):
 
-            dataAddr(dataAddress), syncAddr(syncAddress),
+            dataAddr(dataAddr), syncAddr(syncAddr),
             dataPort(dataPort), syncPort(syncPort),
-            mtu(mtu), delay(delay), delayPrescale(delayPrescale),
-            cores(cores), connectSocket(connect),
-            id(id), entropy(entropy), version(version), protocol(protocol),
+            id(id), entropy(entropy),
+            delay(delay), delayPrescale(delayPrescale),
+            connectSocket(connect), mtu(mtu),
+            cores(cores),
+            version(version), protocol(protocol),
             endThreads(false)
 
     {
         delayCounter = delayPrescale;
 
-        ipv6Data = isIPv6(dataAddress);
-        ipv6Sync = isIPv6(syncAddress);
+        ipv6Data = isIPv6(dataAddr);
+        ipv6Sync = isIPv6(syncAddr);
+
+        bool ipv4Data = isIPv4(dataAddr);
+        bool ipv4Sync = isIPv4(syncAddr);
+
+        // Check for valid IP addrs
+        if ((!ipv6Data && !ipv4Data) || (!ipv6Sync && !ipv4Sync)) {
+            // no valid data or sync IP addrs
+            throwEjfatLine("invalid IP addr arg(s)");
+        }
+
+        // Check for valid ports
+        if ((dataPort < 1024 || dataPort > 65535) ||
+            (syncPort < 1024 || syncPort > 6553))   {
+            // no valid data or sync ports
+            throwEjfatLine("invalid port arg(s)");
+        }
+
+        if (mtu > 9000) mtu = 9000;
+        else if (mtu < 500) mtu = 500;
 
         createSocketsAndStartThreads();
     }

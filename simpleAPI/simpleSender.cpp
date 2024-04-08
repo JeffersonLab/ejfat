@@ -132,7 +132,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
             case 'p':
                 // PORT
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
+                if (i_tmp > 1023 && i_tmp < 65536) {
                     *port = i_tmp;
                 } else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
@@ -200,7 +200,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
             case 3:
                 // DATA_ID
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp < 0 || i_tmp > 65535) {
+                if (i_tmp < 0 || i_tmp > 65536) {
                     fprintf(stderr, "Invalid argument to -id. Id must be >= 0 and < 65536\n");
                     exit(-1);
                 }
@@ -251,7 +251,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
             case 8:
                 // CP PORT
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
+                if (i_tmp > 1023 && i_tmp < 65536) {
                     *cp_port = i_tmp;
                 }
                 else {
@@ -322,7 +322,7 @@ int main(int argc, char **argv) {
 
     uint64_t tick = 0;
     int mtu = 9000, version = 2, protocol = 1, entropy = 0;
-    uint16_t dataId = 1;
+    uint16_t dataId = 0;
 
     bool debug = false;
     bool useIPv6 = false;
@@ -384,9 +384,8 @@ int main(int argc, char **argv) {
 
     // Create the producer
     EjfatProducer producer(std::string(host), std::string(cp_host),
-                           port, cp_port, mtu,
-                           cores, delay, delayPrescale, !noConnect);
-
+                           port, cp_port, dataId, entropy,
+                           delay, delayPrescale, !noConnect, mtu, cores);
 
     // Create buffer to send & place some data into it and repeatedly send.
     // For most efficient use of UDP packets, make our buffer a multiple of maxUdpPayload,
