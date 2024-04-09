@@ -75,7 +75,10 @@ namespace ejfat {
         /** Ids of data sources sending to this consumer. */
         std::vector<int> ids;
 
-        /** Starting core # to run receiving threads on. */
+        /**
+         * Starting core # to run receiving threads on.
+         * If < 0, don't use thread affinity.
+         */
         int startingCore = -1;
 
         /** Number of cores per receiving thread. */
@@ -309,14 +312,15 @@ namespace ejfat {
 
 //        // Single data source
 //        EjfatConsumer(const std::string &dataAddr, const std::string &cpAddr, int srcId=0,
-//                      const std::string& envVar = "EJFAT_URI",
+//                      const std::string& uri = "",
 //                      const std::string& fileName = "/tmp/ejfat_uri",
-//                      float Kp=0., float Ki=0., float Kd=0., float weight=1.);
+//                      float Kp=0., float Ki=0., float Kd=0.,
+//                      float setPt=0., float weight=1.);
 
         // Multiple data sources
         EjfatConsumer(const std::string &dataAddr, const std::string &cpAddr,
                       const std::vector<int> &ids = {0},
-                      const std::string& envVar = "EJFAT_URI",
+                      const std::string& uri = "",
                       const std::string& fileName = "/tmp/ejfat_uri",
                       uint16_t dataPort = 17750, uint16_t cpPort = 18347,
                       int startingCore = -1, int coreCount = 1,

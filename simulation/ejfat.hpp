@@ -14,6 +14,8 @@
  * Contains definitions and routines common to both packetizing
  * and reassembling. Mainly stuff to handle the placing of info
  * into a URI when reserving an LB and the parsing of the URI.
+ * This supports the new, simple EJFAT API designed to be an
+ * easy-to-use introduction to EJFAT.
  */
 #ifndef EJFAT_H
 #define EJFAT_H
@@ -175,16 +177,31 @@ namespace ejfat {
 
 
     /**
-     * Method to parse a URI with ejfat connection info of the format:
+     * <p>
+     * This is a method to parse a URI which was obtained with the reservation
+     * of a load balancer. This URI contains information which both an event sender
+     * and event consumer can use to interact with the LB and CP.
+     * </p><p>
+     * The URI is of the format:
      * ejfat://[<token>@]<cp_host>:<cp_port>/lb/<lb_id>[?data=<data_host>:<data_port>][&sync=<sync_host>:<sync_port>].
-     * Token is optional, data_host and data_port are optional, sync_host, and sync_port are optional.
+     * </p><p>
+     * The token is optional and is the instance token with which a consumer can
+     * register with the control plane. If the instance token is not available,
+     * the administration token can be used to register. A sender will not need
+     * either token.
+     * </p><p>
+     * The data_host & data_port are the IP address and UDP port to send events/data to.
+     * They are optional and not used by the consumer. Likewise the sync_host & sync_port
+     * are the IP address and UDP port to which the sender send sync messages.
+     * They're also optional and not used by the consumer.
      * The order of data= and sync= must be kept, data first, sync second.
      * If data= is not there, &sync must become ?sync.
      * Distinction is made between ipV6 and ipV4 addresses.
+     * </p>
      *
      * @param uri URI to parse.
      * @param uriInfo ref to ejfatURI struct to fill with parsed values.
-     * @return true if parse sucessful, else false;
+     * @return true if parse sucessful, else false.
      */
     static bool parseURI(const std::string uri, ejfatURI &uriInfo) {
 
@@ -362,6 +379,56 @@ namespace ejfat {
     }
 
 
+    /**
+     * Method to map max # of data sources a backend will see to
+     * the corressponding PortRange (enum) value in loadbalancer.proto.
+     *
+     * @param sourceCount max # of data sources backend will see.
+     * @return corressponding PortRange.
+     */
+    static int getPortRange(int sourceCount) {
+
+        // Based on the proto file enum for the load balancer, seen below,
+        // map the max # of sources a backend will see to the PortRange value.
+        // This is necessay to provide the control plane when registering.
+
+//        enum PortRange {
+//            PORT_RANGE_1 = 0;
+//            PORT_RANGE_2 = 1;
+//            PORT_RANGE_4 = 2;
+//            PORT_RANGE_8 = 3;
+//            PORT_RANGE_16 = 4;
+//            PORT_RANGE_32 = 5;
+//            PORT_RANGE_64 = 6;
+//            PORT_RANGE_128 = 7;
+//            PORT_RANGE_256 = 8;
+//            PORT_RANGE_512 = 9;
+//            PORT_RANGE_1024 = 10;
+//            PORT_RANGE_2048 = 11;
+//            PORT_RANGE_4096 = 12;
+//            PORT_RANGE_8192 = 13;
+//            PORT_RANGE_16384 = 14;
+//        }
+
+
+        // Handle edge cases
+        if (sourceCount < 2) {
+            return 0;
+        }
+        else if (sourceCount > 16384) {
+            return 14;
+        }
+
+        int maxCount  = 2;
+        int iteration = 1;
+
+        while (sourceCount > maxCount) {
+            iteration++;
+            maxCount *= 2;
+        }
+
+        return iteration;
+    }
 
 
 }

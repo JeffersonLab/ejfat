@@ -61,7 +61,7 @@ namespace ejfat {
      * @param dataAddr     IP address (either ipv6 or ipv4) to receive data on.
      * @param cpAddr       IP address (currently only ipv4) to talk to control plane on.
      * @param ids          vector of data source ids (defaults to single source of id=0).
-     * @param envVar       name of environmental variable containing URI (default EJFAT_URI).
+     * @param uri          URI containing details of LB/CP connections(default "").
      * @param fileName     name of environmental variable containing URI (default /tmp/ejfat_uri).
      * @param dataPort     starting UDP port to receive data on. The first src in ids will
      *                     received on this port, the second will be received on dataPort + 1, etc.
@@ -76,11 +76,11 @@ namespace ejfat {
      * @param weight       initial weight of this backend for CP to use in comparison to other backends.
      *                     User determines scales and values (default 1.).
      *
-     * @throws EjfatException if no information about the reserved LB is available or could be parsed.
+     * @throws EjfatException if no information about the LB/CP is available or could be parsed.
      */
     EjfatConsumer::EjfatConsumer(const std::string &dataAddr, const std::string &cpAddr,
                                  const std::vector<int> &ids,
-                                 const std::string& envVar,
+                                 const std::string& uri,
                                  const std::string& fileName,
                                  uint16_t dataPort, uint16_t cpPort,
                                  int startingCore, int coreCount,
@@ -93,22 +93,42 @@ namespace ejfat {
             Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt), weight(weight)
 
     {
-        // Get the URI created by calling lbreserve.
-        // This can be in the env var or file.
-        std::string uri = getURI(envVar, fileName);
-        if (uri.empty()) {
-            throwEjfatLine("cannot find URI information in env var or file");
+
+        ejfatURI uriInfo;
+        bool haveEverything = false;
+
+        // First see if the uri arg is defined, if so, parse it
+        if (!uri.empty()) {
+            bool parsed = parseURI(uri, uriInfo);
+            if (parsed) {
+                // URI is in correct format, so set internal members
+                // from struct obtained by parsing URI.
+                haveEverything = setFromURI(uriInfo);
+            }
         }
 
-        // Parse the URI
-        ejfatURI parsedURI;
-        bool parsed = parseURI(uri, parsedURI);
-        if (!parsed) {
-            throwEjfatLine("cannot parse URI information from env var or file");
+        // If no luck with URI, look into file
+        if (!haveEverything && !fileName.empty()) {
+
+            std::ifstream file(fileName);
+            if (file.is_open()) {
+                std::string uriLine;
+                if (std::getline(file, uriLine)) {
+                    bool parsed = parseURI(uriLine, uriInfo);
+                    if (parsed) {
+                        haveEverything = setFromURI(uriInfo);
+                    }
+                }
+
+                file.close();
+            }
         }
 
-        // Set internal members from the URI info (instance token and lbId)
-        setFromURI(parsedURI);
+        if (!haveEverything) {
+            // our luck ran out
+            throwEjfatLine("no LB/CP info in URI or in file");
+        }
+
 
         ipv6DataAddr = isIPv6(dataAddr);
 
@@ -150,35 +170,10 @@ namespace ejfat {
 
 
         // For more on portRange, look into loadbalancer.proto file in ersap-grpc git repo
-
         int sourceCount = ids.size();
-        int portRange;
-
-        // Convert integer range in PortRange enum
-        // Set port range according to sourceCount
-        switch (sourceCount) {
-            case 1:
-                portRange = 0;
-                break;
-            case 2:
-                portRange = 1;
-                break;
-            case 3: case 4:
-                portRange = 2;
-                break;
-            case 5: case 6: case 7: case 8:
-                portRange = 3;
-                break;
-            case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
-                portRange = 4;
-                break;
-            default:
-                // up to 32 inputs
-                portRange = 5;
-                break;
-        }
-
-        auto range = PortRange(portRange);
+        int portRangeValue = getPortRange(sourceCount);
+        auto range = PortRange(portRangeValue);
+        std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
         LbClient = std::make_shared<LbControlPlaneClient> (cpAddr, cpPort,
                                                            dataAddr, dataPort, range,
