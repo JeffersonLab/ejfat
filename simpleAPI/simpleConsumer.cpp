@@ -53,7 +53,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-jointstats]\n",
 
@@ -61,20 +61,18 @@ static void printHelp(char *programName) {
             "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
 
             "        [-a <data receiving address to register w/ CP>]",
-            "        [-p <starting UDP port (default 17750)>]",
+            "        [-p <starting UDP port (default 17750)>]\n",
 
-            "        [-gaddr <CP IP address (no default)>]",
-            "        [-gport <CP port (default 18347)>]",
-
-            "        [-ids <comma-separated list of incoming source ids>]\n",
-
-            "        [-core    <starting core # for read thds>]",
+            "        [-ids <comma-separated list of incoming source ids>]",
+            "        [-core  <starting core # for read thds>]",
             "        [-coreCnt <# of cores for each read thd>]\n");
 
     fprintf(stderr, "        This is an EJFAT consumer, using the new simple API,\n");
     fprintf(stderr, "        able to receive from multiple data sources.\n\n");
-    fprintf(stderr, "        There are 2 ways to know how to receive data: 1) specify -uri, or\n");
+    fprintf(stderr, "        One or both of the ways to get LB/CP info must be specified:\n");
+    fprintf(stderr, "           1) specify -uri, and/or\n");
     fprintf(stderr, "           2) specify -file for file that contains URI.\n");
+    fprintf(stderr, "        Also -gaddr must be specified in order to talk to CP\n");
 }
 
 
@@ -86,22 +84,20 @@ static void printHelp(char *programName) {
  * @param core          starting core id on which to run pkt reading threads.
  * @param coreCnt       number of cores on which to run each pkt reading thread.
  * @param port          filled with UDP port to listen on to send to CP.
- * @param cpPort        filled with main control plane port.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param jointStats    display stats of all sources joined together.
  * @param uri           URI containing LB/CP connection info.
- * @param filename      name of file in which to read URI.
+ * @param file          name of file in which to read URI.
  * @param dataAddr      data destination IP address to send to CP.
- * @param cpAddr        control plane IP address.
  * @param ids           vector to be filled with data source id numbers.
  */
 static void parseArgs(int argc, char **argv,
                       int* core, int* coreCnt,
-                      uint16_t* port, uint16_t* cpPort,
+                      uint16_t* port,
                       bool* debug, bool* useIPv6, bool* jointStats,
-                      char* uri, char* filename,
-                      char* dataAddr, char* cpAddr,
+                      char* uri, char* file,
+                      char* dataAddr,
                       std::vector<int>& ids) {
 
     int c, i_tmp;
@@ -114,8 +110,8 @@ static void parseArgs(int argc, char **argv,
                           {"ids",         1, nullptr, 3},
                           {"jointstats",  0, nullptr, 4},
                                 // Control Plane
-                          {"gaddr",       1, nullptr, 5},
-                          {"gport",       1, nullptr, 6},
+                          {"uri",         1, nullptr, 5},
+                          {"file",        1, nullptr, 6},
                           {0,       0, 0,    0}
             };
 
@@ -204,27 +200,21 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 5:
-                // control plane IP ADDRESS
-                if (strlen(optarg) > 15 || strlen(optarg) < 7 || !isIPv4(optarg)) {
-                    fprintf(stderr, "grpc server IP address is bad\n\n");
-                    printHelp(argv[0]);
+                // URI
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -uri, uri name is too long\n");
                     exit(-1);
                 }
-                strcpy(cpAddr, optarg);
+                strcpy(uri, optarg);
                 break;
 
-
             case 6:
-                // control plane PORT
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
-                    *cpPort = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
+                // FILE NAME
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -file, file name is too long\n");
                     exit(-1);
                 }
+                strcpy(file, optarg);
                 break;
 
             case 4:
@@ -252,19 +242,6 @@ static void parseArgs(int argc, char **argv,
         printHelp(argv[0]);
         exit(2);
     }
-
-    if (*dump && *lump) {
-        fprintf(stderr, "Only one of -dump or -lump may be specified\n");
-        exit(-1);
-    }
-
-    // If wanting to register with a control plane ...
-    if (std::strlen(cpAddr) > 0) {
-        if (std::strlen(dataAddr) < 1) {
-            fprintf(stderr, "If connecting to CP, must also specify -addr\n");
-            exit(-1);
-        }
-    }
 }
 
 
@@ -279,8 +256,7 @@ static void parseArgs(int argc, char **argv,
 int main(int argc, char **argv) {
 
 
-    uint16_t port   = 17750; // UDP port on which to receive data
-    uint16_t cpPort = 18347; // default grpc TCP port to talk to CP
+    uint16_t dataPort = 17750; // UDP port on which to receive data
 
     int core = -1;
     int coreCnt = 1;
@@ -295,9 +271,6 @@ int main(int argc, char **argv) {
     char host[INPUT_LENGTH_MAX];
     memset(host, 0, INPUT_LENGTH_MAX);
 
-    char cpAddr[INPUT_LENGTH_MAX];
-    memset(cpAddr, 0, INPUT_LENGTH_MAX);
-
     char dataAddr[INPUT_LENGTH_MAX];
     memset(dataAddr, 0, INPUT_LENGTH_MAX);
 
@@ -309,13 +282,18 @@ int main(int argc, char **argv) {
 
     // Parse command line args
     parseArgs(argc, argv, &core, &coreCnt,
-              &port, &cpPort, &debug, &useIPv6, &jointStats,
-              uri, fileName, dataAddr, cpAddr, ids);
+              &dataPort, &debug, &useIPv6, &jointStats,
+              uri, fileName, dataAddr, ids);
+
+    // If not sources given on cmd line, assume 1 src, id=0
+    if (ids.size() == 0) {
+        ids.push_back(0);
+    }
 
     // Create the consumer
-    EjfatConsumer consumer(std::string(dataAddr), std::string(cpAddr),
-                           ids, uri, fileName, dataPort, cpPort,
-                           core, coreCnt, port, cp_port);
+    EjfatConsumer consumer(std::string(dataAddr), dataPort,
+                           ids, uri, fileName, core, coreCnt);
+    consumer.setDebug(debug);
 
     char*    event;
     size_t   bytes;
@@ -329,7 +307,6 @@ int main(int argc, char **argv) {
         if (gotEvent) {
             if (debug) {
                 printf("Got event #%" PRIu64 " with %d bytes from src %hu", eventNum, (int)bytes, srcId);
-
             }
         }
         else {

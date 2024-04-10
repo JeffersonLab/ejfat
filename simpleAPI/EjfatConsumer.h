@@ -70,7 +70,7 @@ namespace ejfat {
 
 
         /** If true, print out debugging info to console. */
-        bool debug = false;
+        bool debug = true;
 
         /** Ids of data sources sending to this consumer. */
         std::vector<int> ids;
@@ -318,11 +318,10 @@ namespace ejfat {
 //                      float setPt=0., float weight=1.);
 
         // Multiple data sources
-        EjfatConsumer(const std::string &dataAddr, const std::string &cpAddr,
+        EjfatConsumer(const std::string &dataAddr, uint16_t dataPort = 17750,
                       const std::vector<int> &ids = {0},
                       const std::string& uri = "",
                       const std::string& fileName = "/tmp/ejfat_uri",
-                      uint16_t dataPort = 17750, uint16_t cpPort = 18347,
                       int startingCore = -1, int coreCount = 1,
                       float Kp=0., float Ki=0., float Kd=0.,
                       float setPt=0., float weight=1.);
@@ -340,6 +339,7 @@ namespace ejfat {
         // Non-blocking call to get events
         bool getEvent(char **event, size_t *bytes, uint64_t* eventNum, uint16_t *srcId);
 
+        void setDebug(bool on);
 
     private:
 

@@ -51,14 +51,13 @@ static void printHelp(char *programName) {
             "        [-port <CP port, 18347 default)>]",
             "        [-name  <name to give LB instance, \"Default_LB\" default>]",
             "        [-file  <file to store URI, /tmp/ejfat_uri default>]",
-            "        [-until <end time of LB reservation, 20 min from now default>]",
+            "        [-until <end time of LB reservation, 10 min from now default>]",
             "                 RFC 3339 format, e.g. 2024-03-28T23:59:22Z (+4 hours EDT, +5 EST)\n",
 
             "        [<admin_token> udplbd_default_change_me = default]");
 
     fprintf(stderr, "        For the specified host/port, reserve an LB assigned the given name until the given time.\n");
-    fprintf(stderr, "        A URI, containing LB connection info is printed out, stored in the EJFAT_URI env var,\n");
-    fprintf(stderr, "        and written into a file.\n");
+    fprintf(stderr, "        A URI, containing LB connection info is printed to stdout and written into a file.\n");
     fprintf(stderr, "        This URI can be parsed and used by both sender and receiver, and is in the format:\n");
     fprintf(stderr, "            ejfat://[<token>@]<cp_host>:<cp_port>/lb/<lb_id>[?data=<data_host>:<data_port>][&sync=<sync_host>:<sync_port>]\n");
 }
@@ -219,9 +218,6 @@ int main(int argc, char **argv) {
 
     char adminToken[INPUT_LENGTH_MAX];
     memset(adminToken, 0, INPUT_LENGTH_MAX);
-//
-//    char url[INPUT_LENGTH_MAX];
-//    memset(url, 0, INPUT_LENGTH_MAX);
 
 
 
@@ -259,57 +255,30 @@ int main(int argc, char **argv) {
                 untilSeconds = epochSeconds;
                 badTime = false;
             }
-            else {
-//                fprintf(stdout, "until time lapsed\n");
-            }
         }
 
         if (badTime) {
             // If until is bad, set for 10 min from now
             untilSeconds = nowSeconds + 10*60;
-//            fprintf(stdout, "until is a bad time/format, set to = %d\n", (int)(untilSeconds));
         }
     }
 
-    //std::string instanceToken = "e3216cb5c7f927b88d0b8dcfc7377e12905edfa4e1f21ef2d9bf54607d4d0239";
-    //std::string lbid = "1";
 
     if (strlen(adminToken) == 0) {
         std::strcpy(adminToken, "udplbd_default_change_me");
     }
 
-//    fprintf(stdout, "cp_host = %s, port = %hu, name = %s, until = %d\nadmin token = %s\n", cp_host, cp_port, name, (int)(untilSeconds), adminToken);
-
-
-//    LbReservation res(cp_host, cp_port, name, adminToken, untilSeconds);
-
-//    int err = res.FreeLoadBalancer();
-//    fprintf(stdout, "free err = %d\n", err);
-
-    std::string url = LbReservation::ReserveLoadBalancer(cp_host, cp_port, name, adminToken, untilSeconds, useIPv6);
+    std::string uri = LbReservation::ReserveLoadBalancer(cp_host, cp_port, name, adminToken, untilSeconds, useIPv6);
 
     // If the returned string starts with "error" ...
-    if (url.compare(0, 5, "error") == 0) {
-        std::cout << "reserve err = " << url << std::endl;
+    if (uri.compare(0, 5, "error") == 0) {
+        std::cout << "reserve err = " << uri << std::endl;
     }
     else {
-        // Set environment variable
-//        sprintf(url, "EJFAT_URI=ejfat://%s@%s:%hu/lb/%s?data=%s:%hu&sync=%s:%hu",
-//                res.getInstanceToken().c_str(),
-//                cp_host, cp_port, res.getLbId().c_str(),
-//                res.getDataAddrV4().c_str(), res.getDataPort(),
-//                res.getSyncAddr().c_str(), res.getSyncPort());
-
-        //    // Set environment variable
-        //    sprintf(url, "export EJFAT_URI=ejfat://%s@%s:%hu?data=%s:%hu&sync=%s:%hu",
-        //            "instance_token", cp_host, cp_port,
-        //            "129.57.155.5", 19522,
-        //            "129.57.177.135", 19523);
-
-        std::cout << url << std::endl;
+        // This output can be captured into an environmental variable
+        std::cout << uri << std::endl;
 
         // Write it to a file
-
         if (std::strlen(fileName) < 1) {
             // Default file name
             std::strcpy(fileName, "/tmp/ejfat_uri");
@@ -318,8 +287,8 @@ int main(int argc, char **argv) {
         std::fstream file;
         file.open(fileName, std::ios::trunc | std::ios::out);
         if (!file.fail()) {
-            // Write this url into a file (without the EJFAT_URI=")
-            file.write(url.c_str(), url.size());
+            // Write this uri into a file (without the EJFAT_URI=")
+            file.write(uri.c_str(), uri.size());
             file.write("\n", 1);
             file.close();
         }

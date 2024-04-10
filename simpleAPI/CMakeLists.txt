@@ -10,6 +10,7 @@ set(EXECUTABLE_FILES
         lbfree.cpp
         lbreserve.cpp
         simpleSender.cpp
+        simpleConsumer.cpp
    )
 
 add_library(ejfat_simple SHARED ${SIMPLE_SRC})

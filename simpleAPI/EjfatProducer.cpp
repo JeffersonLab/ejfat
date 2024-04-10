@@ -109,6 +109,9 @@ namespace ejfat {
         if (mtu > 9000) mtu = 9000;
         else if (mtu < 500) mtu = 500;
 
+        printUri(std::cerr, uriInfo);
+
+
         createSocketsAndStartThreads();
     }
 

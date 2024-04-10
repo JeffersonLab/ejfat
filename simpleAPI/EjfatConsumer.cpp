@@ -59,14 +59,12 @@ namespace ejfat {
      * set to their defaults, including port numbers.
      *
      * @param dataAddr     IP address (either ipv6 or ipv4) to receive data on.
-     * @param cpAddr       IP address (currently only ipv4) to talk to control plane on.
-     * @param ids          vector of data source ids (defaults to single source of id=0).
-     * @param uri          URI containing details of LB/CP connections(default "").
-     * @param fileName     name of environmental variable containing URI (default /tmp/ejfat_uri).
      * @param dataPort     starting UDP port to receive data on. The first src in ids will
      *                     received on this port, the second will be received on dataPort + 1, etc.
      *                     (defaults to 17750).
-     * @param cpPort       TCP port to talk to the control plane on (defaults 18347).
+     * @param ids          vector of data source ids (defaults to single source of id=0).
+     * @param uri          URI containing details of LB/CP connections(default "").
+     * @param fileName     name of environmental variable containing URI (default /tmp/ejfat_uri).
      * @param startingCore first core to run the receiving threads on (default 0).
      * @param coreCount    number of cores each receiving thread will run on (default 2).
      * @param Kp           PID proportional constant used for error signal to CP (default 0.).
@@ -78,17 +76,15 @@ namespace ejfat {
      *
      * @throws EjfatException if no information about the LB/CP is available or could be parsed.
      */
-    EjfatConsumer::EjfatConsumer(const std::string &dataAddr, const std::string &cpAddr,
+    EjfatConsumer::EjfatConsumer(const std::string &dataAddr, uint16_t dataPort,
                                  const std::vector<int> &ids,
                                  const std::string& uri,
                                  const std::string& fileName,
-                                 uint16_t dataPort, uint16_t cpPort,
                                  int startingCore, int coreCount,
                                  float Kp, float Ki, float Kd,
                                  float setPt, float weight) :
 
-            dataAddr(dataAddr), cpAddr(cpAddr),
-            dataPort(dataPort), cpPort(cpPort),
+            dataAddr(dataAddr), dataPort(dataPort),
             ids(ids), startingCore(startingCore), coreCount(coreCount),
             Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt), weight(weight)
 
@@ -129,6 +125,7 @@ namespace ejfat {
             throwEjfatLine("no LB/CP info in URI or in file");
         }
 
+        printUri(std::cerr, uriInfo);
 
         ipv6DataAddr = isIPv6(dataAddr);
 
@@ -173,12 +170,13 @@ namespace ejfat {
         int sourceCount = ids.size();
         int portRangeValue = getPortRange(sourceCount);
         auto range = PortRange(portRangeValue);
-        std::cout << "GRPC client port range = " << portRangeValue << std::endl;
+        if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
         LbClient = std::make_shared<LbControlPlaneClient> (cpAddr, cpPort,
                                                            dataAddr, dataPort, range,
                                                            myName, instanceToken, lbId, weight);
 
+        std::cout << "Created LbControlPlaneClient" << std::endl;
         // Register this client with the control plane's grpc server &
         // wait for server to send session token in return.
         int32_t err = LbClient->Register();
@@ -192,6 +190,12 @@ namespace ejfat {
         createSocketsAndStartThreads();
     }
 
+
+    /**
+     * Set debug level on and off.
+     * @param on if true, set debug output on.
+     */
+    void EjfatConsumer::setDebug(bool on) {debug = on;}
 
 
     /** Method to set max UDP packet payload, create sockets, and startup threads. */
@@ -215,6 +219,8 @@ namespace ejfat {
     bool EjfatConsumer::setFromURI(ejfatURI & uri) {
         if (!uri.haveInstanceToken) return false;
 
+        cpAddr = uri.cpAddrV4;
+        cpPort = uri.cpPort;
         instanceToken = uri.instanceToken;
         lbId = uri.lbId;
         return true;
@@ -841,9 +847,11 @@ namespace ejfat {
             // Every "loopMax" loops
             if (--loopCount <= 0) {
 
+                if (debug) std::cout << "update fill% and pidError" << std::endl;
                 // Update the changing variables
                 LbClient->update(fillPercent, pidError);
 
+                if (debug) std::cout << "send state to CP" << std::endl;
                 // Send to server
                 int err = LbClient->SendState();
                 if (err == 1) {
@@ -888,6 +896,7 @@ namespace ejfat {
         recvThdArg *tArg = (recvThdArg *)arg;
         int srcId = tArg->srcId;
 
+        if (debug) std::cerr << "in recv thd for src " << srcId << std::endl;
 
 #ifdef __linux__
 

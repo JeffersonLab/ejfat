@@ -117,6 +117,8 @@ namespace ejfat {
         out << "Have sync info:      " << btoa(uri.haveSync) << std::endl;
         out << "Have instance Token: " << btoa(uri.haveInstanceToken) << std::endl;
 
+        out << "CP host:             " << uri.cpAddrV4 << std::endl;
+        out << "CP port:             " << uri.cpPort << std::endl;
 
         if (!uri.adminToken.empty()) {
             out << "Admin token:         " << uri.adminToken << std::endl;
@@ -188,7 +190,8 @@ namespace ejfat {
      * The token is optional and is the instance token with which a consumer can
      * register with the control plane. If the instance token is not available,
      * the administration token can be used to register. A sender will not need
-     * either token.
+     * either token. The cp_host and cp_port are the host and port used to talk
+     * to the control plane. They are exactly the host and port used to reserve an LB.
      * </p><p>
      * The data_host & data_port are the IP address and UDP port to send events/data to.
      * They are optional and not used by the consumer. Likewise the sync_host & sync_port
