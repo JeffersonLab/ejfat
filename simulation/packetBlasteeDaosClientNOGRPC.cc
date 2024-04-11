@@ -15,6 +15,8 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 #include <ctime>
 #include <thread>
 #include <cmath>
@@ -26,6 +28,7 @@
 #include <cinttypes>
 
 #include "ejfat_assemble_ersap.hpp"
+#include "ejfat_daos.hpp"
 
 #ifdef __linux__
     #ifndef _GNU_SOURCE
@@ -39,6 +42,13 @@
 
 using namespace ejfat;
 
+// Make sure this pool exists. Query with `dmg sys query list-pools`.
+#define EJFAT_DAOS_POOL_LABEL "ejfat"
+
+// Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
+#define EJFAT_DAOS_CONT_LABEL "cont1"
+
+#define MAX_UINT64_DIGITS 20  // help to convert a uint64_t to a padded string
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -422,6 +432,23 @@ static void *thread(void *arg) {
 }
 
 
+const char* uint64ToStringWithPadding(uint64_t num, int width) {
+    static std::string str; // static to ensure lifetime beyond function scope
+    std::stringstream ss;
+    ss << std::setw(width) << std::setfill('0') << num;
+    str = ss.str();
+
+    std::cout << "\nGet event id string: " << str << std::endl;
+    return str.c_str();
+}
+
+
+// @return a string based on @param evt_id but with padding zeros
+const char* generate_daos_kv_key(uint64_t evt_id) {
+    const char * result = uint64ToStringWithPadding(evt_id, MAX_UINT64_DIGITS);
+    return result;
+}
+
 
 int main(int argc, char **argv) {
 
@@ -436,6 +463,9 @@ int main(int argc, char **argv) {
     bool debug = false;
     bool useIPv6 = false;
     bool noBuild = false;
+
+    // DAOS stuff declaration
+    DAOSConnector daos_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -703,6 +733,12 @@ int main(int argc, char **argv) {
         discardedTicks   += stats->discardedBuffers;
         discardedBytes   += stats->discardedBytes;
         discardedPackets += stats->discardedPackets;
+
+        // DAOS: send data to DAOS server.
+        daos_obj_id_t daos_oid = daos_client.createKVObject(tick);
+        /// TODO: more meaningful DAOS keys.
+        daos_client.push2KVObject(daos_oid,
+                    generate_daos_kv_key(totalEvents), nBytes, dataBuf);
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.

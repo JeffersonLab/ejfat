@@ -9,6 +9,7 @@ _*
 
 # ignore generated files/dirs
 *.class
+*.log
 cmake-*
 *.cmake
 CMakeCache.txt
@@ -16,6 +17,7 @@ CMakeFiles/
 Makefile
 build/
 install/
+install*
 bin/
 jbuild/
 doxyerrors.log
