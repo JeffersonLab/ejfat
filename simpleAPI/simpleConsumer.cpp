@@ -45,6 +45,7 @@ using namespace ejfat;
 
 #define INPUT_LENGTH_MAX 256
 
+// admin token = udplbd_default_change_me
 
 
 /**
@@ -292,8 +293,7 @@ int main(int argc, char **argv) {
 
     // Create the consumer
     EjfatConsumer consumer(std::string(dataAddr), dataPort,
-                           ids, uri, fileName, core, coreCnt);
-    consumer.setDebug(debug);
+                           ids, uri, fileName, debug, core, coreCnt);
 
     char*    event;
     size_t   bytes;
@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
 
         if (gotEvent) {
             if (debug) {
-                printf("Got event #%" PRIu64 " with %d bytes from src %hu", eventNum, (int)bytes, srcId);
+                printf("Got event #%" PRIu64 " with %d bytes from src %hu\n", eventNum, (int)bytes, srcId);
             }
         }
         else {

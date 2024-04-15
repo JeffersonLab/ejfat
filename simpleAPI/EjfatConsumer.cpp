@@ -65,6 +65,7 @@ namespace ejfat {
      * @param ids          vector of data source ids (defaults to single source of id=0).
      * @param uri          URI containing details of LB/CP connections(default "").
      * @param fileName     name of environmental variable containing URI (default /tmp/ejfat_uri).
+     * @param debug        if true, printout debug statements (default false).
      * @param startingCore first core to run the receiving threads on (default 0).
      * @param coreCount    number of cores each receiving thread will run on (default 2).
      * @param Kp           PID proportional constant used for error signal to CP (default 0.).
@@ -80,13 +81,14 @@ namespace ejfat {
                                  const std::vector<int> &ids,
                                  const std::string& uri,
                                  const std::string& fileName,
+                                 bool debug,
                                  int startingCore, int coreCount,
                                  float Kp, float Ki, float Kd,
                                  float setPt, float weight) :
 
-            dataAddr(dataAddr), dataPort(dataPort),
+            dataAddr(dataAddr), dataPort(dataPort), debug(debug),
             ids(ids), startingCore(startingCore), coreCount(coreCount),
-            Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt), weight(weight)
+            Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt), weight(weight), endThreads(false)
 
     {
 
@@ -190,12 +192,6 @@ namespace ejfat {
         createSocketsAndStartThreads();
     }
 
-
-    /**
-     * Set debug level on and off.
-     * @param on if true, set debug output on.
-     */
-    void EjfatConsumer::setDebug(bool on) {debug = on;}
 
 
     /** Method to set max UDP packet payload, create sockets, and startup threads. */
@@ -402,10 +398,11 @@ namespace ejfat {
 
             // Loop for zeroing stats when first starting - for accurate rate calc
             for (int i=0; i < sourceCount; i++) {
+
                 if (dataArrived[i] && (skippedFirst[i] == 1)) {
                     // Data is now coming in. To get an accurate rate, start w/ all stats = 0
                     int src = ids[i];
-                    if (debug) std::cerr << "\nData now coming in for src " << src << std::endl;
+std::cerr << "\nData now coming in for src " << src << std::endl;
                     pstats = &allStats[src];
                     currTotalBytes[i]   = pstats->acceptedBytes    = 0;
                     currTotalPkts[i]    = pstats->acceptedPackets  = 0;
@@ -419,7 +416,7 @@ namespace ejfat {
 
                     // Start the clock for this source
                     clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
-//fprintf(stderr, "started clock for src %d\n", src);
+fprintf(stderr, "started clock for src %d\n", src);
 
                     // From now on we skip this zeroing step
                     skippedFirst[i]++;
@@ -932,7 +929,7 @@ namespace ejfat {
         int currentQItem  = currentQItems[srcId];
         int dataSocket    = dataSockets[srcId];
         auto stats        = &allStats[srcId];
-        bool takeStats    = stats == nullptr;
+        bool takeStats    = stats != nullptr;
 
 
         while (true) {
