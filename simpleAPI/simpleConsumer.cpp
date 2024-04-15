@@ -293,7 +293,9 @@ int main(int argc, char **argv) {
 
     // Create the consumer
     EjfatConsumer consumer(std::string(dataAddr), dataPort,
-                           ids, uri, fileName, debug, core, coreCnt);
+                           ids, uri, fileName,
+                           debug, jointStats,
+                           core, coreCnt);
 
     char*    event;
     size_t   bytes;

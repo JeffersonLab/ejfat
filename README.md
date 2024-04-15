@@ -33,18 +33,41 @@ The following programs will be created:
 - **lb_rcv_roc** (reassembles to file)
 - **lb_send**    (sends to LB)
 
+The **staticLB** directory, contains old code with
+receivers only configured to use the old, static CP (no grpc).
+The following programs will be created:
 
-From the **simulation** directory, the following will be created:
-
-- **packetBlaster** (packetizes and sends data)
 - **packetBlastee** (receives and reassembles data with static LB only)
 - **packetBlasterSmall** (For Debugging, sends really small packets to LB)
 - **packetAnalyzer** (For Debugging, receives pkts and prints RE and LB headers)
 - **udp_send_order** (sends file, which is read or piped-in, to udp_rcv_order)
 - **udp_rcv_order** (receives file sent by udp_send_order and reconstructs it)
 
+
 These executables will be created with every **make** no matter
 which cmake flags are used.
+
+
+From the **simulation** directory, the following will be created:
+
+- **packetBlaster** (packetizes and sends data)
+
+
+The **simpleAPI** directory contains classes EjfatConsumer and EjfatProducer
+which are held in a library along with a couple of executables based on them.
+They support the latest CP/LB which requires an LB reservation and a
+specially-generated URI from the reservation which allows both a producer and
+consumer of data to use the CP/LB. This API was designed to be as simple
+as possible, hiding much of the complexity from users. It depends only on the
+boost and grpc-based libs.+
+The following will be created:
+
+- **libejfat_simple.so** (consumer and producer C++ classes)
+- **simpleConsumer** (receives and reassembles data)
+- **simpleProduer** (packetizes and sends data)
+
+
+
 
 
 #### Where to look for libs & headers

@@ -31,7 +31,7 @@
 #include <vector>
 
 #include "ejfat_assemble_ersap.hpp"
-#include "ejfat_network.hpp"
+//#include "ejfat_network.hpp"
 
 #include "et.h"
 #include "et_fifo.h"

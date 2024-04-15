@@ -103,7 +103,6 @@ set(EMU_EXEC_FILES
         )
 
 set(GRPC_EXEC_FILES
-        simulation/packetBlasteeEtFifoClient.cc
         simulation/packetBlasteeEtMT.cc
         simulation/packetBlasteeFastMP.cc
         simulation/packetBlasteeFullNewMP.cc
@@ -130,13 +129,16 @@ set(UTIL_FILES
         util/PacketRefItem.cpp
         )
 
+set(STATIC_EXEC_FILES
+        staticLB/udp_rcv_order.cc
+        staticLB/udp_send_order.cc
+        staticLB/packetAnalyzer.cc
+        staticLB/packetBlastee.cc
+        staticLB/packetBlasterSmall.cc
+        )
+
 set(SIM_EXEC_FILES
-        simulation/udp_rcv_order.cc
-        simulation/udp_send_order.cc
-        simulation/packetAnalyzer.cc
-        simulation/packetBlastee.cc
         simulation/packetBlaster.cc
-        simulation/packetBlasterSmall.cc
         )
 
 set(CLAS_EXEC_FILES
@@ -168,7 +170,7 @@ set(CPP_HEADER_FILES
 
 # Files using Disruptor code also need util files, so keep them separate from other executables,
 # ie don't include DIS_EXEC_FILES here
-set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES})
+set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES} ${STATIC_EXEC_FILES})
 
 # Disruptor build is optional and set it to OFF by default
 option(BUILD_DIS "Build Disruptor-related code" OFF)

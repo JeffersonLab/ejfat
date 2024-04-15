@@ -66,6 +66,7 @@ namespace ejfat {
      * @param uri          URI containing details of LB/CP connections(default "").
      * @param fileName     name of environmental variable containing URI (default /tmp/ejfat_uri).
      * @param debug        if true, printout debug statements (default false).
+     * @param jointStats   if true, printout combined stats for all sources (default false).
      * @param startingCore first core to run the receiving threads on (default 0).
      * @param coreCount    number of cores each receiving thread will run on (default 2).
      * @param Kp           PID proportional constant used for error signal to CP (default 0.).
@@ -81,14 +82,16 @@ namespace ejfat {
                                  const std::vector<int> &ids,
                                  const std::string& uri,
                                  const std::string& fileName,
-                                 bool debug,
+                                 bool debug, bool jointStats,
                                  int startingCore, int coreCount,
                                  float Kp, float Ki, float Kd,
                                  float setPt, float weight) :
 
-            dataAddr(dataAddr), dataPort(dataPort), debug(debug),
+            dataAddr(dataAddr), dataPort(dataPort),
+            debug(debug), jointStats(jointStats),
             ids(ids), startingCore(startingCore), coreCount(coreCount),
-            Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt), weight(weight), endThreads(false)
+            Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt),
+            weight(weight), endThreads(false)
 
     {
 

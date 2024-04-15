@@ -93,11 +93,20 @@ With 2 sources (each with 2 cores), the best total receiving rate (after a few m
 
 #### packetBlasteeEtMT.cc
 
-This data receiver is similar to packetBlasteeEtFifoClient (see below),
-differs by adding 2 threads and buffering. It's faster and makes
-packetBlasteeEtFifoClient obsolete, but has the disadvantage of needing
-the disruptor (fast ring buffer) library to link against. It also needs
-the EtFifoEntryItem.cpp & EtFifoEntryItem.h files.
+This data receiver reads UDP packets from clasBlaster.cc (a single event source),
+reassembles it, then
+places it into an ET system which is configured to be used as a FIFO.
+It also connects and reports telemetry to the LB's control plane.
+One thread monitors the ET system and reports the fifo level along with PID error signal.
+The reading thread runs on a command-line-settable # of cores.
+Because it uses a routine from ejfat_assemble_ersap.hpp to reassemble,
+it only accommodates out-of-order packets if they don't cross event boundaries.
+Duplicate packets will mess things up.
+
+This program does <b>not</b> use the sophisticated handling of out-of-order and
+duplicate packets that packetBlasteeFullNewMP uses. Like packetBlasteeFastMP,
+it only calls getCompletePacketizedBuffer(), but I believe that's an advantage
+since it's much faster reassembly code.
 
 Measurements show that writing into the ET system has a delay every so
 often when ET's memory-mapped file is updated.
@@ -108,8 +117,8 @@ of buffers, one must edit the code and recompile.
 
 It also adds another thread to simultaneously get (up to 1024) 
 empty ET fifo entries in a ring buffer, so there is always somewhere to write into.
-These improve performance so that it handles 3X the input rate before one
-sees dropped packets.
+These improve performance so that it handles 3X the input rate of the previous
+version before one sees dropped packets.
 
 **Dependencies:**
  1) the **ejfat_grpc** lib to talk to the CP.

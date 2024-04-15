@@ -322,7 +322,7 @@ namespace ejfat {
                       const std::vector<int> &ids = {0},
                       const std::string& uri = "",
                       const std::string& fileName = "/tmp/ejfat_uri",
-                      bool debug = false,
+                      bool debug = false, bool jointStats = false,
                       int startingCore = -1, int coreCount = 1,
                       float Kp=0., float Ki=0., float Kd=0.,
                       float setPt=0., float weight=1.);
