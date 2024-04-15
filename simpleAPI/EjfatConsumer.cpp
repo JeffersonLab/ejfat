@@ -402,7 +402,7 @@ namespace ejfat {
                 if (dataArrived[i] && (skippedFirst[i] == 1)) {
                     // Data is now coming in. To get an accurate rate, start w/ all stats = 0
                     int src = ids[i];
-std::cerr << "\nData now coming in for src " << src << std::endl;
+                    if (debug) std::cerr << "\nData now coming in for src " << src << std::endl;
                     pstats = &allStats[src];
                     currTotalBytes[i]   = pstats->acceptedBytes    = 0;
                     currTotalPkts[i]    = pstats->acceptedPackets  = 0;
@@ -416,7 +416,7 @@ std::cerr << "\nData now coming in for src " << src << std::endl;
 
                     // Start the clock for this source
                     clock_gettime(CLOCK_MONOTONIC, &tStart[i]);
-fprintf(stderr, "started clock for src %d\n", src);
+                    if (debug) fprintf(stderr, "started clock for src %d\n", src);
 
                     // From now on we skip this zeroing step
                     skippedFirst[i]++;
