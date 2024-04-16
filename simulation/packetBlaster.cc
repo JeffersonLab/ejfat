@@ -70,11 +70,9 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-direct]\n",
-
-            "        [-i <outgoing interface name (e.g. eth0, only used to find MTU)>]",
+            "        [-h] [-v]",
             "        [-nc (no connect on socket)]\n",
 
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
@@ -99,9 +97,7 @@ static void printHelp(char *programName) {
             "        [-d <delay in microsec between buffers>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
-    fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
-    fprintf(stderr, "        The -sync option will send a UDP message to CP every second with last tick sent (needs cp_addr, cp_port).\n");
-    fprintf(stderr, "        The -direct option will NOT put in LB headers and allows sending events directly to receiver.\n");
+    fprintf(stderr, "        Data is copied into a buffer once and \"send()\" is used (connect is called).\n");
     fprintf(stderr, "        This program cycles thru the use of up to 16 UDP sockets for better switch performance.\n");
 }
 
@@ -116,8 +112,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       uint32_t *sockets,
                       bool *debug,
-                      bool *direct, bool *noConnect,
-                      char* uri, char* file, char* interface,
+                      bool *noConnect,
+                      char* uri, char* file,
                       std::vector<int>& cores) {
 
     int c, i_tmp;
@@ -140,7 +136,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"bufrate",  1, nullptr, 14},
              {"byterate", 1, nullptr, 15},
              {"sock",     1, nullptr, 16},
-             {"direct",   0, nullptr, 17},
              {"nc",       0, nullptr, 18},
 
              {"uri",      1, nullptr, 19},
@@ -149,7 +144,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhi:t:d:b:s:e:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vht:d:b:s:e:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -208,15 +203,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     fprintf(stderr, "Invalid argument to -d, packet delay > 0\n");
                     exit(-1);
                 }
-                break;
-
-            case 'i':
-                // OUTGOING INTERFACE NAME / IP ADDRESS
-                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "interface address is bad\n");
-                    exit(-1);
-                }
-                strcpy(interface, optarg);
                 break;
 
             case 1:
@@ -361,11 +347,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     fprintf(stderr, "Invalid argument to -sock, 0 < port < 17\n");
                     exit(-1);
                 }
-                break;
-
-            case 17:
-                // do we bypass the LB and go directly to backend?
-                *direct = true;
                 break;
 
             case 18:
@@ -550,10 +531,6 @@ int main(int argc, char **argv) {
 
     char syncBuf[28];
 
-    char interface[16];
-    memset(interface, 0, 16);
-    strcpy(interface, "lo0");
-
     char uri[256];
     memset(uri, 0, 256);
 
@@ -565,8 +542,8 @@ int main(int argc, char **argv) {
               &version, &dataId, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale, &sockCount, &debug,
-              &direct, &noConnect,
-              uri, fileName, interface, cores);
+              &noConnect,
+              uri, fileName, cores);
 
 #ifdef __linux__
 
@@ -679,6 +656,8 @@ int main(int argc, char **argv) {
 
 
     fprintf(stderr, "Delay = %u microsec\n", delay);
+    fprintf(stderr, "no connect = %s\n", btoa(noConnect));
+    fprintf(stderr, "Using MTU = %d\n", mtu);
 
     if (byteRate > 0) {
         setByteRate = true;
@@ -687,17 +666,6 @@ int main(int argc, char **argv) {
         setBufRate = true;
     }
 
-
-    fprintf(stderr, "no connect = %s\n", btoa(noConnect));
-
-    // Break data into multiple packets of max MTU size.
-    // If the mtu was not set on the command line, get it progamatically
-    if (mtu == 0) {
-        mtu = getMTU(interface, true);
-    }
-
-
-    fprintf(stderr, "Using MTU = %d\n", mtu);
 
     // 20 bytes = normal IPv4 packet header (60 is max), 8 bytes = max UDP packet header
     // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
@@ -1053,6 +1021,7 @@ int main(int argc, char **argv) {
                                               0, 1, &delayCounter,
                                               firstBuffer, lastBuffer, debug, direct, &packetsSent);
         }
+
         if (err < 0) {
             // Should be more info in errno
             fprintf(stderr, "\nsendPacketizedBuffer: errno = %d, %s\n\n", errno, strerror(errno));
