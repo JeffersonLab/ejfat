@@ -42,10 +42,14 @@
 #include <iostream>
 #include <cinttypes>
 #include <chrono>
+#include <vector>
+#include <sstream>
+#include <fstream>
 
 #include <arpa/inet.h>
 #include <net/if.h>
 
+#include "ejfat.hpp"
 #include "ejfat_packetize.hpp"
 
 #ifdef __linux__
@@ -66,18 +70,15 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ipv6] [-sync] [-direct]\n",
+            "        [-h] [-v] [-direct]\n",
 
-            "        [-bufdelay] (delay between each buffer, not packet)",
-            "        [-host <destination host (defaults to 127.0.0.1)>]",
-            "        [-p <destination UDP port, default 19522>]",
             "        [-i <outgoing interface name (e.g. eth0, only used to find MTU)>]",
             "        [-nc (no connect on socket)]\n",
 
-            "        [-cp_addr <CP IP address (default = none & no CP comm)>]",
-            "        [-cp_port <CP port for sync msgs (default 19523)>]",
+            "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
+            "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
 
             "        [-sock <# of UDP sockets, 16 max>]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
@@ -95,7 +96,7 @@ static void printHelp(char *programName) {
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... tick increment each buffer sent)>]",
             "        [-dpre <delay prescale (1,2, ... if -d defined, 1 delay for every prescale pkts/bufs)>]",
-            "        [-d <delay in microsec between packets or buffers depending on -bufdelay>]");
+            "        [-d <delay in microsec between buffers>]");
 
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        By default, data is copied into buffer and \"send()\" is used (connect is called).\n");
@@ -108,15 +109,16 @@ static void printHelp(char *programName) {
 
 static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       int *entropy, int *version,
-                      uint16_t *id, uint16_t* port, uint16_t* cp_port,
+                      uint16_t *id,
                       uint64_t* tick, uint32_t* delay,
                       uint64_t *bufSize, float *bufRate,
                       uint64_t *byteRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
-                      uint32_t *sockets, int *cores,
-                      bool *debug, bool *useIPv6, bool *bufDelay,
-                      bool *sendSync, bool *direct, bool *noConnect,
-                      char* host, char *cp_host, char *interface) {
+                      uint32_t *sockets,
+                      bool *debug,
+                      bool *direct, bool *noConnect,
+                      char* uri, char* file, char* interface,
+                      std::vector<int>& cores) {
 
     int c, i_tmp;
     int64_t tmp;
@@ -126,28 +128,28 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
     /* 4 multiple character command-line options */
     static struct option long_options[] =
             {{"mtu",      1, nullptr, 1},
-             {"host",     1, nullptr, 2},
+
              {"ver",      1, nullptr, 3},
              {"id",       1, nullptr, 4},
              {"pro",      1, nullptr, 5},
-             {"sync",     0, nullptr, 6},
+
+
              {"dpre",     1, nullptr, 9},
              {"tpre",     1, nullptr, 10},
-             {"ipv6",     0, nullptr, 11},
-             {"bufdelay", 0, nullptr, 12},
              {"cores",    1, nullptr, 13},
              {"bufrate",  1, nullptr, 14},
              {"byterate", 1, nullptr, 15},
              {"sock",     1, nullptr, 16},
              {"direct",   0, nullptr, 17},
              {"nc",       0, nullptr, 18},
-             {"cp_port",  1, nullptr, 19},
-             {"cp_addr",  1, nullptr, 20},
+
+             {"uri",      1, nullptr, 19},
+             {"file",     1, nullptr, 20},
              {nullptr,    0, 0,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:i:t:d:b:s:e:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhi:t:d:b:s:e:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -161,17 +163,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     *tick = tmp;
                 } else {
                     fprintf(stderr, "Invalid argument to -t, tick > 0\n");
-                    exit(-1);
-                }
-                break;
-
-            case 'p':
-                // PORT
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
-                    *port = i_tmp;
-                } else {
-                    fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n");
                     exit(-1);
                 }
                 break;
@@ -244,15 +235,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 break;
 
-            case 2:
-                // DESTINATION HOST
-                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
-                    fprintf(stderr, "Invalid argument to -host, host name is too long\n");
-                    exit(-1);
-                }
-                strcpy(host, optarg);
-                break;
-
             case 3:
                 // VERSION
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -283,11 +265,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 *protocol = i_tmp;
                 break;
 
-            case 6:
-                // do we send sync messages to LB?
-                *sendSync = true;
-                break;
-
             case 9:
                 // Delay prescale
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -312,14 +289,31 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 }
                 break;
 
-            case 11:
-                // use IP version 6
-                *useIPv6 = true;
-                break;
+            case 13:
+                // Cores to run on
+                if (strlen(optarg) < 1) {
+                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                    exit(-1);
+                }
 
-            case 12:
-                // delay is between buffers not packets
-                *bufDelay = true;
+                {
+                    // split into ints
+                    cores.clear();
+                    std::string s = optarg;
+                    std::istringstream ss(s);
+                    std::string token;
+
+                    while (std::getline(ss, token, ',')) {
+                        try {
+                            int value = std::stoi(token);
+                            cores.push_back(value);
+                        }
+                        catch (const std::exception& e) {
+                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of ints\n");
+                            exit(-1);
+                        }
+                    }
+                }
                 break;
 
             case 14:
@@ -380,80 +374,23 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                 break;
 
             case 19:
-                // CP PORT
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
-                    *cp_port = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -cp_port, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
+                // URI
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -uri, uri name is too long\n");
                     exit(-1);
                 }
+                strcpy(uri, optarg);
                 break;
 
             case 20:
-                // CP HOST for sync messages
-                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
-                    fprintf(stderr, "Invalid argument to -cp_host, name is too long\n\n");
-                    printHelp(argv[0]);
+                // FILE NAME
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -file, file name is too long\n");
                     exit(-1);
                 }
-                strcpy(cp_host, optarg);
+                strcpy(file, optarg);
                 break;
 
-            case 13:
-                // Cores to run on
-                if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
-                    exit(-1);
-                }
-
-
-                {
-                    // split into ints
-                    std::string s = optarg;
-                    std::string delimiter = ",";
-
-                    size_t pos = 0;
-                    std::string token;
-                    char *endptr;
-                    int index = 0;
-                    bool oneMore = true;
-
-                    while ((pos = s.find(delimiter)) != std::string::npos) {
-                        //fprintf(stderr, "pos = %llu\n", pos);
-                        token = s.substr(0, pos);
-                        errno = 0;
-                        cores[index] = (int) strtol(token.c_str(), &endptr, 0);
-
-                        if ((token.c_str() - endptr) == 0) {
-                            //fprintf(stderr, "two commas next to eachother\n");
-                            oneMore = false;
-                            break;
-                        }
-                        index++;
-                        //std::cout << token << std::endl;
-                        s.erase(0, pos + delimiter.length());
-                        if (s.length() == 0) {
-                            //fprintf(stderr, "break on zero len string\n");
-                            oneMore = false;
-                            break;
-                        }
-                    }
-
-                    if (oneMore) {
-                        errno = 0;
-                        cores[index] = (int) strtol(s.c_str(), nullptr, 0);
-                        if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
-                            exit(-1);
-                        }
-                        index++;
-                        //std::cout << s << std::endl;
-                    }
-                }
-                break;
 
             case 'v':
                 // VERBOSE
@@ -473,7 +410,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
     // If we specify the byte/buffer send rate, then all delays are removed
     if (*byteRate > 0 || *bufRate) {
         fprintf(stderr, "Byte rate set to %" PRIu64 " bytes/sec, all delays removed!\n", *byteRate);
-        *bufDelay = false;
         *delayPrescale = 1;
         *delay = 0;
     }
@@ -593,63 +529,61 @@ int main(int argc, char **argv) {
     uint32_t tickPrescale = 1;
     uint32_t delayPrescale = 1, delayCounter = 0;
     uint32_t offset = 0, sendBufSize = 0;
-    uint32_t delay = 0, packetDelay = 0, bufferDelay = 0;
+    uint32_t delay = 0;
     float    bufRate = 0.F;
     uint64_t bufSize = 0L, byteRate = 0L;
-    uint16_t port    = 19522; // FPGA port is default
-    uint16_t cp_port = 19523; // default for CP port getting sync messages from sender
+
     uint32_t sockCount = 1;   // only use one outgoing socket by default, 16 max
     int syncSocket;
 
     uint64_t tick = 0;
-    int cores[10];
     int mtu = 9000, version = 2, protocol = 1, entropy = 0;
-    uint16_t dataId = 1;
+    uint16_t dataId = 0;
+
+    std::vector<int> cores;
+    size_t coreCount = 0;
+
     bool debug = false;
-    bool useIPv6 = false, bufDelay = false;
     bool setBufRate = false, setByteRate = false;
-    bool sendSync = false;
     bool direct = false;
     bool noConnect = false;
 
     char syncBuf[28];
-    char host[INPUT_LENGTH_MAX], cp_host[INPUT_LENGTH_MAX], interface[16];
-    memset(host, 0, INPUT_LENGTH_MAX);
-    memset(cp_host, 0, INPUT_LENGTH_MAX);
-    memset(interface, 0, 16);
-    strcpy(host, "127.0.0.1");
-    strcpy(interface, "lo0");
-    for (int i=0; i < 10; i++) {
-        cores[i] = -1;
-    }
 
-    parseArgs(argc, argv, &mtu, &protocol, &entropy,
-              &version, &dataId, &port, &cp_port, &tick,
+    char interface[16];
+    memset(interface, 0, 16);
+    strcpy(interface, "lo0");
+
+    char uri[256];
+    memset(uri, 0, 256);
+
+    char fileName[256];
+    memset(fileName, 0, 256);
+
+
+        parseArgs(argc, argv, &mtu, &protocol, &entropy,
+              &version, &dataId, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
-              &delayPrescale, &tickPrescale, &sockCount, cores, &debug,
-              &useIPv6, &bufDelay, &sendSync, &direct, &noConnect, host, cp_host, interface);
+              &delayPrescale, &tickPrescale, &sockCount, &debug,
+              &direct, &noConnect,
+              uri, fileName, interface, cores);
 
 #ifdef __linux__
 
-      if (cores[0] > -1) {
+      if (cores.size() > 0) {
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
         if (debug) {
-            for (int i=0; i < 10; i++) {
+            for (int i=0; i < cores.size(); i++) {
                      std::cerr << "core[" << i << "] = " << cores[i] << "\n";
             }
         }
 
-        for (int i=0; i < 10; i++) {
-            if (cores[i] >= 0) {
-                std::cerr << "Run sending thread on core " << cores[i] << "\n";
-                CPU_SET(cores[i], &cpuset);
-            }
-            else {
-                break;
-            }
+        for (int i=0; i < cores.size(); i++) {
+            std::cerr << "Run sending thread on core " << cores[i] << "\n";
+            CPU_SET(cores[i], &cpuset);
         }
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
@@ -663,16 +597,88 @@ int main(int argc, char **argv) {
 #endif
 
 
-    if (bufDelay) {
-        packetDelay = 0;
-        bufferDelay = delay;
-    }
-    else {
-        packetDelay = delay;
-        bufferDelay = 0;
+    //----------------------------------------------
+    // Parse the URI (directly given or in file().
+    // This gives CP connection info.
+    //----------------------------------------------
+
+    // Set default file name
+    if (strlen(fileName) < 1) {
+        strcpy(fileName, "/tmp/ejfat_uri");
     }
 
-    fprintf(stderr, "Delays: packet = %u, buffer = %u microsec\n", packetDelay, bufferDelay);
+    ejfatURI uriInfo;
+    bool haveEverything = false;
+
+    // First see if the uri arg is defined, if so, parse it
+    if (strlen(uri) > 0) {
+        bool parsed = parseURI(uri, uriInfo);
+        if (parsed) {
+            // URI is in correct format
+            if (!(uriInfo.haveData && uriInfo.haveSync)) {
+                std::cerr << "no LB/CP info in URI" << std::endl;
+            }
+            else {
+                haveEverything = true;
+            }
+        }
+    }
+
+    // If no luck with URI, look into file
+    if (!haveEverything && strlen(fileName) > 0) {
+
+        std::ifstream file(fileName);
+        if (file.is_open()) {
+            std::string uriLine;
+            if (std::getline(file, uriLine)) {
+                bool parsed = parseURI(uriLine, uriInfo);
+                if (parsed) {
+                    if (!(uriInfo.haveData && uriInfo.haveSync)) {
+                        std::cerr << "no LB/CP info in file" << std::endl;
+                        file.close();
+                        return 1;
+                    }
+                }
+            }
+
+            file.close();
+        }
+    }
+
+    if (!haveEverything) {
+        std::cerr << "no LB/CP info in uri or file" << std::endl;
+        return 1;
+    }
+
+    std::string dataAddr;
+    std::string syncAddr;
+
+    bool useIPv6Data = false;
+    bool useIPv6Sync = false;
+
+    // data address and port
+    if (uriInfo.useIPv6Data) {
+        dataAddr = uriInfo.dataAddrV6;
+        useIPv6Data = true;
+    }
+    else {
+        dataAddr = uriInfo.dataAddrV4;
+    }
+
+    // sync address and port
+    if (uriInfo.useIPv6Sync) {
+        syncAddr = uriInfo.syncAddrV6;
+        useIPv6Sync = true;
+    }
+    else {
+        syncAddr = uriInfo.syncAddrV4;
+    }
+
+    uint16_t dataPort = uriInfo.dataPort;
+    uint16_t syncPort = uriInfo.syncPort;
+
+
+    fprintf(stderr, "Delay = %u microsec\n", delay);
 
     if (byteRate > 0) {
         setByteRate = true;
@@ -681,12 +687,8 @@ int main(int argc, char **argv) {
         setBufRate = true;
     }
 
-    if (strlen(cp_host) < 1) {
-        sendSync = false;
-    }
 
     fprintf(stderr, "no connect = %s\n", btoa(noConnect));
-    fprintf(stderr, "send sync = %s\n", btoa(sendSync));
 
     // Break data into multiple packets of max MTU size.
     // If the mtu was not set on the command line, get it progamatically
@@ -703,46 +705,45 @@ int main(int argc, char **argv) {
 
 
     // Socket for sending sync message to CP
-    if (sendSync) {
-        if (useIPv6) {
-            struct sockaddr_in6 serverAddr6;
+    if (useIPv6Sync) {
+        struct sockaddr_in6 serverAddr6;
 
-            if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-                perror("creating IPv6 sync socket");
-                return -1;
-            }
+        if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv6 sync socket");
+            return -1;
+        }
 
-            memset(&serverAddr6, 0, sizeof(serverAddr6));
-            serverAddr6.sin6_family = AF_INET6;
-            serverAddr6.sin6_port = htons(cp_port);
-            inet_pton(AF_INET6, cp_host, &serverAddr6.sin6_addr);
+        memset(&serverAddr6, 0, sizeof(serverAddr6));
+        serverAddr6.sin6_family = AF_INET6;
+        serverAddr6.sin6_port = htons(syncPort);
+        inet_pton(AF_INET6, syncAddr.c_str(), &serverAddr6.sin6_addr);
 
-            int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP sync socket:");
-                close(syncSocket);
-                exit(1);
-            }
-        } else {
-            struct sockaddr_in serverAddr;
+        int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+        if (err < 0) {
+            if (debug) perror("Error connecting UDP sync socket:");
+            close(syncSocket);
+            exit(1);
+        }
+    }
+    else {
+        struct sockaddr_in serverAddr;
 
-            if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-                perror("creating IPv4 sync socket");
-                return -1;
-            }
+        if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("creating IPv4 sync socket");
+            return -1;
+        }
 
-            memset(&serverAddr, 0, sizeof(serverAddr));
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(cp_port);
-            serverAddr.sin_addr.s_addr = inet_addr(cp_host);
-            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(syncPort);
+        serverAddr.sin_addr.s_addr = inet_addr(syncAddr.c_str());
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
-            int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP sync socket:");
-                close(syncSocket);
-                return err;
-            }
+        int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+        if (err < 0) {
+            if (debug) perror("Error connecting UDP sync socket:");
+            close(syncSocket);
+            return err;
         }
     }
 
@@ -757,23 +758,23 @@ int main(int argc, char **argv) {
     struct sockaddr_in  serverAddr;
     struct sockaddr_in6 serverAddr6;
 
-    if (useIPv6) {
+    if (useIPv6Data) {
         // Configure settings in address struct
         // Clear it out
         memset(&serverAddr6, 0, sizeof(serverAddr6));
         // it is an INET address
         serverAddr6.sin6_family = AF_INET6;
         // the port we are going to send to, in network byte order
-        serverAddr6.sin6_port = htons(port);
+        serverAddr6.sin6_port = htons(dataPort);
         // the server IP address, in network byte order
-        inet_pton(AF_INET6, host, &serverAddr6.sin6_addr);
+        inet_pton(AF_INET6, dataAddr.c_str(), &serverAddr6.sin6_addr);
     }
     else {
         // Configure settings in address struct
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
-        serverAddr.sin_addr.s_addr = inet_addr(host);
+        serverAddr.sin_port = htons(dataPort);
+        serverAddr.sin_addr.s_addr = inet_addr(dataAddr.c_str());
         memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
     }
 
@@ -781,8 +782,8 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < sockCount; i++) {
 
-        if (useIPv6) {
-            /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
+        if (useIPv6Data) {
+            // create a DGRAM (UDP) socket in the INET/INET6 protocol
             if ((clientSockets[i] = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
                 perror("creating IPv6 client socket");
                 return -1;
@@ -842,7 +843,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
             if (!noConnect) {
-                fprintf(stderr, "Connection socket to host %s, port %hu\n", host, port);
+                fprintf(stderr, "Connection socket to host %s, port %hu\n", dataAddr.c_str(), dataPort);
                 int err = connect(clientSockets[i], (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
                 if (err < 0) {
                     if (debug) perror("Error connecting UDP socket:");
@@ -966,19 +967,16 @@ int main(int argc, char **argv) {
                 bytesToWriteAtOnce, byteRate, buffersAtOnce, microSecItShouldTake);
     }
 
-    uint64_t startTimeNanos = 0UL;
 
-    if (setByteRate || setBufRate || sendSync) {
-        // Start the clock
-        clock_gettime(CLOCK_MONOTONIC, &t1);
+    // Start the clock
+    clock_gettime(CLOCK_MONOTONIC, &t1);
 
-        // Let's try some C++ to do the rate calculation and sending of time in sync message
-        // Get the starting time point
-        auto startT = std::chrono::high_resolution_clock::now();
-        // Convert the time point to nanoseconds since the epoch
-        auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(startT.time_since_epoch()).count();
-        startTimeNanos = static_cast<uint64_t>(nano);
-    }
+    // Let's try some C++ to do the rate calculation and sending of time in sync message
+    // Get the starting time point
+    auto startT = std::chrono::high_resolution_clock::now();
+    // Convert the time point to nanoseconds since the epoch
+    auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(startT.time_since_epoch()).count();
+    uint64_t startTimeNanos = static_cast<uint64_t>(nano);
 
     uint32_t evtRate;
     uint64_t byteCounterPerSock = 0;
@@ -1024,12 +1022,12 @@ int main(int argc, char **argv) {
         }
 
         if (noConnect) {
-            if (useIPv6) {
+            if (useIPv6Data) {
                 err = sendPacketizedBufferSendNew(buf, bufSize, maxUdpPayload,
                                                   clientSockets[portIndex],
                                                   tick, protocol, entropy, version, dataId,
                                                   (uint32_t) bufSize, &offset,
-                                                  packetDelay, delayPrescale, &delayCounter,
+                                                  0, 1, &delayCounter,
                                                   firstBuffer, lastBuffer, debug,
                                                   direct, noConnect,
                                                   &packetsSent, 0,
@@ -1040,7 +1038,7 @@ int main(int argc, char **argv) {
                                                   clientSockets[portIndex],
                                                   tick, protocol, entropy, version, dataId,
                                                   (uint32_t) bufSize, &offset,
-                                                  packetDelay, delayPrescale, &delayCounter,
+                                                  0, 1, &delayCounter,
                                                   firstBuffer, lastBuffer, debug,
                                                   direct, noConnect,
                                                   &packetsSent, 0,
@@ -1052,7 +1050,7 @@ int main(int argc, char **argv) {
                                               clientSockets[portIndex],
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) bufSize, &offset,
-                                              packetDelay, delayPrescale, &delayCounter,
+                                              0, 1, &delayCounter,
                                               firstBuffer, lastBuffer, debug, direct, &packetsSent);
         }
         if (err < 0) {
@@ -1068,34 +1066,39 @@ int main(int argc, char **argv) {
         offset = 0;
         tick += tickPrescale;
 
-        if (sendSync) {
-            // Get the current time point
-            auto endT = std::chrono::high_resolution_clock::now();
-            // Convert the time point to nanoseconds since the epoch
-            auto tEnd = std::chrono::duration_cast<std::chrono::nanoseconds>(endT.time_since_epoch()).count();
-            uint64_t currentTimeNanos = static_cast<uint64_t>(tEnd);
 
-            // Calculate the time difference in nanoseconds
-            auto timeDiff = currentTimeNanos - startTimeNanos;
+        //---------------------------------------
+        // send the sync
+        //---------------------------------------
 
-            // if >= 1 sec ...
-            if (timeDiff >= 1000000000UL) {
-                // Calculate buf or event rate in Hz
-                evtRate = bufsSent/(timeDiff/1000000000UL);
+        // Get the current time point
+        auto endT = std::chrono::high_resolution_clock::now();
+        // Convert the time point to nanoseconds since the epoch
+        auto tEnd = std::chrono::duration_cast<std::chrono::nanoseconds>(endT.time_since_epoch()).count();
+        uint64_t currentTimeNanos = static_cast<uint64_t>(tEnd);
 
-                // Send sync message to same destination
-if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
-                setSyncData(syncBuf, version, dataId, tick, evtRate, currentTimeNanos);
-                err = (int)send(clientSockets[portIndex], syncBuf, 28, 0);
-                if (err == -1) {
-                    fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
-                    return (-1);
-                }
+        // Calculate the time difference in nanoseconds
+        auto timeDiff = currentTimeNanos - startTimeNanos;
 
-                startTimeNanos = currentTimeNanos;
-                bufsSent = 0;
+        // if >= 1 sec ...
+        if (timeDiff >= 1000000000UL) {
+            // Calculate buf or event rate in Hz
+            evtRate = bufsSent/(timeDiff/1000000000UL);
+
+            // Send sync message to same destination
+            if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
+            setSyncData(syncBuf, version, dataId, tick, evtRate, currentTimeNanos);
+            err = (int)send(clientSockets[portIndex], syncBuf, 28, 0);
+            if (err == -1) {
+                fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
+                return (-1);
             }
+
+            startTimeNanos = currentTimeNanos;
+            bufsSent = 0;
         }
+        //---------------------------------------
+
 
         // Switching sockets for each buffer, if the buffer is relatively small,
         // causes performance problems on the receiving end. So, to mitigate that,
@@ -1108,9 +1111,9 @@ if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRat
         }
 
         // delay if any
-        if (bufDelay) {
+        if (delay) {
             if (--delayCounter < 1) {
-                std::this_thread::sleep_for(std::chrono::microseconds(bufferDelay));
+                std::this_thread::sleep_for(std::chrono::microseconds(delay));
                 delayCounter = delayPrescale;
             }
         }
