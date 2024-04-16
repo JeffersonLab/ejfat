@@ -94,12 +94,27 @@ mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 
+# Michael's old files used with static LB, now obsolete, not compiled by default
 set(EMU_EXEC_FILES
         emulation/lb_emu.cc
         emulation/lb_rcv.cc
         emulation/lb_rcv-roc.cc
         emulation/pktzr_md.cc
         emulation/lb_send.cc
+        )
+
+# Carl's old files used with static LB, now obsolete, not compiled by default
+set(STATIC_EXEC_FILES
+        staticLB/udp_rcv_order.cc
+        staticLB/udp_send_order.cc
+        staticLB/packetAnalyzer.cc
+        staticLB/packetBlastee.cc
+        staticLB/packetBlasterSmall.cc
+        )
+
+# Executables with no dependencies
+set(NODEP_EXEC_FILES
+        simulation/packetBlaster.cc
         )
 
 set(GRPC_EXEC_FILES
@@ -112,10 +127,12 @@ set(GRPC_SRC_FILES
         simulation/EtFifoEntryItem.cpp
         )
 
+# ET system dependency only
 set(ET_EXEC_FILES
         simulation/ersap_et_consumer.cc
         )
 
+# Utility files all using Disruptor, fast ring-buffer based object supplies
 set(UTIL_FILES
         util/ByteOrder.cpp
         util/ByteBuffer.cpp
@@ -129,26 +146,18 @@ set(UTIL_FILES
         util/PacketRefItem.cpp
         )
 
-set(STATIC_EXEC_FILES
-        staticLB/udp_rcv_order.cc
-        staticLB/udp_send_order.cc
-        staticLB/packetAnalyzer.cc
-        staticLB/packetBlastee.cc
-        staticLB/packetBlasterSmall.cc
-        )
-
-set(SIM_EXEC_FILES
-        simulation/packetBlaster.cc
-        )
 
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
         )
 
+# List of all test files
 set(TEST_FILES
         )
 
+# List of all header files
 set(CPP_HEADER_FILES
+        simulation/ejfat.hpp
         simulation/ejfat_packetize.hpp
         simulation/ejfat_assemble_ersap.hpp
         simulation/EtFifoEntryItem.h
@@ -168,9 +177,50 @@ set(CPP_HEADER_FILES
         )
 
 
-# Files using Disruptor code also need util files, so keep them separate from other executables,
-# ie don't include DIS_EXEC_FILES here
-set(EXEC_FILES ${EMU_EXEC_FILES} ${SIM_EXEC_FILES} ${STATIC_EXEC_FILES})
+# List the files with no dependencies, made by default
+set(EXEC_FILES ${NODEP_EXEC_FILES})
+
+
+# OLD code build is optional, set it to OFF by default
+option(BUILD_OLD "Build old static-LB code" OFF)
+
+if (BUILD_OLD)
+    list(APPEND EXEC_FILES ${EMU_EXEC_FILES} ${STATIC_EXEC_FILES})
+endif()
+
+
+
+# Simple API build is optional and set it to OFF by default.
+option(BUILD_SIMPLE "Build simple api library and executables" OFF)
+
+if (BUILD_SIMPLE)
+    # Need boost libs for disruptor
+    find_package(Boost REQUIRED system thread chrono)
+
+    if (Boost_FOUND)
+        message(STATUS "Boost Found: libs = " ${Boost_LIBRARIES} ", include dirs = " ${Boost_INCLUDE_DIRS})
+        link_directories(${Boost_LIBRARY_DIRS})
+    else()
+        message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
+    endif()
+
+    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
+    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{GRPC_INSTALL_DIR}))
+        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or GRPC_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
+    endif()
+
+    find_package(GRPC)
+    if (NOT GRPC_FOUND)
+        message(STATUS "GRPC cannot be found, compile without it")
+    else()
+        message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
+    endif()
+
+
+    add_subdirectory(simpleAPI)
+endif()
+
+
 
 # Disruptor build is optional and set it to OFF by default
 option(BUILD_DIS "Build Disruptor-related code" OFF)
@@ -254,36 +304,6 @@ if (BUILD_ERSAP)
     add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
 endif()
 
-
-# Simple API build is optional and set it to OFF by default.
-option(BUILD_SIMPLE "Build simple api library" OFF)
-
-if (BUILD_SIMPLE)
-    # Need boost libs for disruptor
-    find_package(Boost REQUIRED system thread chrono)
-
-    if (Boost_FOUND)
-        message(STATUS "Boost Found: libs = " ${Boost_LIBRARIES} ", include dirs = " ${Boost_INCLUDE_DIRS})
-        link_directories(${Boost_LIBRARY_DIRS})
-    else()
-        message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
-    endif()
-
-    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
-    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{GRPC_INSTALL_DIR}))
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or GRPC_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
-    endif()
-
-    find_package(GRPC)
-    if (NOT GRPC_FOUND)
-        message(STATUS "GRPC cannot be found, compile without it")
-    else()
-        message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
-    endif()
-
-
-    add_subdirectory(simpleAPI)
-endif()
 
 
 # CLAS12 source build is optional and set it to OFF by default
