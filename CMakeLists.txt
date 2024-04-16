@@ -110,6 +110,7 @@ set(STATIC_EXEC_FILES
         staticLB/packetAnalyzer.cc
         staticLB/packetBlastee.cc
         staticLB/packetBlasterSmall.cc
+        staticLB/packetBlasterOld.cc
         )
 
 # Executables with no dependencies
