@@ -83,6 +83,7 @@
 #include "ByteBuffer.h"
 #include "ByteOrder.h"
 
+#include "ejfat.hpp"
 #include "ejfat_assemble_ersap.hpp"
 
 // GRPC stuff
@@ -144,26 +145,22 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
 
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <starting listening UDP port (increment for each source, 17750 default)>]",
+            "        [-addr <data receiving address to register w/ CP>]\n",
+
             "        [-b <internal buffer byte size, 100kB default>]",
             "        [-r <UDP receive buffer byte size, system default>]\n",
 
-            "        [-addr  <data receiving address to register w/ CP>]",
-            "        [-token <authentication token (for CP registration, default token_<time>)>]",
-            "        [-range <data receiving port range, entropy of sender, default 0>]",
-            "        [-gaddr <CP IP address (default = none & no CP comm)>]",
-            "        [-gport <CP port (default 18347)>]",
-            "        [-gname <name of this backend (default backend_<time>)>]\n",
+            "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
+            "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
 
-            "        [-f <file for stats>]",
             "        [-dump (no thd to get & merge buffers)]",
             "        [-lump (1 thd to get & merge buffers from all sources)]",
-            "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]\n",
 
             "        [-pinRead <starting core # for read thds>]",
@@ -171,8 +168,9 @@ static void printHelp(char *programName) {
             "        [-pinBuf <starting core #, 1 for each buf collection thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
-    fprintf(stderr, "        If connecting to a CP by specifying -gaddr,\n");
-    fprintf(stderr, "        this client only reports 0%% fill and ready for data.\n\n");
+    fprintf(stderr, "        Must connect to a CP. This can be done by specifying either -uri or -file.\n");
+    fprintf(stderr, "        If neither specified, default is to find connection info in /tmp/ejat_uri.\n");
+    fprintf(stderr, "        This client only reports 0%% fill and ready for data.\n\n");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
     fprintf(stderr, "        It can receive from multiple data sources simultaneously.\n\n");
@@ -195,32 +193,28 @@ static void printHelp(char *programName) {
  * @param core          starting core id on which to run pkt reading thread.
  * @param coreCnt       number of cores on which to run pkt reading thread.
  * @param coreBuf       starting core id on which to run buf assembly threads.
- * @param sourceIds     array of incoming source ids.
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
- * @param keepStats     keep and printout stats.
  * @param dump          don't have a thd which gets all buffers (for possible merging).
  * @param noRestart     exit program if sender restarts.
  * @param jointStats    display stats of all sources joined together.
  * @param listenAddr    IP address to listen on.
- * @param filename      name of file in which to write stats.
  * @param dataAddr      IP address to send to CP as data destination addr for this program.
- * @param cpAddr        control plane IP address.
- * @param cpToken       foken string used into connecting to CP.
- * @param beName        name of this backend CP client.
- * @param cpPort        main control plane port.
- * @param range         range of ports in powers of 2 (entropy) for CP connection.
- */
+ * @param uri           URI containing LB/CP connection info.
+ * @param file          name of file in which to read URI.
+ * @param ids           vector to be filled with data source id numbers.
+*/
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *core, int *coreCnt, int *coreBuf, int *sourceIds,
+                      int *core, int *coreCnt, int *coreBuf,
                       uint16_t* port,
-                      bool *debug, bool *useIPv6, bool *keepStats,
-                      bool *dump, bool *lump, bool *noRestart, bool *jointStats,
-                      char *listenAddr, char *filename,
-                      char *dataAddr, char *cpAddr, char *cpToken, char *beName,
-                      uint16_t* cpPort, int *range) {
+                      bool *debug, bool *useIPv6,
+                      bool *dump, bool *lump,
+                      bool *noRestart, bool *jointStats,
+                      char *listenAddr, char *dataAddr,
+                      char *uri, char *file,
+                      std::vector<int>& ids) {
 
     int c, i_tmp;
     bool help = false;
@@ -232,7 +226,7 @@ static void parseArgs(int argc, char **argv,
                           {"pinRead",     1, nullptr, 3},
                           {"pinBuf",      1, nullptr, 4},
                           {"ids",         1, nullptr, 5},
-                          {"stats",       0, nullptr, 6},
+
                           {"dump",        0, nullptr, 7},
                           {"lump",        0, nullptr, 8},
                           {"pinCnt",      1, nullptr, 9},
@@ -242,16 +236,13 @@ static void parseArgs(int argc, char **argv,
                             // Control Plane
 
                           {"addr",        1, nullptr, 12},
-                          {"gaddr",       1, nullptr, 13},
-                          {"gport",       1, nullptr, 14},
-                          {"gname",       1, nullptr, 15},
-                          {"token",       1, nullptr, 16},
-                          {"range",       1, nullptr, 17},
+                          {"uri",         1, nullptr, 13},
+                          {"file",        1, nullptr, 14},
                           {0,       0, 0,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -303,16 +294,6 @@ static void parseArgs(int argc, char **argv,
                 strcpy(listenAddr, optarg);
                 break;
 
-            case 'f':
-                // output stat file
-                if (strlen(optarg) > 100 || strlen(optarg) < 1) {
-                    fprintf(stderr, "Output file name too long/short, %s\n", optarg);
-                    exit(-1);
-                }
-                strcpy(filename, optarg);
-                *keepStats = true;
-                break;
-
             case 1:
                 // Tick prescale
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -343,19 +324,6 @@ static void parseArgs(int argc, char **argv,
 
                 break;
 
-            case 9:
-                // NUmber of cores to run on for packet reading thd
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 1) {
-                    *coreCnt = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -pinCnt, need # of read cores (min 1)\n");
-                    exit(-1);
-                }
-
-                break;
-
             case 4:
                 // Cores to run on for buf assembly thds
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -376,54 +344,35 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
 
-
                 {
-                    // split into ints
+                    ids.clear();
                     std::string s = optarg;
-                    std::string delimiter = ",";
-
-                    size_t pos = 0;
+                    std::stringstream ss(s);
                     std::string token;
-                    char *endptr;
-                    int index = 0;
-                    bool oneMore = true;
 
-                    while ((pos = s.find(delimiter)) != std::string::npos) {
-                        //fprintf(stderr, "pos = %llu\n", pos);
-                        token = s.substr(0, pos);
-                        errno = 0;
-                        sourceIds[index] = (int) strtol(token.c_str(), &endptr, 0);
-
-                        if ((token.c_str() - endptr) == 0) {
-                            //fprintf(stderr, "two commas next to eachother\n");
-                            oneMore = false;
-                            break;
+                    while (std::getline(ss, token, ',')) {
+                        try {
+                            int value = std::stoi(token);
+                            ids.push_back(value);
                         }
-                        index++;
-                        //std::cout << token << std::endl;
-                        s.erase(0, pos + delimiter.length());
-                        if (s.length() == 0) {
-                            //fprintf(stderr, "break on zero len string\n");
-                            oneMore = false;
-                            break;
-                        }
-                    }
-
-                    if (oneMore) {
-                        errno = 0;
-                        sourceIds[index] = (int) strtol(s.c_str(), nullptr, 0);
-                        if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ids\n");
+                        catch (const std::exception& e) {
+                            fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ints\n");
                             exit(-1);
                         }
-                        index++;
-                        //std::cout << s << std::endl;
                     }
+                }
 
-                    if (index > MAX_SOURCES) {
-                        fprintf(stderr, "Too many sources specified in -ids, max %d\n", MAX_SOURCES);
-                        exit(-1);
-                    }
+                break;
+
+            case 9:
+                // NUmber of cores to run on for packet reading thd
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1) {
+                    *coreCnt = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -pinCnt, need # of read cores (min 1)\n");
+                    exit(-1);
                 }
 
                 break;
@@ -439,65 +388,21 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 13:
-                // control plane IP ADDRESS
-                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "grpc server IP address is bad\n\n");
-                    printHelp(argv[0]);
+                // URI
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -uri, uri name is too long\n");
                     exit(-1);
                 }
-                strcpy(cpAddr, optarg);
+                strcpy(uri, optarg);
                 break;
-
 
             case 14:
-                // control plane PORT
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
-                    *cpPort = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
+                // FILE NAME
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -file, file name is too long\n");
                     exit(-1);
                 }
-                break;
-
-            case 15:
-                // this client name to control plane
-                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
-                    fprintf(stderr, "backend client name too long/short, %s\n\n", optarg);
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(beName, optarg);
-                break;
-
-            case 16:
-                // backend authentication token with control plane
-                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
-                    fprintf(stderr, "authentication token length must be > 1 and < 33\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(cpToken, optarg);
-                break;
-
-            case 17:
-                // LB port range
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 0 && i_tmp <= 14) {
-                    *range = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -range, 0 <= port <= 14\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
-            case 6:
-                // Keep stats
-                *keepStats = true;
+                strcpy(file, optarg);
                 break;
 
             case 7:
@@ -561,7 +466,8 @@ static volatile struct timespec restartTime;
 typedef struct threadStruct_t {
     bool jointStats;
     int  sourceCount;
-    int  sourceIds[MAX_SOURCES];
+    std::vector<int> sourceIds;
+
     // key = source id, val = stats for src
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
     char filename[101];
@@ -578,8 +484,7 @@ static void *rateThread(void *arg) {
     threadStruct *targ = static_cast<threadStruct *>(arg);
     bool jointStats = targ->jointStats;
     int sourceCount = targ->sourceCount;
-    int sourceIds[MAX_SOURCES];
-    memcpy(sourceIds, targ->sourceIds, sizeof(sourceIds));
+    std::vector<int> sourceIds = targ->sourceIds;
 
     // key = source id, val = stats
     // std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
@@ -2239,55 +2144,49 @@ int main(int argc, char **argv) {
     int startingCore = -1;
     int coreCount = 1;
     int startingBufCore = -1;
-    int sourceIds[MAX_SOURCES];
-    int sourceCount = 0;
 
-    bool debug = false;
-    bool useIPv6 = false;
-    bool keepStats = false;
-    bool pinCores = false;
+    std::vector<int> ids;
+
+    bool debug       = false;
+    bool useIPv6     = false;
+    bool pinCores    = false;
     bool pinBufCores = false;
-    bool dumpBufs = false;
-    bool lumpBufs = false;
-    bool noRestart = false;
-    bool jointStats = false;
+    bool dumpBufs    = false;
+    bool lumpBufs    = false;
+    bool noRestart   = false;
+    bool jointStats  = false;
 
     // CP stuff
     int portRange = 0; // translates to PORT_RANGE_1 in proto enum
-    uint16_t cpPort = 18347;
 
     char dataAddr[16];
     memset(dataAddr, 0, 16);
 
-    char cpAddr[16];
-    memset(cpAddr, 0, 16);
+    char uri[256];
+    memset(uri, 0, 256);
 
-    char beName[33];
-    memset(beName, 0, 33);
+    char fileName[256];
+    memset(fileName, 0, 256);
 
-    char cpToken[33];
-    memset(cpToken, 0, 33);
+    char beName[256];
+    memset(beName, 0, 256);
+
     //----------------------
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
-    char filename[101];
-    memset(filename, 0, 101);
 
-    for (int i = 0; i < MAX_SOURCES; i++) {
-        sourceIds[i] = -1;
-    }
 
     parseArgs(argc, argv, &bufSize, &recvBufSize,
               &tickPrescale, &startingCore, &coreCount,
-              &startingBufCore, sourceIds,
+              &startingBufCore,
               &startingPort, &debug, &useIPv6,
-              &keepStats, &dumpBufs, &lumpBufs,
+              &dumpBufs, &lumpBufs,
               &noRestart, &jointStats,
-              listeningAddr, filename,
-              dataAddr, cpAddr, cpToken, beName, &cpPort, &portRange);
+              listeningAddr, dataAddr,
+              uri, fileName, ids);
 
-    pinCores = startingCore >= 0;
+    pinCores    = startingCore >= 0;
     pinBufCores = startingBufCore >= 0;
 
 #ifdef __linux__
@@ -2314,31 +2213,76 @@ int main(int argc, char **argv) {
 
 #endif
 
-
-    for (int i = 0; i < MAX_SOURCES; i++) {
-        if (sourceIds[i] > -1) {
-            sourceCount++;
-            std::cerr << "Expecting source " << sourceIds[i] << " in position " << i << std::endl;
-        }
-        else {
-            break;
-        }
-    }
+    int sourceCount = ids.size();
 
     if (sourceCount < 1) {
-        sourceIds[0] = 1;
+        ids.push_back(0);
         sourceCount = 1;
-        std::cerr << "Defaulting to (single) source id = 1" << std::endl;
+        std::cerr << "Defaulting to (single) source id = 0" << std::endl;
     }
 
-    //---------------------------------------------------
-    // Map to convert from data source id to the index in our local array of source ids
-    //---------------------------------------------------
-    std::unordered_map<int, int> srcMap;
-    for (int i=0; i < sourceCount; i++) {
-        srcMap[sourceIds[i]] = i;
-        //fprintf(stderr, "mainThd: srcMap[%d] = %d\n", sourceIds[i], i);
+
+    //----------------------------------------------
+    // Parse the URI (directly given or in file().
+    // This gives CP connection info.
+    //----------------------------------------------
+
+    // Set default file name
+    if (strlen(fileName) < 1) {
+        strcpy(fileName, "/tmp/ejfat_uri");
     }
+
+    ejfatURI uriInfo;
+    bool haveEverything = false;
+
+    // First see if the uri arg is defined, if so, parse it
+    if (strlen(uri) > 0) {
+        bool parsed = parseURI(uri, uriInfo);
+        if (parsed) {
+            // URI is in correct format
+            if (!uriInfo.haveInstanceToken) {
+                std::cerr << "no LB/CP info in URI" << std::endl;
+            }
+            else {
+                haveEverything = true;
+            }
+        }
+    }
+
+    // If no luck with URI, look into file
+    if (!haveEverything && strlen(fileName) > 0) {
+
+        std::ifstream file(fileName);
+        if (file.is_open()) {
+            std::string uriLine;
+            if (std::getline(file, uriLine)) {
+                bool parsed = parseURI(uriLine, uriInfo);
+                if (parsed) {
+                    if (!uriInfo.haveInstanceToken) {
+                        std::cerr << "no LB/CP info in file" << std::endl;
+                        file.close();
+                        return 1;
+                    }
+                }
+            }
+
+            file.close();
+        }
+    }
+
+    std::string cpAddr = uriInfo.cpAddrV4;
+    uint16_t cpPort    = uriInfo.cpPort;
+    std::string lbId   = uriInfo.lbId;
+    std::string instanceToken = uriInfo.instanceToken;
+
+    //printUri(std::cerr, uriInfo);
+
+    // Need to give this back end a name (no, not "horse's"),
+    // base part of it on least significant 6 digits of current time in microsec
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int time = now.tv_nsec/1000L;
+    sprintf(beName, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
 
 
 #ifdef __APPLE__
@@ -2354,17 +2298,14 @@ int main(int argc, char **argv) {
 
     // Have one stats object for each reassembly thread and one for the UDP reading thread
     std::shared_ptr<packetRecvStats> buildStats[sourceCount];
-    // key = source id, val = stats
-    std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> allBuildStats = nullptr;
 
-    if (keepStats) {
-        allBuildStats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
+    // Store each in a map, key = source id, val = stats
+    auto allBuildStats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
 
-        for (int i = 0; i < sourceCount; i++) {
-            buildStats[i] = std::make_shared<packetRecvStats>();
-            clearStats(buildStats[i]);
-            allBuildStats->insert({sourceIds[i], buildStats[i]});
-        }
+    for (int i = 0; i < sourceCount; i++) {
+        buildStats[i] = std::make_shared<packetRecvStats>();
+        clearStats(buildStats[i]);
+        allBuildStats->insert({ids[i], buildStats[i]});
     }
 
 
@@ -2384,9 +2325,8 @@ int main(int argc, char **argv) {
     // If there are multiple sources, this can be divided amongst them.
     int ringSize = 256;
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
-//    // Map of buffer supplies. Each map --> key = src id, value = supply.
-//    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
-    // array of buffer supplies
+
+    // Array of buffer supplies
     std::shared_ptr<Supplier<BufferItem>> supplyMaps[sourceCount];
     for (int i=0; i < sourceCount; i++) {
         supplyMaps[i] = std::make_shared<Supplier<BufferItem>>(ringSize, false);
@@ -2406,9 +2346,9 @@ int main(int argc, char **argv) {
         arg->stats = buildStats[i];
         arg->dump  = dumpBufs;
         arg->debug = debug;
-        arg->sourceCount = sourceCount;
+        arg->sourceCount   = sourceCount;
         arg->pktConsumerId = i;
-        arg->sourceId = sourceIds[i];
+        arg->sourceId = ids[i];
 
         arg->port = startingPort;
         arg->useIPv6 = useIPv6;
@@ -2446,7 +2386,7 @@ int main(int argc, char **argv) {
             targ->supplyMap = supplyMaps[i];
             targ->noRestart = noRestart;
             targ->debug = debug;
-            targ->sourceId = sourceIds[i];
+            targ->sourceId = ids[i];
             if (pinBufCores) {
                 targ->core = startingBufCore + i;
             }
@@ -2466,95 +2406,64 @@ int main(int argc, char **argv) {
     //---------------------------------------------------
     // Start thread to do rate printout
     //---------------------------------------------------
-    if (keepStats) {
-        threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
-        if (targ == nullptr) {
-            fprintf(stderr, "out of mem\n");
+    threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
+    if (targ == nullptr) {
+        fprintf(stderr, "out of mem\n");
 
-            return -1;
-        }
-
-        targ->jointStats  = jointStats;
-        targ->sourceCount = sourceCount;
-        targ->stats = allBuildStats;
-        memcpy(targ->sourceIds, sourceIds, sizeof(sourceIds));
-
-        pthread_t thd2;
-        status = pthread_create(&thd2, NULL, rateThread, (void *) targ);
-        if (status != 0) {
-            fprintf(stderr, "\n ******* error creating thread\n\n");
-            return -1;
-        }
+        return -1;
     }
 
+    targ->jointStats  = jointStats;
+    targ->sourceCount = sourceCount;
+    targ->stats       = allBuildStats;
+    targ->sourceIds   = ids;
 
-    // If using control plane, fake things since there is no internal fifo ...
-    if (std::strlen(cpAddr) > 0) {
-        // Convert integer range in PortRange enum
-        // Set port range according to sourceCount
-        switch (sourceCount) {
-            case 1:
-                portRange = 0;
-                break;
-            case 2:
-                portRange = 1;
-                break;
-            case 3:
-            case 4:
-                portRange = 2;
-                break;
-            case 5:
-            case 6:
-            case 7:
-            case 8:
-                portRange = 3;
-                break;
-            default:
-                // up to 16 inputs
-                portRange = 4;
-                break;
-        }
+    pthread_t thd2;
+    status = pthread_create(&thd2, NULL, rateThread, (void *) targ);
+    if (status != 0) {
+        fprintf(stderr, "\n ******* error creating thread\n\n");
+        return -1;
+    }
 
-        auto range = PortRange(portRange);
-        float setPoint = 0.F;
-        float fillPercent = 0.F;
-        float pidError = 0.F;
-        int eventSize = bufSize, numEvents = 1024;
+    //--------------------------------------------------------
 
-        LbControlPlaneClient client(cpAddr, cpPort,
-                                    dataAddr, startingPort, range,
-                                    beName, cpToken,
-                                    eventSize, numEvents, setPoint);
+    // Fake things since there is no internal fifo ...
 
-        // Register this client with the grpc server &
-        // wait for server to send session token in return.
-        // Token stored internally in client.
-        int32_t err = client.Register();
+    int portRangeValue = getPortRange(sourceCount);
+    auto range = PortRange(portRangeValue);
+    if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
+
+    float setPoint = 0.F;
+    float fillPercent = 0.F;
+    float pidError = 0.F;
+    float weight = 1.F;
+
+    LbControlPlaneClient client(cpAddr, cpPort,
+                                dataAddr, startingPort, range,
+                                beName, instanceToken,
+                                lbId, weight);
+
+    // Register this client with the grpc server
+    int32_t err = client.Register();
+    if (err == 1) {
+        printf("GRPC client %s communication error with server when registering, exit\n", beName);
+        exit(1);
+    }
+
+    printf("GRPC client %s registered!\n", beName);
+
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        // Update the changing variables
+        client.update(fillPercent, pidError);
+
+        // Send to server
+        err = client.SendState();
         if (err == 1) {
-            printf("GRPC client %s communication error with server when registering, exit\n", beName);
+            printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
             exit(1);
-        }
-
-        printf("GRPC client %s registered!\n", beName);
-
-
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-
-            // Update the changing variables
-            client.update(fillPercent, pidError);
-
-            // Send to server
-            err = client.SendState();
-            if (err == 1) {
-                printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
-                exit(1);
-            }
-        }
-    }
-    else {
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(7777));
         }
     }
 

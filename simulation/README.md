@@ -132,77 +132,9 @@ version before one sees dropped packets.
 
 
 
-#### packetBlasteeEtFifoClient.cc
-
-This data receiver reads UDP packets from clasBlaster.cc (a single event source),
-reassembles it, then
-places it into an ET system which is configured to be used as a FIFO.
-It also connects and reports telemetry to the LB's control plane.
-One thread monitors the ET system and reports the fifo level along with PID error signal.
-The reading thread runs on a command-line-settable # of cores.
-Because it uses a routine from ejfat_assemble_ersap.hpp to reassemble,
-it only accommodates out-of-order packets if they don't cross event boundaries.
-Duplicate packets will mess things up.
-
-This program does <b>not</b> use the sophisticated handling of out-of-order and
-duplicate packets that packetBlasteeFullNewMP uses. Like packetBlasteeFastMP,
-it only calls getCompletePacketizedBuffer(), but I believe that's an advantage
-since it's much faster reassembly code.
-
-**Dependencies:**
- 1) the **ejfat_grpc** lib to talk to the CP.
-    This, in turn, depends on the **protobuf** and multiple **grpc** libraries.
-  
- 2) the **et** lib
-  
-
-
-#### packetBlastee.cc
-
-The originial and most basic data receiver with one thread for stats and a settable number
-of threads for the reading and reassembling of events.
-
-Because it uses a routine from ejfat_assemble_ersap.hpp to reassemble,
-it only accommodates out-of-order packets if they don't cross event boundaries.
-Duplicate packets will mess things up. **Does NOT speak grpc and thus is useful
-only with a statically configured CP.**
-
-**Dependencies:** None
-
-
-
-#### packetAnalyzer.cc
-
-This program accepts packets and prints out both the LB and RE headers.
-Used only to debug header issues. Sender need to send directly to this
-program and thus it is **not** for use with an LB.
-
-**Dependencies:** None
-
-
-
 #### packetBlaster.cc
 
 General program used to send data to the various receiving programs. Lots of cmd line options.
-
-**Dependencies:** None
-
-
-
-#### udp_send_order.cc
-
-Send a file, which is either read or piped-in, to udp_rcv_order.cc
-
-**Dependencies:** None
-
-
-
-#### udp_rcv_order.cc
-
-Receive the file sent to it by udp_send_order.cc and reconstruct it.
-Most of the work is done in ejfat_packetize.hpp and ejfat_assemble_ersap.hpp.
-**Does NOT speak grpc and thus is useful
-  only with a statically configured CP.** 
 
 **Dependencies:** None
 

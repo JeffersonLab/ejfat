@@ -32,33 +32,23 @@
  * There is also a thread to calculate and print rates.
  * </p>
  * <p>
- * Each reassembly thread accounts for out-of-order and duplicate packets.
- * It will only hold a limited number of partially constructed events in an effort to wait for
- * straggling packets with the oldest events eventually being discarded.
- * There is a 2-tiered solution for this problem.
- * The solution is to set a small "hold" time defined in FAST_STORE_MICROSEC as 2000 in order
- * to handle high event input rates. Also, the max size of the holding map is limited
- * by FAST_MAP_MAX to allow for fast searches.
- * Once this fast hold time or map size is exceeded, the partial event is copied and stored in
- * the "slow" map. The max # of items in the slow map and the max time to store it are
- * given by SLOW_MAP_MAX and SLOW_STORE_MILLISEC. If size is exceeded, the oldest item
- * is deleted to make room. Anything stored over the time limit is deleted.
+ * This program is like packetBlasteeFullNewMP.cc but with 2 improvements:<br>
+ *   1) Like packetBlasterFullNewMP, it reads data in by means of N thds
+ *   for each source which also reassembles. However, unlike that program,
+ *   it doesn't use the complicated algorithm for dealing with every out-of-order
+ *   and duplicate packet. It turns out that doing so uses so much compute time
+ *   that at high input rates, it drops many more packets than the simple approach.
+ *   That simple approach is just to call a function which returns the next
+ *   buildable buffer. It only accounts for out-of-order within the boundaries of a
+ *   single event.<br>
+ *
+ *   2) As part of keeping stats, it measures the latency of an event -
+ *   that is the average time to reassemble in nanoseconds. Clock starts when the
+ *   first packet of an event arrives and ends when the calling thread gets the full
+ *   event. This number will only make sense if all incoming events are the same size.
  * </p>
  * <p>
  * Use packetBlaster.cc to produce events.
- * On an EFJAT node, to produce events at roughly 3 GB/s, use arg "-cores 60" where 60 can just as
- * easily be 0-63. To produce at roughly 3.4 GB/s, use cores 64-79, 88-127.
- * To produce at 4.7 GB/s, use cores 80-87. (Notices cores # start at 0).
- *
- * On an EJFAT node, this receiver will be able to receive data on a single thread of over
- * 3.3 GB/s dropping about 0.03%. It can receive at
- * 3.4 GB/s with dropping about 0.2% with 3 cores, but can't seem to be pushed beyond that.
- * To receive at high rates, the args "-pinRead 80 -pinCnt 2" must be used to specify the fastest
- * network cores for packet-reading-reassembling threads.
- * There needs to be 2 or 3 cores/thd to distribute the work, 2 is fine except when pushing the limit
- * in which case 3 helps a little.
- * Cores 80-87 have fastest access to the NIC.
- * Also, the main core needs to be pinned to the same chip to get least drops.
  * </p>
  */
 
@@ -83,6 +73,7 @@
 #include "ByteBuffer.h"
 #include "ByteOrder.h"
 
+#include "ejfat.hpp"
 #include "ejfat_assemble_ersap.hpp"
 
 // GRPC stuff
@@ -144,26 +135,22 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
 
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
             "        [-p <starting listening UDP port (increment for each source, 17750 default)>]",
+            "        [-addr  <data receiving address to register w/ CP>]\n",
+
             "        [-b <internal buffer byte size, 100kB default>]",
             "        [-r <UDP receive buffer byte size, system default>]\n",
 
-            "        [-addr  <data receiving address to register w/ CP>]",
-            "        [-token <authentication token (for CP registration, default token_<time>)>]",
-            "        [-range <data receiving port range, entropy of sender, default 0>]",
-            "        [-gaddr <CP IP address (default = none & no CP comm)>]",
-            "        [-gport <CP port (default 18347)>]",
-            "        [-gname <name of this backend (default backend_<time>)>]\n",
+            "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
+            "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
 
-            "        [-f <file for stats>]",
             "        [-dump (no thd to get & merge buffers)]",
             "        [-lump (1 thd to get & merge buffers from all sources)]",
-            "        [-stats (keep stats)]",
             "        [-ids <comma-separated list of incoming source ids>]\n",
 
             "        [-pinRead <starting core # for read thds>]",
@@ -171,8 +158,9 @@ static void printHelp(char *programName) {
             "        [-pinBuf <starting core #, 1 for each buf collection thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]\n");
 
-    fprintf(stderr, "        If connecting to a CP by specifying -gaddr,\n");
-    fprintf(stderr, "        this client only reports 0%% fill and ready for data.\n\n");
+    fprintf(stderr, "        Must connect to a CP. This can be done by specifying either -uri or -file.\n");
+    fprintf(stderr, "        If neither specified, default is to find connection info in /tmp/ejat_uri.\n");
+    fprintf(stderr, "        This client only reports 0%% fill and ready for data.\n\n");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
     fprintf(stderr, "        It can receive from multiple data sources simultaneously.\n\n");
@@ -195,32 +183,28 @@ static void printHelp(char *programName) {
  * @param core          starting core id on which to run pkt reading thread.
  * @param coreCnt       number of cores on which to run pkt reading thread.
  * @param coreBuf       starting core id on which to run buf assembly threads.
- * @param sourceIds     array of incoming source ids.
  * @param port          filled with UDP port to listen on.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
- * @param keepStats     keep and printout stats.
  * @param dump          don't have a thd which gets all buffers (for possible merging).
  * @param noRestart     exit program if sender restarts.
  * @param jointStats    display stats of all sources joined together.
  * @param listenAddr    IP address to listen on.
  * @param filename      name of file in which to write stats.
  * @param dataAddr      IP address to send to CP as data destination addr for this program.
- * @param cpAddr        control plane IP address.
- * @param cpToken       foken string used into connecting to CP.
- * @param beName        name of this backend CP client.
- * @param cpPort        main control plane port.
- * @param range         range of ports in powers of 2 (entropy) for CP connection.
+ * @param uri           URI containing LB/CP connection info.
+ * @param file          name of file in which to read URI.
+ * @param ids           vector to be filled with data source id numbers.
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *core, int *coreCnt, int *coreBuf, int *sourceIds,
+                      int *core, int *coreCnt, int *coreBuf,
                       uint16_t* port,
-                      bool *debug, bool *useIPv6, bool *keepStats,
+                      bool *debug, bool *useIPv6,
                       bool *dump, bool *lump, bool *noRestart, bool *jointStats,
-                      char *listenAddr, char *filename,
-                      char *dataAddr, char *cpAddr, char *cpToken, char *beName,
-                      uint16_t* cpPort, int *range) {
+                      char *listenAddr, char *dataAddr,
+                      char *uri, char *file,
+                      std::vector<int>& ids) {
 
     int c, i_tmp;
     bool help = false;
@@ -232,27 +216,23 @@ static void parseArgs(int argc, char **argv,
                           {"pinRead",     1, nullptr, 3},
                           {"pinBuf",      1, nullptr, 4},
                           {"ids",         1, nullptr, 5},
-                          {"stats",       0, nullptr, 6},
+
                           {"dump",        0, nullptr, 7},
                           {"lump",        0, nullptr, 8},
                           {"pinCnt",      1, nullptr, 9},
                           {"norestart",   0, nullptr, 10},
                           {"jointstats",  0, nullptr, 11},
 
-                          // Control Plane
+                    // Control Plane
 
                           {"addr",        1, nullptr, 12},
-                          {"gaddr",       1, nullptr, 13},
-                          {"gport",       1, nullptr, 14},
-                          {"gname",       1, nullptr, 15},
-                          {"token",       1, nullptr, 16},
-                          {"range",       1, nullptr, 17},
-
+                          {"uri",         1, nullptr, 13},
+                          {"file",        1, nullptr, 14},
                           {0,       0, 0,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -304,16 +284,6 @@ static void parseArgs(int argc, char **argv,
                 strcpy(listenAddr, optarg);
                 break;
 
-            case 'f':
-                // output stat file
-                if (strlen(optarg) > 100 || strlen(optarg) < 1) {
-                    fprintf(stderr, "Output file name too long/short, %s\n", optarg);
-                    exit(-1);
-                }
-                strcpy(filename, optarg);
-                *keepStats = true;
-                break;
-
             case 1:
                 // Tick prescale
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -344,19 +314,6 @@ static void parseArgs(int argc, char **argv,
 
                 break;
 
-            case 9:
-                // NUmber of cores to run on for packet reading thd
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 1) {
-                    *coreCnt = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -pinCnt, need # of read cores (min 1)\n");
-                    exit(-1);
-                }
-
-                break;
-
             case 4:
                 // Cores to run on for buf assembly thds
                 i_tmp = (int) strtol(optarg, nullptr, 0);
@@ -377,54 +334,35 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
 
-
                 {
-                    // split into ints
+                    ids.clear();
                     std::string s = optarg;
-                    std::string delimiter = ",";
-
-                    size_t pos = 0;
+                    std::stringstream ss(s);
                     std::string token;
-                    char *endptr;
-                    int index = 0;
-                    bool oneMore = true;
 
-                    while ((pos = s.find(delimiter)) != std::string::npos) {
-                        //fprintf(stderr, "pos = %llu\n", pos);
-                        token = s.substr(0, pos);
-                        errno = 0;
-                        sourceIds[index] = (int) strtol(token.c_str(), &endptr, 0);
-
-                        if ((token.c_str() - endptr) == 0) {
-                            //fprintf(stderr, "two commas next to eachother\n");
-                            oneMore = false;
-                            break;
+                    while (std::getline(ss, token, ',')) {
+                        try {
+                            int value = std::stoi(token);
+                            ids.push_back(value);
                         }
-                        index++;
-                        //std::cout << token << std::endl;
-                        s.erase(0, pos + delimiter.length());
-                        if (s.length() == 0) {
-                            //fprintf(stderr, "break on zero len string\n");
-                            oneMore = false;
-                            break;
-                        }
-                    }
-
-                    if (oneMore) {
-                        errno = 0;
-                        sourceIds[index] = (int) strtol(s.c_str(), nullptr, 0);
-                        if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ids\n");
+                        catch (const std::exception& e) {
+                            fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ints\n");
                             exit(-1);
                         }
-                        index++;
-                        //std::cout << s << std::endl;
                     }
+                }
 
-                    if (index > MAX_SOURCES) {
-                        fprintf(stderr, "Too many sources specified in -ids, max %d\n", MAX_SOURCES);
-                        exit(-1);
-                    }
+                break;
+
+            case 9:
+                // NUmber of cores to run on for packet reading thd
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1) {
+                    *coreCnt = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -pinCnt, need # of read cores (min 1)\n");
+                    exit(-1);
                 }
 
                 break;
@@ -440,65 +378,21 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 13:
-                // control plane IP ADDRESS
-                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "grpc server IP address is bad\n\n");
-                    printHelp(argv[0]);
+                // URI
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -uri, uri name is too long\n");
                     exit(-1);
                 }
-                strcpy(cpAddr, optarg);
+                strcpy(uri, optarg);
                 break;
-
 
             case 14:
-                // control plane PORT
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
-                    *cpPort = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
+                // FILE NAME
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -file, file name is too long\n");
                     exit(-1);
                 }
-                break;
-
-            case 15:
-                // this client name to control plane
-                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
-                    fprintf(stderr, "backend client name too long/short, %s\n\n", optarg);
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(beName, optarg);
-                break;
-
-            case 16:
-                // backend authentication token with control plane
-                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
-                    fprintf(stderr, "authentication token length must be > 1 and < 33\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(cpToken, optarg);
-                break;
-
-            case 17:
-                // LB port range
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 0 && i_tmp <= 14) {
-                    *range = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -range, 0 <= port <= 14\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
-            case 6:
-                // Keep stats
-                *keepStats = true;
+                strcpy(file, optarg);
                 break;
 
             case 7:
@@ -546,14 +440,6 @@ static void parseArgs(int argc, char **argv,
         fprintf(stderr, "Only one of -dump or -lump may be specified\n");
         exit(-1);
     }
-
-    // If wanting to register with a control plane ...
-    if (std::strlen(cpAddr) > 0) {
-        if (std::strlen(dataAddr) < 1) {
-            fprintf(stderr, "If connecting to CP, must also specify -addr\n");
-            exit(-1);
-        }
-    }
 }
 
 
@@ -570,7 +456,8 @@ static volatile struct timespec restartTime;
 typedef struct threadStruct_t {
     bool jointStats;
     int  sourceCount;
-    int  sourceIds[MAX_SOURCES];
+    std::vector<int> sourceIds;
+
     // key = source id, val = stats for src
     std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
     char filename[101];
@@ -587,8 +474,7 @@ static void *rateThread(void *arg) {
     threadStruct *targ = static_cast<threadStruct *>(arg);
     bool jointStats = targ->jointStats;
     int sourceCount = targ->sourceCount;
-    int sourceIds[MAX_SOURCES];
-    memcpy(sourceIds, targ->sourceIds, sizeof(sourceIds));
+    std::vector<int> sourceIds = targ->sourceIds;
 
     // key = source id, val = stats
     // std::shared_ptr<std::unordered_map<int, std::shared_ptr<packetRecvStats>>> stats;
@@ -990,31 +876,6 @@ printf("Stats ROLLING OVER\n");
 }
 
 
-/**
- * This method prints out the desired number of data bytes starting from the given index
- * without regard to the limit.
- *
- * @param buf     data to pring
- * @param bytes   number of bytes to print in hex
- * @param label   a label to print as header
- */
-void printPktData(char *buf, size_t bytes, std::string const & label) {
-
-    std::cout << label <<  ":" << std::endl;
-
-    for (size_t i = 0; i < bytes; i++) {
-        if (i%20 == 0) {
-            std::cout << "\n  array[" << (i + 1) << "-" << (i + 20) << "] =  ";
-        }
-        else if (i%4 == 0) {
-            std::cout << "  ";
-        }
-
-        printf("%02x ", (char)(buf[i]));
-    }
-    std::cout << std::endl << std::endl;
-}
-
 
 // Arg to pass to buffer reassembly thread
 typedef struct threadArg_t {
@@ -1343,1078 +1204,6 @@ static void *threadAssembleFast(void *arg) {
 
 
 
-
-
-/**
- * <p>
- * Thread to assemble incoming packets into their original buffers.
- *
- * There is a fast-ring-buffer-based supply which contains empty buffers designed to hold built events.
- * An empty buffer is taken from the buffer supply. Then packets are read from the socket and
- * reconstructed into an event in that empty buffer.
- * When the event is fully constructed, the buffer is released back to the ring
- * which is then accessed by another thread which is looking for the built events downstream
- * (or it can simply be dumped straight away).
- * </p>
- * <p>
- * How is the decision made to discard packets?
- * If packets come out-of-order, then more than one buffer will be constructed at one time.
- * This thread will only keep a limited number of partially constructed events in an effort to wait
- * for straggling packets with the oldest event being discarded if more storage is needed.
- * Also, old events will have their memory released if not fully constructed before a given
- * time limit.
- * After each packet is consumed, a scan is made to see if anything needs to be discarded.
- * All out-of-order and duplicate packets are handled.
- * </p>
- * <p>
- * What happens if a data source dies and restarts?
- * This causes the tick/event-number sequence to restart. In order to avoid causing problems
- * calculating various stats, like rates, the "biggest tick" from a source is reset if 1000
- * packets with smaller ticks than the current largest.
- * </p>
- *
- *
- * @param arg   struct to be passed to thread.
- */
-static void *threadAssemble(void *arg) {
-
-    threadArg *tArg = (threadArg *) arg;
-
-    int id          = tArg->pktConsumerId;
-    int sourceId    = tArg->sourceId;
-    int port        = tArg->port + sourceId;
-    int recvBufSize = tArg->recvBufSize;
-
-    char *listeningAddr = tArg->listeningAddr;
-
-    auto bufSupply = tArg->supplyMap;
-
-    /** Byte size of buffers contained in supply. */
-
-    bool dumpBufs  = tArg->dump;
-    bool debug     = tArg->debug;
-    bool noRestart = tArg->noRestart;
-    bool useIPv6   = tArg->useIPv6;
-
-    auto stats     = tArg->stats;
-    bool takeStats = (stats != nullptr);
-
-    // expected max size of packets
-    int mtu = tArg->mtu;
-    if (mtu < 1) {
-        mtu = 9000;
-    }
-    else if (mtu < 1400) {
-        mtu = 1400;
-    }
-
-
-    //---------------------------------------------------
-    // Create socket to read data from source ID
-    //---------------------------------------------------
-    int udpSocket;
-
-    if (useIPv6) {
-        struct sockaddr_in6 serverAddr6{};
-
-        // Create IPv6 UDP socket
-        if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv6 client socket");
-            exit(1);
-        }
-
-        // Set & read back UDP receive buffer size
-        socklen_t size = sizeof(int);
-        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-        recvBufSize = 0;
-        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-
-        // Configure settings in address struct
-        // Clear it out
-        memset(&serverAddr6, 0, sizeof(serverAddr6));
-        // it is an INET address
-        serverAddr6.sin6_family = AF_INET6;
-        // the port we are going to receiver from, in network byte order
-        serverAddr6.sin6_port = htons(port);
-        if (strlen(listeningAddr) > 0) {
-            inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
-        }
-        else {
-            serverAddr6.sin6_addr = in6addr_any;
-        }
-
-        // Bind socket with address struct
-        int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
-        if (err != 0) {
-            if (debug) fprintf(stderr, "bind socket error\n");
-            exit(1);
-        }
-    }
-    else {
-        // Create UDP socket
-        if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv4 client socket");
-            exit(1);
-        }
-
-        // Set & read back UDP receive buffer size
-        socklen_t size = sizeof(int);
-        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-        recvBufSize = 0;
-        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-
-        // Configure settings in address struct
-        struct sockaddr_in serverAddr{};
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
-        if (strlen(listeningAddr) > 0) {
-            serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
-        }
-        else {
-            serverAddr.sin_addr.s_addr = INADDR_ANY;
-        }
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-        // Bind socket with address struct
-        int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-        if (err != 0) {
-            fprintf(stderr, "bind socket error\n");
-            exit(1);
-        }
-    }
-
-    fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes, source count = %d\n",
-            port, recvBufSize, sourceId);
-
-
-
-    std::shared_ptr<BufferItem>  bufItem, prevBufItem;
-    std::shared_ptr<ByteBuffer>  buf;
-
-#ifdef __linux__
-
-    int core = tArg->core;
-    if (core > -1) {
-       cpu_set_t cpuset;
-       CPU_ZERO(&cpuset);
-
-       for (int i=0; i < tArg->coreCount; i++) {
-            std::cerr << "Run assemble thd for source " << sourceId << " on core " << (core + i) << "\n";
-            CPU_SET(core+i, &cpuset);
-        }
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-    }
-
-#endif
-
-    // We implement a 2-tiered storage system.
-    //
-    // First, fastest tier #1:
-    // Map #1 keeps BufferItems currently being worked on: key = tick, val = buffer .
-    // Limit the number of ticks/events being worked on simultaneously to "FAST_MAP_MAX".
-    // The map has buffers that are part of the buffer supply and thus must be
-    // released quickly or it backs up the circular buffer.
-    // If a buffer is there longer than FAST_STORE_MICROSEC microseconds, then it is
-    // moved to longer term storage in tier 2.
-    //
-    // Slower tier #2:
-    // Buffer items are COPIED into separate memory and placed into a separate map
-    // so the supply's circular buffer can continue to function. Up to "SLOW_MAP_MAX"
-    // items may stay there up to SLOW_STORE_MILLISEC milliseconds, whichever comes first.
-    //
-    // Both maps are sorted by tick with lowest value being the "first" and also the
-    // first to be discarded.
-    //
-    std::map<uint64_t, std::shared_ptr<BufferItem>> fastTickMap;
-    std::map<uint64_t, std::shared_ptr<BufferItem>> slowTickMap;
-
-    // Keep a corresponding map of time - when each tick started being assembled.
-    // key = tick, val = start time in microsec
-    // This will allow us to dump old, partially assembled bufs/pkts
-    std::map<uint64_t, int64_t> fastTimeMap;
-    std::map<uint64_t, int64_t> slowTimeMap;
-
-    // For reading time
-    struct timespec now;
-    int64_t microSec = 0;
-
-    // Need to figure out if source was killed and restarted.
-    // If this is the case, then the tick # will be much smaller than the previous value.
-    int64_t tick, prevTick = -1, largestTick = -1, largestSlowTick = -1;
-    uint32_t offset, length;
-    int portIndex;
-    bool restarted = false, fromSlowMap = false;
-    size_t count;
-
-
-    char pkt[PacketStoreItem::size];
-    reHeader hdr;
-
-
-    while (true) {
-
-        //-------------------------------------------------------------
-        // Get packet
-        //-------------------------------------------------------------
-
-        ssize_t bytesRead = recv(udpSocket, pkt, PacketStoreItem::size, 0);
-        if (bytesRead < 0) {
-            if (debug) fprintf(stderr, "recvmsg failed: %s\n", strerror(errno));
-            exit(1);
-        }
-        else if (bytesRead < HEADER_BYTES) {
-            if (debug) fprintf(stderr, "packet does not contain not enough data\n");
-            exit(1);
-        }
-
-        // Parse header & store in item
-        parseReHeader(pkt, &hdr);
-
-        tick    = (int64_t)hdr.tick;
-        offset  = hdr.offset;
-        length  = hdr.length;
-        portIndex = hdr.reserved;
-        fromSlowMap = false;
-
-        assert(hdr.dataId == sourceId);
-
-        // If NOT the same tick as previous ...
-        if (tick != prevTick) {
-
-            bufItem = nullptr;
-
-            // If tick is larger than largest, we'll need to get a new bufItem from supply
-
-            // Also, if tick is <= largest tick received thus far,
-            // it may be stored in one of the maps ...
-            if (tick <= largestTick) {
-
-                // If VERY OLD tick which will only be found in slow storage ...
-                if (tick <= largestSlowTick) {
-                    if (slowTickMap.count(tick)) {
-                        bufItem = slowTickMap[tick];
-                        fromSlowMap = true;
-                    }
-                }
-                else {
-                    // Look for it in fast storage
-                    if (fastTickMap.count(tick)) {
-                        bufItem = fastTickMap[tick];
-                    }
-                }
-
-                if (bufItem == nullptr) {
-                    // If there is no buffer associated with this tick available,
-                    //    1) tick may have been reassembled and this is a late, duplicate packet, or
-                    //    2) it is a very late packet and the incomplete buffer was deleted/released, or
-                    //    3) data source was restarted with new, lower starting event number.
-                    // In the first 2 cases, it can be released and ignored. So go to the next packet.
-                    // In the last case, it's ok only if noRestart is false.
-
-                    // How do we tell if a data source has been restarted?
-                    // Hopefully this is good enough.
-                    bool restarted = (largestTick - tick > 1000);
-
-                    if (restarted) {
-                        if (noRestart) {
-                            fprintf(stderr, "\nRestarted data source %d so exit\n", sourceId);
-                            fflush(stderr);
-                            exit(1);
-                        }
-
-                        //fprintf(stderr, "\nRestarted data source %d\n", sourceId);
-
-                        // Tell stat thread when restart happened so that rates can be calculated within reason
-                        struct timespec now;
-                        clock_gettime(CLOCK_MONOTONIC, &now);
-                        restartTime.tv_sec  = now.tv_sec;
-                        restartTime.tv_nsec = now.tv_nsec;
-
-                        // If source restarted, remove old stuff and start over. Release anything in maps.
-                        if (fastTimeMap.size() > 0) {
-                            // Iterate through the map
-                            auto it = fastTimeMap.begin();
-                            while (it != fastTimeMap.end()) {
-                                // Release buffer resources
-                                uint64_t tik = it->first;
-                                auto bItem = fastTickMap[tik];
-
-                                if (dumpBufs) {
-                                    bufSupply->release(bItem);
-
-                                } else {
-                                    bItem->setValidData(false);
-                                    bufSupply->publish(bItem);
-                                }
-
-                                // Erase the entry in fastTickMap associated with this tick
-                                fastTickMap.erase(tik);
-
-                                // Erase the current element, erase() will return the
-                                // next iterator. So, don't need to increment.
-                                it = fastTimeMap.erase(it);
-                            }
-                        }
-
-                        slowTickMap.clear();
-                        slowTimeMap.clear();
-
-                        if (takeStats) {
-                            clearStats(stats);
-                        }
-                    }
-                    else  {
-                        // std::cout << "  ignore old pkt from tick " << tick << std::endl;
-
-                        // If we're here:
-                        //    1) tick may have been reassembled and this is a duplicate packet, or
-                        //    2) it is a very late packet
-                        //
-                        // In both cases, the incomplete buffer was deleted/released.
-                        // So just ignore this packet.
-                        // This actually happens quite often when packetBlaster has its "-sock" flag set to > 1.
-                        // There seems to be a race condition between packets sent by one app but on different
-                        // sockets!
-                        //
-                        // Unfortuneately, we just set bufItem = nullptr since tick changed. But, presumably,
-                        // it will change back to the tick we were most recently working on.
-                        // If we leave bufItem = nullptr, then a new buffer will be obtained from the supply
-                        // and overwrite the previous causing many problems.
-
-                        // So, go back and restore things back to they way they were before the really
-                        // old packets showed up.
-                        bufItem = prevBufItem;
-                        continue;
-                    }
-                }
-            }
-
-
-            // Could not find it stored anywhere. This will only happen if it's the largest tick
-            // received so far or the source was restarted and thus it is now the largest tick.
-            if (bufItem == nullptr) {
-                // With the load balancer, ticks can only increase. This new, largest tick
-                // (or restarted tick) will not have an associated buffer yet, so create it,
-                // store it, etc.
-
-                fastTickMap[tick] = bufItem = bufSupply->get();
-                bufItem->setEventNum(tick);
-                bufItem->setDataLen(length);
-
-                // store current time in microsec
-                clock_gettime(CLOCK_MONOTONIC, &now);
-                microSec = ((1000000L * now.tv_sec) + (now.tv_nsec / 1000L));
-                fastTimeMap[tick] = microSec;
-
-                largestTick = tick;
-            }
-
-
-            // At limit of # of bufs that can be worked on concurrently?
-            // If we pulled bufItem out of the fastTickMap above, then this
-            // should not be true.
-            if (fastTickMap.size() > FAST_MAP_MAX) {
-
-                // Find oldest entry in the fast map (still part of the supply)
-                auto oldestEntry = *(fastTickMap.begin());
-                uint64_t oldestTick = oldestEntry.first;
-                std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
-
-                // Copy entry
-                auto slowBufItem = std::make_shared<BufferItem>(oldestBufItem);
-
-                // Release oldestBufItem, that was just copied, back to the supply
-                if (dumpBufs) {
-                    bufSupply->release(oldestBufItem);
-                }
-                else {
-                    oldestBufItem->setValidData(false);
-                    bufSupply->publish(oldestBufItem);
-                }
-
-                // Place copy into slowTickMap but keep size of map under slowTickMapMax
-                if (slowTickMap.size() >= SLOW_MAP_MAX) {
-
-                    // Too many entries in slowTickMap, so remove oldest
-                    auto oldestSlowEntry = *(slowTickMap.begin());
-                    uint64_t oldestSlowTick = oldestSlowEntry.first;
-                    auto oldestSlowItem = oldestSlowEntry.second;
-
-                    if (takeStats) {
-                        stats->discardedBuffers++;
-                        stats->discardedBytes += oldestSlowItem->getDataLen();
-                        // This will under count pkts discarded since not all have arrived yet
-                        stats->discardedPackets  += oldestSlowItem->getUserInt();
-                    }
-
-                    // Remove oldest entry from slow map. NOTE:
-                    // BufferItems in slowTickMap are not part of the supply and so can
-                    // be deleted without having to publish or release back to the supply.
-                    slowTickMap.erase(oldestSlowTick);
-                    slowTimeMap.erase(oldestSlowTick);
-//std::cout << "D " << " ";
-                }
-
-                // Put copied bufItem into slow map
-                slowTickMap[oldestTick] = slowBufItem;
-                slowTimeMap.insert({oldestTick, microSec});
-                largestSlowTick = oldestTick;
-//std::cout << "SL_" << slowTickMap.size() << " ";
-
-                // Remove oldest entry from fast map
-                fastTickMap.erase(oldestTick);
-                fastTimeMap.erase(oldestTick);
-//std::cout << "  remove partial tick " << oldestTick << ", fastTickMap size = " << fastTickMap.size() << std::endl;
-            }
-        }
-
-
-        // Check for duplicate packets, ie if its offset has been stored already
-        auto &offsets = bufItem->getOffsets();
-//std::cout << portIndex << " " ;
-        if (offsets.find(offset) != offsets.end()) {
-            // There was already a packet with this offset, so ignore this duplicate packet!!
-std::cout << "Got duplicate packet for event " << tick << ", offset " << offset << std::endl;
-            continue;
-        }
-        else {
-            // Record this packet's presence in buffer by storing the unique offset in a set
-            offsets.insert(offset);
-        }
-
-        // Keep track so if next packet is same source/tick, we don't have to look it up
-        prevTick = tick;
-        prevBufItem = bufItem;
-
-        // We are using the ability of the BufferItem to store a user's long.
-        // Use it store how many bytes we've copied into it so far.
-        // This will enable us to tell if we're done w/ reassembly.
-        // Likewise, store # packets copied in user int.
-        int64_t bytesSoFar = bufItem->getUserLong();
-        int32_t pktsSoFar  = bufItem->getUserInt();
-        int64_t dataLen    = bytesRead - HEADER_BYTES;
-
-        //std::cout << "pkt len = " << dataLen << std::endl;
-
-        // Do we have memory to store entire buf? If not, expand.
-        if (length > bufItem->getBuffer()->capacity()) {
-std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
-            // Preserves all existing data while increasing underlying array
-            bufItem->expandBuffer(length + 27000); // also fit in 3 extra jumbo packets
-        }
-
-        // The neat thing about doing things this way is we don't have to track out-of-order packets.
-        // Copy things into the buffer into its final spot.
-        auto data = (uint8_t *)pkt + HEADER_BYTES;
-        memcpy(bufItem->getBuffer()->array() + offset, data, dataLen);
-
-        // Keep track of how much we've written so far
-        bytesSoFar += dataLen;
-        bufItem->setUserLong(bytesSoFar);
-
-        // Track # of packets written so far
-        pktsSoFar++;
-        bufItem->setUserInt(pktsSoFar);
-
-        // If we've written all data to this buf ...
-        if (bytesSoFar >= length) {
-            // Done with this buffer, so get it reading for reading
-            bufItem->getBuffer()->limit(bytesSoFar).position(0);
-
-            if (takeStats) {
-                stats->acceptedBytes += bytesSoFar;
-                stats->builtBuffers++;
-                stats->acceptedPackets += bufItem->getUserInt();
-            }
-
-            if (fromSlowMap) {
-                // It should be a VERY SELDOM thing that a very old partially-constructed buffer
-                // gets a late packet, gets completely assembled, and is ready to be passed on.
-
-                // Get it back into the supply by getting a free buffer from supply, copying this
-                // item into the new buffer, and placing it back into the supply.
-                auto bItem = bufSupply->get();
-                bItem->copy(bufItem);
-//std::cout << "\nResurrect" << std::endl;
-
-                // Pass buffer to waiting consumer or just dump it
-                if (dumpBufs) {
-                    bufSupply->release(bItem);
-                }
-                else {
-                    bufSupply->publish(bItem);
-                }
-
-                // Clear buffer from local map
-                slowTickMap.erase(tick);
-                slowTimeMap.erase(tick);
-            }
-            else {
-                if (dumpBufs) {
-                    bufSupply->release(bufItem);
-                }
-                else {
-                    bufSupply->publish(bufItem);
-                }
-
-                // Clear buffer from local map
-                fastTickMap.erase(tick);
-                fastTimeMap.erase(tick);
-            }
-        }
-
-        // See if items in fastTickMap have stayed over the limit
-        if (fastTimeMap.size() > 0) {
-
-            // Iterate through the map
-            auto it = fastTimeMap.begin();
-
-            while (it != fastTimeMap.end()) {
-                // Check if "now" is more than FAST_STORE_MICROSEC microsec ahead of this entry
-                if ((microSec - it->second) >= FAST_STORE_MICROSEC) {
-                    // Move tick to slow map.
-                    // It's too old, so copy & release buffer resources
-                    uint64_t tik = it->first;
-                    auto bItem = fastTickMap[tik];
-
-                    // Copy buffer item
-                    auto slowItem(bItem);
-
-                    // Put orig item back into supply
-                    if (dumpBufs) {
-                        bufSupply->release(bItem);
-                    }
-                    else {
-                        bItem->setValidData(false);
-                        bufSupply->publish(bItem);
-                    }
-
-                    // Make space if needed
-                    if (slowTickMap.size() >= SLOW_MAP_MAX) {
-                        auto oldestSlowEntry = *(slowTickMap.begin());
-                        uint64_t oldestSlowTick = oldestSlowEntry.first;
-                        auto oldestSlowItem = oldestSlowEntry.second;
-
-                        if (takeStats) {
-                            stats->discardedBuffers++;
-                            stats->discardedBytes   += oldestSlowItem->getDataLen();
-                            stats->discardedPackets += oldestSlowItem->getUserInt();
-                        }
-
-                        slowTickMap.erase(oldestSlowTick);
-                        slowTimeMap.erase(oldestSlowTick);
-//std::cout << "D-" << " ";
-                    }
-
-                    // Put copied bItem into slow map
-                    slowTickMap[tik] = slowItem;
-                    slowTimeMap[tik] = microSec;
-                    largestSlowTick  = tik;
-//std::cout << "S-" << slowTickMap.size() << " ";
-
-                    // Erase the entry in fastTickMap associated with this tick
-                    fastTickMap.erase(tik);
-
-                    // Erase the current element, erase() will return the
-                    // next iterator. So, don't need to increment.
-                    it = fastTimeMap.erase(it);
-                }
-                else {
-                    // Reached newer entries within acceptable time limit, so end loop
-                    break;
-                }
-            }
-        }
-
-        // Check map of stuff that's been hanging around for a while
-        if (slowTimeMap.size() > 0) {
-            auto   it  = slowTimeMap.begin();
-            while (it != slowTimeMap.end()) {
-                if ((microSec - it->second)/1000 >= SLOW_STORE_MILLISEC) {
-                    // Dump too old tick
-//std::cout << "D--" << slowTimeMap.size() << " ";
-                    uint64_t tik = it->first;
-                    auto bItem = slowTickMap[tik];
-
-                    if (takeStats) {
-                        stats->discardedBuffers++;
-                        stats->discardedBytes   += bItem->getDataLen();
-                        stats->discardedPackets += bItem->getUserInt();
-                    }
-
-                    slowTickMap.erase(tik);
-                    it = slowTimeMap.erase(it);
-                }
-                else {
-                    break;
-                }
-            }
-        }
-
-    }
-
-    return nullptr;
-}
-
-
-
-
-/**
- * This reassembly thread is similar to {@link #threadAssemble()},
- * but it does not implement the 2 tiered system allowing for more extended waiting
- * on an event to be fully constructed. It's more like a single tiered algorithm,
- * but it does perform a little bit better. Currently this is unused.
- * @param arg
- * @return
- */
-
-static void *threadAssembleGood(void *arg) {
-
-    threadArg *tArg = (threadArg *) arg;
-
-    int id = tArg->pktConsumerId;
-    int sourceId = tArg->sourceId;
-    int port = tArg->port + sourceId;
-    int recvBufSize = tArg->recvBufSize;
-
-    char *listeningAddr = tArg->listeningAddr;
-
-    auto bufSupply = tArg->supplyMap;
-
-    /** Byte size of buffers contained in supply. */
-
-    bool dumpBufs  = tArg->dump;
-    bool debug     = tArg->debug;
-    bool noRestart = tArg->noRestart;
-    bool useIPv6   = tArg->useIPv6;
-
-    auto stats     = tArg->stats;
-    bool takeStats = (stats != nullptr);
-
-    // expected max size of packets
-    int mtu = tArg->mtu;
-    if (mtu < 1) {
-        mtu = 9000;
-    }
-    else if (mtu < 1400) {
-        mtu = 1400;
-    }
-
-
-    //---------------------------------------------------
-    // Create socket to read data from source ID
-    //---------------------------------------------------
-    int udpSocket;
-
-    if (useIPv6) {
-        struct sockaddr_in6 serverAddr6{};
-
-        // Create IPv6 UDP socket
-        if ((udpSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv6 client socket");
-            exit(1);
-        }
-
-        // Set & read back UDP receive buffer size
-        socklen_t size = sizeof(int);
-        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-        recvBufSize = 0;
-        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-
-        int optval = 1;
-        setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
-
-        // Configure settings in address struct
-        // Clear it out
-        memset(&serverAddr6, 0, sizeof(serverAddr6));
-        // it is an INET address
-        serverAddr6.sin6_family = AF_INET6;
-        // the port we are going to receiver from, in network byte order
-        serverAddr6.sin6_port = htons(port);
-        if (strlen(listeningAddr) > 0) {
-            inet_pton(AF_INET6, listeningAddr, &serverAddr6.sin6_addr);
-        }
-        else {
-            serverAddr6.sin6_addr = in6addr_any;
-        }
-
-        // Bind socket with address struct
-        int err = bind(udpSocket, (struct sockaddr *) &serverAddr6, sizeof(serverAddr6));
-        if (err != 0) {
-            if (debug) fprintf(stderr, "bind socket error\n");
-            exit(1);
-        }
-    }
-    else {
-        // Create UDP socket
-        if ((udpSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv4 client socket");
-            exit(1);
-        }
-
-        // Set & read back UDP receive buffer size
-        socklen_t size = sizeof(int);
-        setsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize));
-        recvBufSize = 0;
-        getsockopt(udpSocket, SOL_SOCKET, SO_RCVBUF, &recvBufSize, &size);
-
-        int optval = 1;
-        setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
-
-        // Configure settings in address struct
-        struct sockaddr_in serverAddr{};
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(port);
-        if (strlen(listeningAddr) > 0) {
-            serverAddr.sin_addr.s_addr = inet_addr(listeningAddr);
-        }
-        else {
-            serverAddr.sin_addr.s_addr = INADDR_ANY;
-        }
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-        // Bind socket with address struct
-        int err = bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-        if (err != 0) {
-            fprintf(stderr, "bind socket error\n");
-            exit(1);
-        }
-    }
-
-    fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes, source count = %d\n",
-            port, recvBufSize, sourceId);
-
-
-
-    std::shared_ptr<BufferItem>      bufItem, prevBufItem;
-    std::shared_ptr<ByteBuffer>      buf;
-
-#ifdef __linux__
-
-    int core = tArg->core;
-    if (core > -1) {
-       cpu_set_t cpuset;
-       CPU_ZERO(&cpuset);
-
-       for (int i=0; i < tArg->coreCount; i++) {
-            std::cerr << "Run assemble thd for source " << sourceId << " on core " << (core + i) << "\n";
-            CPU_SET(core+i, &cpuset);
-        }
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-    }
-
-#endif
-
-    // Map keeps buffers being worked on: key = tick, val = buffer .
-    // Limit the number of ticks/events being worked on simultaneously to 5.
-    // Ticks from before that are delared to be "unassembleable" and are discarded.
-    // Map is sorted by tick with lowest value being the "first" and also the first
-    // to be discarded if need be.
-    std::map<uint64_t, std::shared_ptr<BufferItem>> tickMap;
-    size_t tickMapSize = 0;
-
-    // Keep a corresponding map of time - when each tick started being assembled.
-    // key = tick, val = start time in microsec
-    // This will allow us to dump old, partially assembled bufs/pkts
-    std::map<uint64_t, int64_t> timeMap;
-    // For reading time
-    struct timespec now;
-    int64_t microSec = 0;
-
-    // Need to figure out if source was killed and restarted.
-    // If this is the case, then the tick # will be much smaller than the previous value.
-    int64_t tick, prevTick = -1, largestTick = -1;
-    uint32_t offset, length;
-    bool restarted = false;
-
-    int pktSizeMax = 9100;
-    char pkt[pktSizeMax];
-    reHeader hdr;
-
-
-    while (true) {
-
-        //-------------------------------------------------------------
-        // Get item containing packet previously read in by main thd
-        //-------------------------------------------------------------
-
-        //ssize_t bytesRead = recvfrom(udpSocket, pkt, PacketStoreItem::size, 0, nullptr, nullptr);
-        // We can use this with packetBlaster and is faster than recvfrom()
-        ssize_t bytesRead = recv(udpSocket, pkt, PacketStoreItem::size, 0);
-        if (bytesRead < 0) {
-            if (debug) fprintf(stderr, "recvmsg failed: %s\n", strerror(errno));
-            exit(1);
-        }
-        else if (bytesRead < HEADER_BYTES) {
-            if (debug) fprintf(stderr, "packet does not contain not enough data\n");
-            exit(1);
-        }
-
-        // Parse header & store in item
-        parseReHeader(pkt, &hdr);
-
-        tick    = (int64_t)hdr.tick;
-        offset  = hdr.offset;
-        length  = hdr.length;
-
-        assert(hdr.dataId == sourceId);
-
-        // If NOT the same tick as previous ...
-        if (tick != prevTick) {
-
-            bufItem = nullptr;
-
-            // If tick is larger than largest, we'll need to get a new bufItem from supply.
-
-            // Also, if tick is <= largest tick received thus far, may be stored in the map ...
-            if (tick <= largestTick) {
-
-                if (tickMap.count(tick)) {
-                    bufItem = tickMap[tick];
-                }
-                else {
-                    // If there is no buffer associated with this tick available,
-                    //    1) tick may have been reassembled and this is a late, duplicate packet, or
-                    //    2) it is a very late packet and the incomplete buffer was deleted/released, or
-                    //    3) data source was restarted with new, lower starting event number.
-                    // In the first 2 cases, it can be released and ignored. So go to the next packet.
-                    // In the last case, it's ok only if noRestart is false.
-
-                    // How do we tell if a data source has been restarted?
-                    // Hopefully this is good enough.
-                    bool restarted = (largestTick - tick > 1000);
-//fprintf(stderr, "Smaller tick %" PRId64 "\n", tick);
-
-                    if (restarted) {
-                        if (noRestart) {
-                            fprintf(stderr, "\nRestarted data source %d so exit\n", sourceId);
-                            fflush(stderr);
-                            exit(1);
-                        }
-
-                        // Tell stat thread when restart happened so that rates can be calculated within reason
-                        struct timespec now;
-                        clock_gettime(CLOCK_MONOTONIC, &now);
-                        restartTime.tv_sec  = now.tv_sec;
-                        restartTime.tv_nsec = now.tv_nsec;
-
-                        // If source restarted, remove old stuff and start over. Release anything in maps.
-                        if (timeMap.size() > 0) {
-                            // Iterate through the map
-                            auto it = timeMap.begin();
-                            while (it != timeMap.end()) {
-                                // Release buffer resources
-                                uint64_t tik = it->first;
-                                auto bItem = tickMap[tik];
-
-                                if (dumpBufs) {
-                                    bufSupply->release(bItem);
-
-                                } else {
-                                    bItem->setValidData(false);
-                                    bufSupply->publish(bItem);
-                                }
-
-                                // Erase the entry in tickMap associated with this tick
-                                tickMap.erase(tik);
-
-                                // Erase the current element, erase() will return the
-                                // next iterator. So, don't need to increment.
-                                it = timeMap.erase(it);
-                            }
-                        }
-
-                        if (takeStats) {
-                            clearStats(stats);
-                        }
-                    }
-                    else  {
-                        //std::cout << "  ignore old pkt from tick " << tick << std::endl;
-                        bufItem = prevBufItem;
-                        continue;
-                    }
-                }
-            }
-
-            // Could not find it stored anywhere. This will only happen if it's the largest tick
-            // received so far or the source was restarted and thus it is now the largest tick.
-            if (bufItem == nullptr) {
-                // With the load balancer, ticks can only increase. This new, largest tick
-                // (or restarted tick) will not have an associated buffer yet, so create it,
-                // store it, etc.
-
-                tickMap[tick] = bufItem = bufSupply->get();
-                bufItem->setEventNum(tick);
-                bufItem->setDataLen(length);
-
-                // store current time in msec
-                clock_gettime(CLOCK_MONOTONIC, &now);
-                microSec = ((1000000L * now.tv_sec) + (now.tv_nsec / 1000L));
-                timeMap.insert({tick, microSec});
-
-                largestTick = tick;
-            }
-
-            // Are we at limit of # of buffers being worked on? If so, discard oldest
-            if (tickMap.size() > 4) {
-                auto oldestEntry = *(tickMap.begin());
-                uint64_t oldestTick = oldestEntry.first;
-                std::shared_ptr<BufferItem> oldestBufItem = oldestEntry.second;
-                tickMap.erase(oldestTick);
-                timeMap.erase(oldestTick);
-//std::cout << "  remove partial tick " << oldestTick << ", tickMap size = " << tickMap.size() << std::endl;
-
-                if (takeStats) {
-                    stats->discardedBuffers++;
-                    stats->discardedBytes += oldestBufItem->getDataLen();
-                    // This will under count pkts discarded since not all have arrived yet
-                    stats->discardedPackets  += oldestBufItem->getUserInt();
-                }
-
-                // Do something with the buffer about to be discarded
-                if (dumpBufs) {
-                    bufSupply->release(oldestBufItem);
-                }
-                else {
-                    oldestBufItem->setValidData(false);
-                    bufSupply->publish(oldestBufItem);
-                }
-            }
-        }
-
-        // Check for duplicate packets, ie if its offset has been stored already
-        auto &offsets = bufItem->getOffsets();
-        if (offsets.find(offset) != offsets.end()) {
-            // There was already a packet with this offset, so ignore this duplicate packet!!
-            std::cout << "Got duplicate packet for event " << tick << ", offset " << offset << std::endl;
-            continue;
-        }
-        else {
-            // Record this packet's presence in buffer by storing the unique offset in a set
-            offsets.insert(offset);
-        }
-
-        // Keep track so if next packet is same source/tick, we don't have to look it up
-        prevTick = tick;
-        prevBufItem = bufItem;
-
-        // We are using the ability of the BufferItem to store a user's long.
-        // Use it store how many bytes we've copied into it so far.
-        // This will enable us to tell if we're done w/ reassembly.
-        // Likewise, store # packets copied in user int.
-        int64_t bytesSoFar = bufItem->getUserLong();
-        int32_t pktsSoFar  = bufItem->getUserInt();
-        int64_t dataLen    = bytesRead - HEADER_BYTES;
-
-        //std::cout << "pkt len = " << dataLen << std::endl;
-
-        // Do we have memory to store entire buf? If not, expand.
-        if (length > bufItem->getBuffer()->capacity()) {
-            std::cout << "EXPAND BUF! to " << (length + 27000) << std::endl;
-            // Preserves all existing data while increasing underlying array
-            bufItem->expandBuffer(length + 27000); // also fit in 3 extra jumbo packets
-        }
-
-        // The neat thing about doing things this way is we don't have to track out-of-order packets.
-        // Copy things into the buffer into its final spot.
-        auto data = (uint8_t *)pkt + HEADER_BYTES;
-        memcpy(bufItem->getBuffer()->array() + offset, data, dataLen);
-
-        // Keep track of how much we've written so far
-        bytesSoFar += dataLen;
-        bufItem->setUserLong(bytesSoFar);
-
-        // Track # of packets written so far
-        pktsSoFar++;
-        bufItem->setUserInt(pktsSoFar);
-
-        // If we've written all data to this buf ...
-        if (bytesSoFar >= length) {
-            // Done with this buffer, so get it reading for reading
-            bufItem->getBuffer()->limit(bytesSoFar).position(0);
-
-            // Clear buffer from local map
-            tickMap.erase(tick);
-            timeMap.erase(tick);
-
-//std::cout << "Built tick " << tick << ", src " << sourceId << ", remove, bytes = " << bytesSoFar << std::endl;
-
-            if (takeStats) {
-                stats->acceptedBytes += bytesSoFar;
-                stats->builtBuffers++;
-                stats->acceptedPackets += bufItem->getUserInt();
-            }
-
-            // Pass buffer to waiting consumer or just dump it
-            if (dumpBufs) {
-                bufSupply->release(bufItem);
-            }
-            else {
-                bufSupply->publish(bufItem);
-            }
-        }
-
-        // See if items in tickMap/timeMap have stayed over the limit
-        if (timeMap.size() > 0) {
-
-            // Iterate through the map
-            auto it = timeMap.begin();
-
-            while (it != timeMap.end()) {
-                // Check if "now" is more than FAST_STORE_MICROSEC microsec ahead of this entry
-                if ((microSec - it->second) >= FAST_STORE_MICROSEC) {
-//std::cout << " tick is TOO OLD" << std::endl;
-                    // It's too old, so release buffer resources
-                    uint64_t tik = it->first;
-                    auto bItem = tickMap[tik];
-
-                    if (takeStats) {
-                        stats->discardedBuffers++;
-                        stats->discardedBytes += bItem->getDataLen();
-                        // This will under count pkts discarded since not all have arrived yet
-                        stats->discardedPackets  += bItem->getUserInt();
-                    }
-
-                    if (dumpBufs) {
-                        bufSupply->release(bItem);
-                    }
-                    else {
-                        bItem->setValidData(false);
-                        bufSupply->publish(bItem);
-                    }
-
-                    // Erase the entry in tickMap associated with this tick
-                    tickMap.erase(tik);
-
-                    // Erase the current element, erase() will return the
-                    // next iterator. So, don't need to increment.
-                    it = timeMap.erase(it);
-                }
-                else {
-                    // We've reached the newer entries which are < 10 msec earlier, so end loop
-                    break;
-                }
-            }
-        }
-    }
-
-    return nullptr;
-}
-
-
-
 // Arg to pass to buffer reassembly thread
 typedef struct threadReadBufArg_t {
     /** One buffer supply for each reassembly thread. Used in threadReadBuffers thread. */
@@ -2580,12 +1369,11 @@ int main(int argc, char **argv) {
     int startingCore = -1;
     int coreCount = 1;
     int startingBufCore = -1;
-    int sourceIds[MAX_SOURCES];
-    int sourceCount = 0;
+
+    std::vector<int> ids;
 
     bool debug = false;
     bool useIPv6 = false;
-    bool keepStats = false;
     bool pinCores = false;
     bool pinBufCores = false;
     bool dumpBufs = false;
@@ -2595,38 +1383,33 @@ int main(int argc, char **argv) {
 
     // CP stuff
     int portRange = 0; // translates to PORT_RANGE_1 in proto enum
-    uint16_t cpPort = 18347;
 
     char dataAddr[16];
     memset(dataAddr, 0, 16);
 
-    char cpAddr[16];
-    memset(cpAddr, 0, 16);
+    char uri[256];
+    memset(uri, 0, 256);
 
-    char beName[33];
-    memset(beName, 0, 33);
+    char fileName[256];
+    memset(fileName, 0, 256);
 
-    char cpToken[33];
-    memset(cpToken, 0, 33);
+    char beName[256];
+    memset(beName, 0, 256);
+
     //----------------------
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
-    char filename[101];
-    memset(filename, 0, 101);
 
-    for (int i = 0; i < MAX_SOURCES; i++) {
-        sourceIds[i] = -1;
-    }
 
     parseArgs(argc, argv, &bufSize, &recvBufSize,
               &tickPrescale, &startingCore, &coreCount,
-              &startingBufCore, sourceIds,
+              &startingBufCore,
               &startingPort, &debug, &useIPv6,
-              &keepStats, &dumpBufs, &lumpBufs,
+              &dumpBufs, &lumpBufs,
               &noRestart, &jointStats,
-              listeningAddr, filename,
-              dataAddr, cpAddr, cpToken, beName, &cpPort, &portRange);
+              listeningAddr, dataAddr,
+              uri, fileName, ids);
 
     pinCores = startingCore >= 0;
     pinBufCores = startingBufCore >= 0;
@@ -2656,29 +1439,76 @@ int main(int argc, char **argv) {
 #endif
 
 
-    for (int i = 0; i < MAX_SOURCES; i++) {
-        if (sourceIds[i] > -1) {
-            sourceCount++;
-            std::cerr << "Expecting source " << sourceIds[i] << " in position " << i << std::endl;
-        } else {
-            break;
+    int sourceCount = ids.size();
+
+    if (sourceCount < 1) {
+        ids.push_back(0);
+        sourceCount = 1;
+        std::cerr << "Defaulting to (single) source id = 0" << std::endl;
+    }
+
+
+    //----------------------------------------------
+    // Parse the URI (directly given or in file().
+    // This gives CP connection info.
+    //----------------------------------------------
+
+    // Set default file name
+    if (strlen(fileName) < 1) {
+        strcpy(fileName, "/tmp/ejfat_uri");
+    }
+
+    ejfatURI uriInfo;
+    bool haveEverything = false;
+
+    // First see if the uri arg is defined, if so, parse it
+    if (strlen(uri) > 0) {
+        bool parsed = parseURI(uri, uriInfo);
+        if (parsed) {
+            // URI is in correct format
+            if (!uriInfo.haveInstanceToken) {
+                std::cerr << "no LB/CP info in URI" << std::endl;
+            }
+            else {
+                haveEverything = true;
+            }
         }
     }
 
-    if (sourceCount < 1) {
-        sourceIds[0] = 1;
-        sourceCount = 1;
-        std::cerr << "Defaulting to (single) source id = 1" << std::endl;
+    // If no luck with URI, look into file
+    if (!haveEverything && strlen(fileName) > 0) {
+
+        std::ifstream file(fileName);
+        if (file.is_open()) {
+            std::string uriLine;
+            if (std::getline(file, uriLine)) {
+                bool parsed = parseURI(uriLine, uriInfo);
+                if (parsed) {
+                    if (!uriInfo.haveInstanceToken) {
+                        std::cerr << "no LB/CP info in file" << std::endl;
+                        file.close();
+                        return 1;
+                    }
+                }
+            }
+
+            file.close();
+        }
     }
 
-    //---------------------------------------------------
-    // Map to convert from data source id to the index in our local array of source ids
-    //---------------------------------------------------
-    std::unordered_map<int, int> srcMap;
-    for (int i = 0; i < sourceCount; i++) {
-        srcMap[sourceIds[i]] = i;
-        //fprintf(stderr, "mainThd: srcMap[%d] = %d\n", sourceIds[i], i);
-    }
+    std::string cpAddr = uriInfo.cpAddrV4;
+    uint16_t cpPort    = uriInfo.cpPort;
+    std::string lbId   = uriInfo.lbId;
+    std::string instanceToken = uriInfo.instanceToken;
+
+    //printUri(std::cerr, uriInfo);
+
+    // Need to give this back end a name (no, not "horse's"),
+    // base part of it on least significant 6 digits of current time in microsec
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int time = now.tv_nsec/1000L;
+    sprintf(beName, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
 
 
 #ifdef __APPLE__
@@ -2694,17 +1524,14 @@ int main(int argc, char **argv) {
 
     // Have one stats object for each reassembly thread and one for the UDP reading thread
     std::shared_ptr <packetRecvStats> buildStats[sourceCount];
-    // key = source id, val = stats
-    std::shared_ptr < std::unordered_map < int, std::shared_ptr < packetRecvStats >> > allBuildStats = nullptr;
 
-    if (keepStats) {
-        allBuildStats = std::make_shared < std::unordered_map < int, std::shared_ptr < packetRecvStats >> > ();
+    // Store each in a map, key = source id, val = stats
+    auto allBuildStats = std::make_shared<std::unordered_map<int, std::shared_ptr<packetRecvStats>>>();
 
-        for (int i = 0; i < sourceCount; i++) {
-            buildStats[i] = std::make_shared<packetRecvStats>();
-            clearStats(buildStats[i]);
-            allBuildStats->insert({sourceIds[i], buildStats[i]});
-        }
+    for (int i = 0; i < sourceCount; i++) {
+        buildStats[i] = std::make_shared<packetRecvStats>();
+        clearStats(buildStats[i]);
+        allBuildStats->insert({ids[i], buildStats[i]});
     }
 
 
@@ -2724,9 +1551,8 @@ int main(int argc, char **argv) {
     // If there are multiple sources, this can be divided amongst them.
     int ringSize = 256;
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize);
-//    // Map of buffer supplies. Each map --> key = src id, value = supply.
-//    std::unordered_map<int, std::shared_ptr<Supplier<BufferItem>>> supplyMap;
-    // array of buffer supplies
+
+    // Array of buffer supplies
     std::shared_ptr <Supplier<BufferItem>> supplyMaps[sourceCount];
     for (int i = 0; i < sourceCount; i++) {
         supplyMaps[i] = std::make_shared < Supplier < BufferItem >> (ringSize, false);
@@ -2744,13 +1570,13 @@ int main(int argc, char **argv) {
         arg->supplyMap = supplyMaps[i];
 
         arg->stats = buildStats[i];
-        arg->dump = dumpBufs;
+        arg->dump  = dumpBufs;
         arg->debug = debug;
-        arg->sourceCount = sourceCount;
+        arg->sourceCount   = sourceCount;
         arg->pktConsumerId = i;
-        arg->sourceId = sourceIds[i];
-        arg->bufferSize = (int) bufSize;
-        arg->tickPrescale = (int) tickPrescale;
+        arg->sourceId      = ids[i];
+        arg->bufferSize    = (int) bufSize;
+        arg->tickPrescale  = (int) tickPrescale;
 
         arg->port = startingPort;
         arg->useIPv6 = useIPv6;
@@ -2787,7 +1613,7 @@ int main(int argc, char **argv) {
             targ->supplyMap = supplyMaps[i];
             targ->noRestart = noRestart;
             targ->debug = debug;
-            targ->sourceId = sourceIds[i];
+            targ->sourceId = ids[i];
             if (pinBufCores) {
                 targ->core = startingBufCore + i;
             } else {
@@ -2806,115 +1632,66 @@ int main(int argc, char **argv) {
     //---------------------------------------------------
     // Start thread to do rate printout
     //---------------------------------------------------
-    if (keepStats) {
-        threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
-        if (targ == nullptr) {
-            fprintf(stderr, "out of mem\n");
+    threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
+    if (targ == nullptr) {
+        fprintf(stderr, "out of mem\n");
 
-            return -1;
-        }
-
-        targ->jointStats = jointStats;
-        targ->sourceCount = sourceCount;
-        targ->stats = allBuildStats;
-        memcpy(targ->sourceIds, sourceIds, sizeof(sourceIds));
-
-        pthread_t thd2;
-        status = pthread_create(&thd2, NULL, rateThread, (void *) targ);
-        if (status != 0) {
-            fprintf(stderr, "\n ******* error creating thread\n\n");
-            return -1;
-        }
+        return -1;
     }
 
+    targ->jointStats = jointStats;
+    targ->sourceCount = sourceCount;
+    targ->stats = allBuildStats;
+    targ->sourceIds = ids;
 
-//    enum PortRange {
-//        PORT_RANGE_1 = 0;
-//        PORT_RANGE_2 = 1;
-//        PORT_RANGE_4 = 2;
-//        PORT_RANGE_8 = 3;
-//        PORT_RANGE_16 = 4;
-//        PORT_RANGE_32 = 5;
-//        PORT_RANGE_64 = 6;
-//        PORT_RANGE_128 = 7;
-//        PORT_RANGE_256 = 8;
-//        PORT_RANGE_512 = 9;
-//        PORT_RANGE_1024 = 10;
-//        PORT_RANGE_2048 = 11;
-//        PORT_RANGE_4096 = 12;
-//        PORT_RANGE_8192 = 13;
-//        PORT_RANGE_16384 = 14;
-//    }
+    pthread_t thd2;
+    status = pthread_create(&thd2, NULL, rateThread, (void *) targ);
+    if (status != 0) {
+        fprintf(stderr, "\n ******* error creating thread\n\n");
+        return -1;
+    }
+
+    //--------------------------------------------------------
+
+    // Fake things since there is no internal fifo ...
+
+    int portRangeValue = getPortRange(sourceCount);
+    auto range = PortRange(portRangeValue);
+    if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
 
-    // If using control plane, fake things since there is no internal fifo ...
-    if (std::strlen(cpAddr) > 0) {
-        // Convert integer range in PortRange enum
-        // Set port range according to sourceCount
-        switch (sourceCount) {
-            case 1:
-                portRange = 0;
-                break;
-            case 2:
-                portRange = 1;
-                break;
-            case 3:
-            case 4:
-                portRange = 2;
-                break;
-            case 5:
-            case 6:
-            case 7:
-            case 8:
-                portRange = 3;
-                break;
-            default:
-                // up to 16 inputs
-                portRange = 4;
-                break;
-        }
+    float setPoint = 0.F;
+    float fillPercent = 0.F;
+    float pidError = 0.F;
+    float weight = 1.F;
 
-        auto range = PortRange(portRange);
-        float setPoint = 0.F;
-        float fillPercent = 0.F;
-        float pidError = 0.F;
-        float weight = 1.F;
-        std::string lbId = "myLB";
+    LbControlPlaneClient client(cpAddr, cpPort,
+                                dataAddr, startingPort, range,
+                                beName, instanceToken, lbId, weight);
 
-        LbControlPlaneClient client(cpAddr, cpPort,
-                                    dataAddr, startingPort, range,
-                                    beName, cpToken, lbId, weight);
+    // Register this client with the grpc server
+    int32_t err = client.Register();
+    if (err == 1) {
+        printf("GRPC client %s communication error with server when registering, exit\n", beName);
+        exit(1);
+    }
 
-        // Register this client with the grpc server &
-        // wait for server to send session token in return.
-        // Token stored internally in client.
-        int32_t err = client.Register();
+    printf("GRPC client %s registered!\n", beName);
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        // Update the changing variables
+        client.update(fillPercent, pidError);
+
+        // Send to server
+        err = client.SendState();
         if (err == 1) {
-            printf("GRPC client %s communication error with server when registering, exit\n", beName);
+            printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
             exit(1);
         }
-
-        printf("GRPC client %s registered!\n", beName);
-
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-
-            // Update the changing variables
-            client.update(fillPercent, pidError);
-
-            // Send to server
-            err = client.SendState();
-            if (err == 1) {
-                printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
-                exit(1);
-            }
-        }
     }
-    else {
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(7777));
-        }
-    }
+
 
     return 0;
 }

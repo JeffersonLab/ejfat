@@ -29,7 +29,9 @@
 #include <string>
 #include <stdexcept>
 #include <vector>
+#include <fstream>
 
+#include "ejfat.hpp"
 #include "ejfat_assemble_ersap.hpp"
 //#include "ejfat_network.hpp"
 
@@ -120,23 +122,21 @@ static bool haveEtName = false;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]\n",
 
             "        [-p <data receiving port, 17750 default>]",
             "        [-a <data receiving address to register w/ CP>]",
-            "        [-baddr <bind data receiving socket to this address, default INADDR_ANY>]",
-            "        [-token <authentication token (for CP registration, default token_<time>)>]",
-            "        [-range <data receiving port range, entropy of sender, default 0>]\n",
+            "        [-baddr <bind data receiving socket to this address, default INADDR_ANY>]\n",
+
 
             "        [-sfile <file name for stats>]",
             "        [-stime <stat sample millisec (t >= 1 msec, default = 1)]\n",
 
-            "        [-gaddr <CP IP address (default = none & no CP comm)>]",
-            "        [-gport <CP port (default 18347)>]",
-            "        [-gname <name of this backend (default backend_<time>)>]\n",
+            "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
+            "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
 
             "        [-kp <PID proportional constant, default 0.52>]",
             "        [-ki <PID integral constant, default 0.005>]",
@@ -145,14 +145,15 @@ static void printHelp(char *programName) {
             "        [-count <# of most recent fill values averaged, default 1000>]",
             "        [-rtime <millisec for reporting fill to CP, default 1000>]\n",
 
-            "        [-s <PID fifo set point (default 0)>]",
+            "        [-s <PID fifo set point (default 0.)>]",
+            "        [-w <initial relative weight in CP (default 1.)>]\n",
+
             "        [-b <internal buffer byte size (default 150kB)>]",
             "        [-r <UDP receive buffer byte size (default 25MB)>]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with clasBlaster and send data to an ET system.\n");
-    fprintf(stderr, "        It interacts with either a real or simulated control plane.\n");
     fprintf(stderr, "        Specifying a stat file name will create 1 files with:\n");
     fprintf(stderr, "          1) String header naming columns,\n");
     fprintf(stderr, "          2) Each row: time (usec), instant fill, avg fill, avg fill %%, pid err\n");
@@ -167,11 +168,9 @@ static void printHelp(char *programName) {
  * @param bufSize       filled with buffer size.
  * @param recvBufSize   filled with UDP receive buffer size.
  * @param tickPrescale  expected increase in tick with each incoming buffer.
- * @param cores         array of core ids on which to run assembly thread.
  * @param setPt         filled with the set point of PID loop used with fifo fill level.
+ * @param weight        filled with the set point of PID loop used with fifo fill level.
  * @param port          filled with UDP receiving data port to listen on.
- * @param cpPort        filled with main control plane port.
- * @param range         filled with range of ports in powers of 2 (entropy).
  * @param fillCount     filled with # of fill level measurements to average together before sending.
  * @param reportTime    filled with millisec between reports to CP.
  * @param stime         filled with time in millisec to sample stats.
@@ -179,24 +178,25 @@ static void printHelp(char *programName) {
  * @param useIPv6       filled with use IP version 6 flag.
  * @param dataAddr      filled with IP address to send to CP as data destination addr for this program.
  * @param listenAddr    filled with IP address to listen on (bind to) for incoming data.
- * @param cpAddr        filled with control plane IP address.
- * @param cpToken       filled with token string used into connecting to CP.
+ * @param uri           URI containing LB/CP connection info.
+ * @param file          name of file in which to read URI.
  * @param etFilename    filled with name of ET file in which to write data.
- * @param beName        filled with name of this backend CP client.
  * @param statBaseName  filled with base name of files used to store 100 sec of ET fill level data.
  * @param kp            filled with PID proportional constant.
  * @param ki            filled with PID integral constant.
  * @param kd            filled with PID differential constant.
+ * @param cores         vector to be filled with core numbers.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
-                      int *cores, float *setPt,
-                      uint16_t* port, uint16_t* cpPort, int *range,
+                      float *setPt, float* weight,
+                      uint16_t* port,
                       uint32_t *fillCount, uint32_t *reportTime, uint32_t *stime,
                       bool *debug, bool *useIPv6, char *dataAddr,
-                      char *listenAddr, char *cpAddr, char *cpToken,
-                      char *etFilename, char *beName, std::string &statFileName,
-                      float *kp, float *ki, float *kd) {
+                      char *listenAddr, char *uri, char* file,
+                      char *etFilename, std::string &statFileName,
+                      float *kp, float *ki, float *kd,
+                      std::vector<int>& cores) {
 
     int c, i_tmp;
     bool help = false;
@@ -207,11 +207,10 @@ static void parseArgs(int argc, char **argv,
             {             {"tpre",      1, nullptr, 1},
                           {"ip6",       0, nullptr, 2},
                           {"cores",     1, nullptr, 3},
-                          {"gaddr",     1, nullptr, 4},
-                          {"gport",     1, nullptr, 5},
-                          {"gname",     1, nullptr, 6},
-                          {"token",     1, nullptr, 7},
-                          {"range",     1, nullptr, 8},
+
+                          {"uri",       1, nullptr, 4},
+                          {"file",      1, nullptr, 5},
+
                           {"sfile",     1, nullptr, 9},
                           {"stime",     1, nullptr, 10},
                           {"kp",        1, nullptr, 11},
@@ -224,7 +223,7 @@ static void parseArgs(int argc, char **argv,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:s:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:s:w:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -239,32 +238,6 @@ static void parseArgs(int argc, char **argv,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -p, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
-            case 5:
-                // control plane PORT
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
-                    *cpPort = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -gport, 1023 < port < 65536\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                break;
-
-            case 8:
-                // LB port range
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp >= 0 && i_tmp <= 14) {
-                    *range = i_tmp;
-                }
-                else {
-                    fprintf(stderr, "Invalid argument to -range, 0 <= port <= 14\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
@@ -286,6 +259,27 @@ static void parseArgs(int argc, char **argv,
                 }
                 else {
                     fprintf(stderr, "Invalid argument to -s, 0 <= PID set point <= 100\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                break;
+
+            case 'w':
+                // Initial relative weight of this consumer in CP
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -w, 0.0 <= weight\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+
+                if (sp >= 0.) {
+                    *weight = sp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -w, 0.0 <= weight\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
@@ -317,16 +311,6 @@ static void parseArgs(int argc, char **argv,
                 }
                 break;
 
-            case 7:
-                // backend authentication token with control plane
-                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
-                    fprintf(stderr, "authentication token length must be > 1 and < 33\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(cpToken, optarg);
-                break;
-
             case 'a':
                 // data receiving IP ADDRESS to report to CP
                 if (strlen(optarg) > 15 || strlen(optarg) < 7) {
@@ -348,26 +332,6 @@ static void parseArgs(int argc, char **argv,
                 strcpy(listenAddr, optarg);
                 break;
 
-            case 4:
-                // control plane IP ADDRESS
-                if (strlen(optarg) > 15 || strlen(optarg) < 7) {
-                    fprintf(stderr, "grpc server IP address is bad\n\n");
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(cpAddr, optarg);
-                break;
-
-            case 6:
-                // this client name to control plane
-                if (strlen(optarg) > 32 || strlen(optarg) < 1) {
-                    fprintf(stderr, "backend client name too long/short, %s\n\n", optarg);
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                strcpy(beName, optarg);
-                break;
-
             case 'f':
                 // ET file
                 if (strlen(optarg) > 100 || strlen(optarg) < 1) {
@@ -377,16 +341,6 @@ static void parseArgs(int argc, char **argv,
                 }
                 haveEtName = true;
                 strcpy(etFilename, optarg);
-                break;
-
-            case 9:
-                // statistics file name
-                if (strlen(optarg) > 100 || strlen(optarg) < 1) {
-                    fprintf(stderr, "stat file name too long/short, %s\n\n", optarg);
-                    printHelp(argv[0]);
-                    exit(-1);
-                }
-                statFileName = optarg;
                 break;
 
             case 1:
@@ -409,58 +363,58 @@ static void parseArgs(int argc, char **argv,
                 break;
 
             case 3:
-                // Cores to run on
+                // Incoming source cores
                 if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
-                    printHelp(argv[0]);
+                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of cores\n");
                     exit(-1);
                 }
 
-
                 {
-                    // split into ints
+                    cores.clear();
                     std::string s = optarg;
-                    std::string delimiter = ",";
-
-                    size_t pos = 0;
+                    std::stringstream ss(s);
                     std::string token;
-                    char *endptr;
-                    int index = 0;
-                    bool oneMore = true;
 
-                    while ((pos = s.find(delimiter)) != std::string::npos) {
-                        //fprintf(stderr, "pos = %llu\n", pos);
-                        token = s.substr(0, pos);
-                        errno = 0;
-                        cores[index] = (int) strtol(token.c_str(), &endptr, 0);
-
-                        if ((token.c_str() - endptr) == 0) {
-                            //fprintf(stderr, "two commas next to eachother\n");
-                            oneMore = false;
-                            break;
+                    while (std::getline(ss, token, ',')) {
+                        try {
+                            int value = std::stoi(token);
+                            cores.push_back(value);
                         }
-                        index++;
-                        //std::cout << token << std::endl;
-                        s.erase(0, pos + delimiter.length());
-                        if (s.length() == 0) {
-                            //fprintf(stderr, "break on zero len string\n");
-                            oneMore = false;
-                            break;
-                        }
-                    }
-
-                    if (oneMore) {
-                        errno = 0;
-                        cores[index] = (int) strtol(s.c_str(), nullptr, 0);
-                        if (errno == EINVAL || errno == ERANGE) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n\n");
-                            printHelp(argv[0]);
+                        catch (const std::exception& e) {
+                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of ints\n");
                             exit(-1);
                         }
-                        index++;
-                        //std::cout << s << std::endl;
                     }
                 }
+
+                break;
+
+            case 4:
+                // URI
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -uri, uri name is too long\n");
+                    exit(-1);
+                }
+                strcpy(uri, optarg);
+                break;
+
+            case 5:
+                // FILE NAME
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -file, file name is too long\n");
+                    exit(-1);
+                }
+                strcpy(file, optarg);
+                break;
+
+            case 9:
+                // statistics file name
+                if (strlen(optarg) > 100 || strlen(optarg) < 1) {
+                    fprintf(stderr, "stat file name too long/short, %s\n\n", optarg);
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                statFileName = optarg;
                 break;
 
             case 10:
@@ -706,8 +660,10 @@ typedef struct threadStruct_t {
 
     std::string myName;
     std::string token;
+    std::string lbId;
+
     float setPoint;
-    bool report;
+    float weight;
 
     // fill stats
     bool keepFillStats;
@@ -731,7 +687,6 @@ static void *pidThread(void *arg) {
 
     et_sys_id etId = targ->etId;
     et_fifo_id fid = targ->fid;
-    bool reportToCp = targ->report;
 
     int status, numEvents, usedFifoEntries = 0;
     size_t eventSize;
@@ -779,33 +734,13 @@ static void *pidThread(void *arg) {
     }
 
 
-//    /**
-//     * Constructor.
-//     * @param cIp          grpc IP address of control plane (dotted decimal format).
-//     * @param cPort        grpc port of control plane.
-//     * @param bIp          data-receiving IP address of this backend client.
-//     * @param bPort        data-receiving port of this backend client.
-//     * @param bPortRange   range of data-receiving ports for this backend client.
-//     * @param cliName      name of this backend.
-//     * @param bufferSize   byte size of each buffer (fifo entry) in this backend.
-//     * @param bufferCount  number of buffers in fifo.
-//     * @param setPoint     PID loop set point (% of fifo).
-//     *
-//     */
-//    LbControlPlaneClient::LbControlPlaneClient(
-//            const std::string& cIP, uint16_t cPort,
-//            const std::string& bIP, uint16_t bPort,
-//            PortRange bPortRange, const std::string& cliName,
-//            uint32_t bufferSize, uint32_t bufferCount, float setPoint)  {
-//    }
-
     // convert integer range in PortRange enum
     auto range = PortRange(targ->dataPortRange);
 
     LbControlPlaneClient client(targ->cpServerIpAddr, targ->cpServerPort,
                                 targ->dataIpAddr, targ->dataPort, range,
                                 targ->myName, targ->token,
-                                (int32_t)eventSize, numEvents, targ->setPoint);
+                                targ->lbId, targ->weight);
 
     // Register this client with the grpc server &
     // wait for server to send session token in return.
@@ -969,19 +904,16 @@ static void *pidThread(void *arg) {
         // Every "loopMax" loops
         if (--loopCount <= 0) {
 
-            if (reportToCp) {
-                // Update the changing variables
-                client.update(fillPercent, pidError);
+            // Update the changing variables
+            client.update(fillPercent, pidError);
 
-                // Send to server
-                err = client.SendState();
-                if (err == 1) {
-                    printf("GRPC client %s communication error with server during sending of data, exit\n",
-                           targ->myName.c_str());
-                    exit(1);
-                }
+            // Send to server
+            err = client.SendState();
+            if (err == 1) {
+                printf("GRPC client %s communication error with server during sending of data, exit\n",
+                       targ->myName.c_str());
+                exit(1);
             }
-
 
             // Write out stats
             if (keepFillStats) {
@@ -1147,15 +1079,17 @@ int main(int argc, char **argv) {
 
     int udpSocket;
     ssize_t nBytes;
-    int range = 0; // translates to PORT_RANGE_1 in proto enum
-    int cores[10];
+    std::vector<int> cores;
 
     // Set some defaults
     int bufSize = 150000;
     int recvBufSize = 25000000;
     int tickPrescale = 1;
+
     float cpSetPoint = 0.f;
-    uint16_t cpPort = 18347;
+    float weight = 1.f;
+
+//    uint16_t cpPort = 18347;
     uint16_t port = 17750;
 
     bool debug = false;
@@ -1187,75 +1121,109 @@ int main(int argc, char **argv) {
     char et_filename[101];
     memset(et_filename, 0, 101);
 
-    char cpAddr[16];
-    memset(cpAddr, 0, 16);
+    char uri[256];
+    memset(uri, 0, 256);
 
-    char beName[33];
-    memset(beName, 0, 33);
+    char fileName[256];
+    memset(fileName, 0, 256);
 
-    char cpToken[33];
-    memset(cpToken, 0, 33);
+    char beName[256];
+    memset(beName, 0, 256);
 
-    for (int i=0; i < 10; i++) {
-        cores[i] = -1;
-    }
 
     parseArgs(argc, argv,
               &bufSize, &recvBufSize, &tickPrescale,
-              cores, &cpSetPoint,
-              &port, &cpPort, &range,
+              &cpSetPoint, &weight,
+              &port,
               &fcount, &reportTime, &stime,
               &debug, &useIPv6, dataAddr,
-              listeningAddr, cpAddr, cpToken,
-              et_filename, beName, stat_file_name,
-              &Kp, &Ki, &Kd);
+              listeningAddr, uri, fileName,
+              et_filename, stat_file_name,
+              &Kp, &Ki, &Kd,
+              cores);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
     std::cerr << "Using Kp = " << Kp << ", Ki = " << Ki << ", Kd = " << Kd << "\n";
 
-    // Do we report to control plane?
-    bool reportToCP = true;
-    if (strlen(cpAddr) < 1) {
-        reportToCP = false;
+    //----------------------------------------------
+    // Parse the URI (directly given or in file().
+    // This gives CP connection info.
+    //----------------------------------------------
+
+    // Set default file name
+    if (strlen(fileName) < 1) {
+        strcpy(fileName, "/tmp/ejfat_uri");
     }
 
+    ejfatURI uriInfo;
+    bool haveEverything = false;
 
-    // Find a few bits of local time to set default names if necessary
-    time_t localT = time(nullptr) & 0xffff;
-
-    // Make sure this backend has a name
-    if (strlen(beName) < 1) {
-        std::string name = "backend_" + std::to_string(localT);
-        std::strcpy(beName, name.c_str());
+    // First see if the uri arg is defined, if so, parse it
+    if (strlen(uri) > 0) {
+        bool parsed = parseURI(uri, uriInfo);
+        if (parsed) {
+            // URI is in correct format
+            if (!uriInfo.haveInstanceToken) {
+                std::cerr << "no LB/CP info in URI" << std::endl;
+            }
+            else {
+                haveEverything = true;
+            }
+        }
     }
 
-    // Make sure we have a token
-    if (strlen(cpToken) < 1) {
-        std::string name = "token_" + std::to_string(localT);
-        std::strcpy(cpToken, name.c_str());
+    // If no luck with URI, look into file
+    if (!haveEverything && strlen(fileName) > 0) {
+
+        std::ifstream file(fileName);
+        if (file.is_open()) {
+            std::string uriLine;
+            if (std::getline(file, uriLine)) {
+                bool parsed = parseURI(uriLine, uriInfo);
+                if (parsed) {
+                    if (!uriInfo.haveInstanceToken) {
+                        std::cerr << "no LB/CP info in file" << std::endl;
+                        file.close();
+                        return 1;
+                    }
+                }
+            }
+
+            file.close();
+        }
     }
+
+    std::string cpAddr = uriInfo.cpAddrV4;
+    uint16_t cpPort    = uriInfo.cpPort;
+    std::string lbId   = uriInfo.lbId;
+    std::string instanceToken = uriInfo.instanceToken;
+
+    //printUri(std::cerr, uriInfo);
+
+    // Need to give this back end a name (no, not "horse's"),
+    // base part of it on least significant 6 digits of current time in microsec
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int time = now.tv_nsec/1000L;
+    sprintf(beName, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
+
 
 #ifdef __linux__
 
-    if (cores[0] > -1) {
+    if (cores.size() > 0) {
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
         if (debug) {
-            for (int i=0; i < 10; i++) {
-                     std::cerr << "core[" << i << "] = " << cores[i] << "\n";
+            for (int i=0; i < cores.size(); i++) {
+                std::cerr << "core[" << i << "] = " << cores[i] << "\n";
             }
         }
 
-        for (int i=0; i < 10; i++) {
-            if (cores[i] >= 0) {
-                std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
-                CPU_SET(cores[i], &cpuset);
-            }
-            else {
-                break;
-            }
+        for (int i=0; i < cores.size(); i++) {
+            std::cerr << "Run reassembly thread on core " << cores[i] << "\n";
+            CPU_SET(cores[i], &cpuset);
         }
         pthread_t current_thread = pthread_self();
         int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
@@ -1520,8 +1488,6 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         }
 
 
-        if (reportToCP) {
-
             // Start thread to do PID "control"
             threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
             if (targ == nullptr) {
@@ -1531,17 +1497,19 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
 
             targ->etId = id;
             targ->fid = fid;
-            targ->cpServerPort = cpPort;
+
+            targ->cpServerPort   = cpPort;
             targ->cpServerIpAddr = cpAddr;
 
             targ->dataPort = port;
             targ->dataIpAddr = dataAddr;
-            targ->dataPortRange = range;
+            targ->dataPortRange = 0;
 
-            targ->myName = beName;
-            targ->token = cpToken;
+            targ->myName   = beName;
+            targ->token    = instanceToken;
+            targ->lbId     = lbId;
             targ->setPoint = cpSetPoint;
-            targ->report = reportToCP;
+            targ->weight   = weight;
 
             targ->Kp = Kp;
             targ->Ki = Ki;
@@ -1562,7 +1530,7 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
                 fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
                 return -1;
             }
-        }
+
     }
 
     // Start with offset 0 in very first packet to be read
