@@ -50,6 +50,7 @@ set(TEST_NAME "daos_test")
 add_executable(
   ${TEST_NAME}
   test_daos_version.cc
+  test_daos_pool.cc
   test_daos_cont.cc
   test_daos_obj.cc
   test_daos_kv.cc

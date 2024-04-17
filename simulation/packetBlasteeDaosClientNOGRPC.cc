@@ -466,6 +466,7 @@ int main(int argc, char **argv) {
 
     // DAOS stuff declaration
     DAOSConnector daos_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
+    std::cout << "DAOS pool usage: " << daos_client.getPoolUsage() << "%\n" << std::endl;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -736,7 +737,7 @@ int main(int argc, char **argv) {
 
         // DAOS: send data to DAOS server.
         daos_obj_id_t daos_oid = daos_client.createKVObject(tick);
-        /// TODO: more meaningful DAOS keys.
+        /// TODO: discuss DAOS object keys with team members.
         daos_client.push2KVObject(daos_oid,
                     generate_daos_kv_key(totalEvents), nBytes, dataBuf);
 

@@ -40,6 +40,7 @@ namespace ejfat {
                 }
 
                 daos_fini();  // must-have
+                std::cout << "Close DAOS container [" << pool_label << ":" << cont_label << "]\n\n";
 
                 // Cleanup
                 coh = DAOS_HDL_INVAL;
@@ -165,8 +166,8 @@ namespace ejfat {
                 if (rt != 0) {
                     processKVError(oh, "daos_kv_obj_put", rt);
                 }
-                std::cout << "Put " << size << " bytes of data to "
-                    << oid.hi << ":" << oid.lo << " with key_str: " << key << std::endl;
+                // std::cout << "Put " << size << " bytes of data to "
+                //     << oid.hi << ":" << oid.lo << " with key_str: " << key << std::endl;
 
                 rt = closeDAOSKVObject(oh);
                 if (rt != 0) {
@@ -174,7 +175,7 @@ namespace ejfat {
                 }
             }
 
-            /// TODO: a function to get the pool percentage usage.
+            // Get the pool percentage usage. Now it's based on the tier-0 (SCM) space info.
             // Now I can only find a measurement "Used" via `dmg pool ls` as below
                 /* $ dmg pool ls
                     Pool  Size   State Used Imbalance Disabled 
@@ -182,7 +183,20 @@ namespace ejfat {
                     ejfat 1.7 TB Ready 2%   0%        0/96  
                 */
             // Check "daos_pool_space" in daos_pool.h to get clues.
-            // getPoolUsage();
+            double getPoolUsage() {
+                daos_pool_info_t pool_info = {0};
+                pool_info.pi_bits = DPI_SPACE;  // must-have. Tell daos_pool_query() that we need space info.
+
+                int rt = daos_pool_query(poh, NULL, &pool_info, NULL, NULL);
+                if (rt != 0) {
+                    processRtError("daos_pool_query", rt);
+                }
+
+                double scm_usage = 100.0 - \
+                    (pool_info.pi_space.ps_space.s_free[0] * 100.0) / pool_info.pi_space.ps_space.s_total[0];
+
+                return scm_usage;
+            }
 
     };
 
