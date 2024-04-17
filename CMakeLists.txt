@@ -148,6 +148,10 @@ set(DAOS_EXEC_FILES
         simulation/packetBlasteeDaosClientNOGRPC.cc
         )
 
+set(DAOS_GRPC_EXEC_FILES
+        simulation/packetBlasteeDaosClient.cc
+        )
+
 set(TEST_FILES
         )
 
@@ -403,15 +407,13 @@ if (DEFINED MAKE_EXEC)
     endif()
 
     if (BUILD_DAOS AND DAOS_FOUND)
-        message(STATUS "TRY DAOS CODE:")
+        message(STATUS "TRY DAOS CODE WITHOUT GRPC:")
 
-        # This files need util files added to executable
         foreach(fileName ${DAOS_EXEC_FILES})
             # Get file name with no directory or extension as executable name
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
-            message(STATUS "Create daos-related executable " ${execName})
-            # UTIL_FILES and GRPC_SRC_FILES are only really needed for packetBlasteeEtMT
+            message(STATUS "Create daos executable without grpc " ${execName})
             add_executable(${execName} ${fileName})
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
@@ -428,9 +430,38 @@ if (DEFINED MAKE_EXEC)
                 install(TARGETS ${execName} RUNTIME DESTINATION bin)
             endif()
         endforeach(fileName)
+
+        if (BUILD_GRPC AND GRPC_FOUND)
+            message(STATUS "TRY DAOS CODE WITH GRPC:")
+
+            # This files need util files added to executable
+            foreach(fileName ${DAOS_GRPC_EXEC_FILES})
+                # Get file name with no directory or extension as executable name
+                get_filename_component(execName ${fileName} NAME_WE)
+                # Create executable from file
+                message(STATUS "Create daos-grpc-related executable " ${execName})
+                add_executable(${execName} ${fileName})
+                # Put debug extension on if applicable
+                set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+                # Location of include files
+                target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                        ${CMAKE_SOURCE_DIR}/simulation
+                        ${GRPC_INCLUDE_DIRS}
+                        ${DAOS_INCLUDE_DIRS})
+
+                # Needs these libs
+                target_link_libraries(${execName} pthread ${GRPC_LIBRARIES} ${DAOS_LIBRARY})
+
+                # Only install if installation directory has been defined
+                if (DEFINED INSTALL_DIR_DEFINED)
+                    # Install into bin dir
+                    install(TARGETS ${execName} RUNTIME DESTINATION bin)
+                endif()
+            endforeach(fileName)
+        endif()
     endif()
 
-    if (BUILD_GRPC AND GRPC_FOUND)
+    if (BUILD_GRPC AND GRPC_FOUND AND NOT BUILD_DAOS)
         message(STATUS "TRY GRPC CODE:")
 
         # This files need util files added to executable

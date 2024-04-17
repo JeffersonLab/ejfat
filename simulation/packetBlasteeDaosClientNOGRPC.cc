@@ -15,8 +15,6 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <sstream>
-#include <iomanip>
 #include <ctime>
 #include <thread>
 #include <cmath>
@@ -47,8 +45,6 @@ using namespace ejfat;
 
 // Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
 #define EJFAT_DAOS_CONT_LABEL "cont1"
-
-#define MAX_UINT64_DIGITS 20  // help to convert a uint64_t to a padded string
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -432,24 +428,6 @@ static void *thread(void *arg) {
 }
 
 
-const char* uint64ToStringWithPadding(uint64_t num, int width) {
-    static std::string str; // static to ensure lifetime beyond function scope
-    std::stringstream ss;
-    ss << std::setw(width) << std::setfill('0') << num;
-    str = ss.str();
-
-    std::cout << "\nGet event id string: " << str << std::endl;
-    return str.c_str();
-}
-
-
-// @return a string based on @param evt_id but with padding zeros
-const char* generate_daos_kv_key(uint64_t evt_id) {
-    const char * result = uint64ToStringWithPadding(evt_id, MAX_UINT64_DIGITS);
-    return result;
-}
-
-
 int main(int argc, char **argv) {
 
     int udpSocket;
@@ -735,7 +713,7 @@ int main(int argc, char **argv) {
         discardedBytes   += stats->discardedBytes;
         discardedPackets += stats->discardedPackets;
 
-        // DAOS: send data to DAOS server.
+        // Send data to DAOS server.
         daos_obj_id_t daos_oid = daos_client.createKVObject(tick);
         /// TODO: discuss DAOS object keys with team members.
         daos_client.push2KVObject(daos_oid,

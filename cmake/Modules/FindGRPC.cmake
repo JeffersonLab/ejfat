@@ -26,9 +26,10 @@ find_library(GRPC++_REFLECTION_LIBRARY
         PATHS $ENV{GRPC_INSTALL_DIR}/lib)
 
 # Use No_DEFAULT_PATH to avoid picking up the protobuf lib already installed
+# On daosfs01, libprotobuf is installled to $ENV{GRPC_INSTALL_DIR}/lib64
 find_library(PROTOBUF_LIBRARY
         NAMES protobuf
-        PATHS $ENV{GRPC_INSTALL_DIR}/lib
+        PATHS $ENV{GRPC_INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib64
         NO_DEFAULT_PATH)
 
 if(GRPC_LIBRARY)

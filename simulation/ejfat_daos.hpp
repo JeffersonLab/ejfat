@@ -14,15 +14,19 @@
 
 #include <daos.h>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
+
+#define MAX_UINT64_DIGITS 20  // help to convert a uint64_t to a padded string
 
 namespace ejfat {
 
-    /** WARNING: 
-     * This pilot class only has simple use cases!
-     * It does not consider the edge cases very well!
-    */
-
     class DAOSConnector {
+
+        /** WARNING:
+         * This pilot class only has simple use cases!
+         * It does not consider the edge cases very well!
+        */
         
         private:
             const char* pool_label;
@@ -175,29 +179,52 @@ namespace ejfat {
                 }
             }
 
-            // Get the pool percentage usage. Now it's based on the tier-0 (SCM) space info.
-            // Now I can only find a measurement "Used" via `dmg pool ls` as below
-                /* $ dmg pool ls
-                    Pool  Size   State Used Imbalance Disabled 
-                    ----  ----   ----- ---- --------- -------- 
-                    ejfat 1.7 TB Ready 2%   0%        0/96  
-                */
-            // Check "daos_pool_space" in daos_pool.h to get clues.
-            double getPoolUsage() {
+            
+            /**
+             * Get the pool percentage usage. Now it's based on the tier-0 (SCM) space info.
+             * @return a float value in range [0, 1]
+             */
+            /* Now I can only find a measurement "Used" via `dmg pool ls` as below
+                //  $ dmg pool ls
+                //     Pool  Size   State Used Imbalance Disabled 
+                //     ----  ----   ----- ---- --------- -------- 
+                //     ejfat 1.7 TB Ready 2%   0%        0/96
+            */
+            /// NOTE: As this usage is reported by pool. Individual receivers needs to have its own pool.
+            float getPoolUsage() {
                 daos_pool_info_t pool_info = {0};
-                pool_info.pi_bits = DPI_SPACE;  // must-have. Tell daos_pool_query() that we need space info.
+                pool_info.pi_bits = DPI_SPACE;  // must-have. Tell daos_pool_query() to return space info.
 
                 int rt = daos_pool_query(poh, NULL, &pool_info, NULL, NULL);
                 if (rt != 0) {
                     processRtError("daos_pool_query", rt);
                 }
 
-                double scm_usage = 100.0 - \
-                    (pool_info.pi_space.ps_space.s_free[0] * 100.0) / pool_info.pi_space.ps_space.s_total[0];
+                float tier0_usage = 1.F - \
+                    (float)pool_info.pi_space.ps_space.s_free[0] / pool_info.pi_space.ps_space.s_total[0];
 
-                return scm_usage;
+                return tier0_usage;
             }
 
     };
+
+    /// @brief Helper function to convert a uint64_t to fixed-width string.
+    /// @return the converted string.
+    const char* uint64ToStringWithPadding(uint64_t num, int width) {
+        static std::string str; // static to ensure lifetime beyond function scope
+        std::stringstream ss;
+        ss << std::setw(width) << std::setfill('0') << num;
+        str = ss.str();
+
+        std::cout << "\nGet event id string: " << str << std::endl;
+        return str.c_str();
+    }
+
+    /// Helper function to generate DAOS object key strings.
+    /// @return a string based on @param evt_id but with padding zeros
+    const char* generate_daos_kv_key(uint64_t evt_id) {
+        const char * result = uint64ToStringWithPadding(evt_id, MAX_UINT64_DIGITS);
+        return result;
+    }
 
 }
