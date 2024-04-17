@@ -40,12 +40,26 @@ set(CMAKE_DEBUG_POSTFIX -dbg)
 
 # -------- Prometheus staff
 
-find_package(prometheus-cpp REQUIRED)
-find_package(Crow REQUIRED)
+include(FetchContent)
 
-add_executable(prometheus_exporter main.cpp)
+FetchContent_Declare(
+  crow
+  GIT_REPOSITORY https://github.com/ipkn/crow.git
+  GIT_TAG        master # or a specific commit/branch/tag
+)
+
+FetchContent_GetProperties(crow)
+if(NOT crow_POPULATED)
+  FetchContent_Populate(crow)
+  set(CROW_INCLUDE_DIR ${crow_SOURCE_DIR}/include)
+  include_directories(${CROW_INCLUDE_DIR})
+endif()
+
+# Assuming prometheus-cpp is available and find_package can locate it
+find_package(prometheus-cpp REQUIRED)
+
+add_executable(prometheus_exporter simulation/packetBlasteeEtMTPRT.cc)
 target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
-target_link_libraries(prometheus_exporter PRIVATE Crow::Crow)
 
 # -------- Prometheus staff
 
