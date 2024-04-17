@@ -38,6 +38,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DEBUG_POSTFIX -dbg)
 
+# -------- Prometheus staff
+find_package(prometheus-cpp REQUIRED)
+find_package(Crow REQUIRED)
+
+add_executable(prometheus_exporter main.cpp)
+target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
+target_link_libraries(prometheus_exporter PRIVATE Crow::Crow)
+# -------- Prometheus staff
+
 # Make executables
 set(MAKE_EXEC 1)
 
@@ -487,4 +496,3 @@ if(NOT TARGET uninstall)
     add_custom_target(uninstall
             COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 endif()
-
