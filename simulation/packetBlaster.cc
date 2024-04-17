@@ -608,6 +608,7 @@ int main(int argc, char **argv) {
         if (file.is_open()) {
             std::string uriLine;
             if (std::getline(file, uriLine)) {
+
                 bool parsed = parseURI(uriLine, uriInfo);
                 if (parsed) {
                     if (!(uriInfo.haveData && uriInfo.haveSync)) {
@@ -615,12 +616,18 @@ int main(int argc, char **argv) {
                         file.close();
                         return 1;
                     }
+                    else {
+                        haveEverything = true;
+                    }
                 }
+
             }
 
             file.close();
         }
     }
+
+    //printUri(std::cerr, uriInfo);
 
     if (!haveEverything) {
         std::cerr << "no LB/CP info in uri or file" << std::endl;

@@ -2263,11 +2263,21 @@ int main(int argc, char **argv) {
                         file.close();
                         return 1;
                     }
+                    else {
+                        haveEverything = true;
+                    }
                 }
             }
 
             file.close();
         }
+    }
+
+    //printUri(std::cerr, uriInfo);
+
+    if (!haveEverything) {
+        std::cerr << "no LB/CP info in uri or file" << std::endl;
+        return 1;
     }
 
     std::string cpAddr = uriInfo.cpAddrV4;
