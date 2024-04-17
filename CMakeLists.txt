@@ -39,6 +39,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DEBUG_POSTFIX -dbg)
 
 # -------- Prometheus staff
+
 find_package(prometheus-cpp REQUIRED)
 find_package(Crow REQUIRED)
 
