@@ -1,26 +1,46 @@
-# EJFAT
-**ESnet-JLab FPGA Accelerated Transport**
+# EJFAT (ESnet-JLab FPGA Accelerated Transport)
 
-## Check out ejfat, esnet branch
+## Check out ejfat, esnet2 branch
 
-    git clone https://github.com/JeffersonLab/ejfat.git
+    git clone https://github.com/JeffersonLab/ejfat/tree/esnet2
             or 
     gh repo clone JeffersonLab/ejfat
-    git checkout esnet
+    git checkout esnet2
     
-
-## Building ejfat
-
-Start by doing:
-
+    cd ejfat
     mkdir build
     cd build
-    
-At this point, the user will need to decide what exactly needs to be compiled.
 
-#### Compiling executables with no external dependencies and a ***static*** Control Plane
+
+    
+###-------------------------------------------------------------
+### Latest code with no dependencies
 
     cmake ..
+    make
+
+Or if you want to place files into an installation directory:
+
+    export EJFAT_ERSAP_INSTALL_DIR=/home/me/install_dir
+    cmake ..
+        or
+    cmake .. -DINSTALL_DIR=/home/me/install_dir
+    
+    make install
+    
+From the **simulation** directory, the standard data sender
+will always be compiled.
+It takes the URI (more on this later) and can parse it to find out where to
+send data and sync messages. The following is created:
+
+- **packetBlaster** (packetizes and sends data)
+
+
+
+###-------------------------------------------------------------
+### Older code with no dependencies & a static Control Plane
+
+    cmake .. -DBUILD_OLD=1
     make
 
 The **emulation** directory, containing Mike Goodrich's old code,
@@ -38,42 +58,108 @@ receivers only configured to use the old, static CP (no grpc).
 The following programs will be created:
 
 - **packetBlastee** (receives and reassembles data with static LB only)
+- **packetBlasterOld** (sends data to LB or directly to receiver)
 - **packetBlasterSmall** (For Debugging, sends really small packets to LB)
 - **packetAnalyzer** (For Debugging, receives pkts and prints RE and LB headers)
 - **udp_send_order** (sends file, which is read or piped-in, to udp_rcv_order)
 - **udp_rcv_order** (receives file sent by udp_send_order and reconstructs it)
 
 
-These executables will be created with every **make** no matter
-which cmake flags are used.
 
+###-------------------------------------------------------------
+### Latest "simple" API code
 
-From the **simulation** directory, the following will be created:
-
-- **packetBlaster** (packetizes and sends data)
-
+#### General
 
 The **simpleAPI** directory contains classes EjfatConsumer and EjfatProducer
 which are held in a library along with a couple of executables based on them.
-They support the latest CP/LB which requires an LB reservation and a
-specially-generated URI from the reservation which allows both a producer and
-consumer of data to use the CP/LB. This API was designed to be as simple
-as possible, hiding much of the complexity from users. It depends only on the
-boost and grpc-based libs.+
+They support the latest CP/LB which requires an LB reservation. This reservation
+produces a URI which allows both a producers and consumers to use the CP/LB.
+This API was designed to be as simple as possible, hiding much of the complexity
+from users. It depends on the boost, protobuf, and grpc-based libs.
+
+Cmake **should** find boost.  
+The following grpc-related libs are also necessary:
+
+- libgrpc++.so
+- libgrpc++_reflection.so
+- libprotobuf.so
+
+In addition, there is a library of ejfat commands for talking grpc to the CP:
+
+- libejfat-grpc.so
+
+
+#### Find existing external libs
+
+If the mentioned libs have been already installed on your system, cmake can
+find them by setting an environmental variable to the location of all 4 libs.
+
+    # first look here
+    export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
+    # then here
+    export GRPC_INSTALL_DIR=<installation dir>
+        
+
+#### Install GRPC dependencies
+
+If these libs are **not** already installed, then more work needs to be done.
+Find the requisite packages at:
+
+- **ejfat-grpc**  at  https://github.com/JeffersonLab/ersap-grpc
+
+- **protobuf** can be obtained as follows:
+
+On ubuntu
+
+    sudo apt install protobuf-compiler
+    sudo apt install libprotobuf-dev
+
+- **grpc** can be obtained as follows:
+
+
+On ubuntu
+
+    sudo apt search grpc
+    sudo apt install libgrpc-dev
+
+
+Or download gRPC directly from the official website: https://grpc.io  
+
+Or the source code for gRPC is hosted on GitHub:
+
+    git clone https://github.com/grpc/grpc.git
+
+All these packages need to be installed and available in one of the installation
+directories mentioned above.
+
+
+#### Build
+
+    cmake .. -DBUILD_SIMPLE=1
+    make
+
 The following will be created:
 
 - **libejfat_simple.so** (consumer and producer C++ classes)
-- **simpleConsumer** (receives and reassembles data)
-- **simpleProduer** (packetizes and sends data)
+- **simpleConsumer**     (receives and reassembles data)
+- **simpleProduer**      (packetizes and sends data)
+- **lbreserve**          (reserves a load balancer)
+- **lbfree**             (frees a load balancer)
+- **lbmonitor**          (prints stats of a load balancer)
 
 
+#### More details
+
+For more details, look at simpleAPI/README.md
 
 
-
+###-------------------------------------------------------------
+###-------------------------------------------------------------
 #### Where to look for libs & headers
 
 Be sure to define the following environmental variables, depending on what
-you're compiling:
+you're compiling so that cmake know where to find it:
 
 - **et**
 
@@ -114,14 +200,15 @@ you're compiling:
         
 
 
-#### Compiling everything
+###-------------------------------------------------------------
+#### Compile everything (except staticLB and simpleAPI dirs)
 
     cmake -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1 ..
     make
 
 
 
-#### Compiling disruptor-related utility libs
+#### Compile disruptor-related utility libs
 Creating **libejfat_util.so** and **libejfat_util_st.a**.
 
     cmake -DBUILD_DIS=1 ..
@@ -129,7 +216,7 @@ Creating **libejfat_util.so** and **libejfat_util_st.a**.
 
 
 
-#### Compiling everything in simulation and util directories
+#### Compile everything in simulation and util directories
 
 Among other things, this will make all grpc-enabled reassembly code.
 
@@ -138,39 +225,36 @@ Among other things, this will make all grpc-enabled reassembly code.
 
 
 
-#### Compiling clas_blaster
+#### Compile clas_blaster
 
     cmake -DBUILD_CLAS=1 ..
     make
 
 
-#### Compiling ERSAP engines
+#### Compile ERSAP engines
 
     cmake -DBUILD_ERSAP=1 -DBUILD_ET=1 ..
     make
 
 
-
-
+###-------------------------------------------------------------
 ## Installation of headers, libs, and executables:
 
-- Do
-    
-        cmake -DINSTALL_DIR=<dir> ..
-        make install
-
-- If INSTALL_DIR is not set as a flag,
-  Define the **EJFAT_ERSAP_INSTALL_DIR** environmental variable, and do
-   
+        export EJFAT_ERSAP_INSTALL_DIR=/home/me/install_dir
+        cmake ..
+            or
+        cmake .. -DINSTALL_DIR=/home/me/install_dir
+        
         make install
 
 
-
+###-------------------------------------------------------------
 ## Uninstalling headers, libs, and executables:
    
         make uninstall
 
 
+###-------------------------------------------------------------
 ## Where to find dependencies
 
 - **et**  at  https://github.com/JeffersonLab/et
@@ -201,7 +285,8 @@ The source code for gRPC is hosted on GitHub:
 
 
 
-### List of libraries that may be needed to build:
+###-------------------------------------------------------------
+### Libraries that may need to be built:
 
 #### From ET
 
@@ -240,6 +325,7 @@ directory for more details.**
 
 
 
+###-------------------------------------------------------------
 ## Building clas12 data sender in java
 Do the following:
 
@@ -252,6 +338,7 @@ Clas12DataSender class. To run this and get its help output:
 
 
 
+###-------------------------------------------------------------
 ## Using the ET system as a FIFO for EJFAT backend
 
 #### Create and run the ET system for ejfat reassembler by calling
