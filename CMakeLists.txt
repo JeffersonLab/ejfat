@@ -45,6 +45,7 @@ find_package(Crow REQUIRED)
 add_executable(prometheus_exporter main.cpp)
 target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
 target_link_libraries(prometheus_exporter PRIVATE Crow::Crow)
+
 # -------- Prometheus staff
 
 # Make executables
