@@ -285,7 +285,7 @@ option(BUILD_DIS "Build Disruptor-related code" OFF)
 
 if (BUILD_DIS)
     # Find where Disruptor libs and includes are installed for ejfat use.
-    # If nothing is found in INSTALL_DIR, then DISRUPTOR_CPP_HOME will be searched
+    # If nothing is found in INSTALL_DIR, then $ENV{DISRUPTOR_CPP_HOME} will be searched
 
     find_package(DISRUPTOR)
     if (DISRUPTOR_FOUND)
@@ -331,7 +331,7 @@ option(BUILD_GRPC "Build grpc-related code" OFF)
 
 if (BUILD_GRPC)
     # Find where GRPC libs and includes are installed for ejfat use.
-    # If nothing is found in INSTALL_DIR, then GRPC_INSTALL_DIR will be searched
+    # If nothing is found in INSTALL_DIR, then $ENV{GRPC_INSTALL_DIR} will be searched
 
     find_package(GRPC)
     if (NOT GRPC_FOUND)
@@ -363,7 +363,7 @@ option(BUILD_CLAS "Build CLAS 12 source code" OFF)
 # if you tell cmake to have code use USE_CLAS preprocessor macro
 if (BUILD_CLAS)
     # Find where CLAS libs and includes are installed for ejfat use.
-    # If nothing is found in INSTALL_DIR, then HIPO_HOME will be searched
+    # If nothing is found in INSTALL_DIR, then $ENV{HIPO_HOME} will be searched
 
     find_package(HIPO)
     if (NOT HIPO_FOUND)
