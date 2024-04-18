@@ -11,24 +11,24 @@ pkg_check_modules(PC_LIBGRPC QUIET ejfat_grpc)
 set(GRPC_VERSION ${PC_LIBGRPC_VERSION})
 
 find_path(GRPC_INCLUDE_DIR grpc/grpc.h
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/include $ENV{GRPC_INSTALL_DIR}/include)
+        PATHS ${INSTALL_DIR}/include $ENV{GRPC_INSTALL_DIR}/include)
 
 find_library(GRPC_LIBRARY
         NAMES ejfat_grpc
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib)
+        PATHS ${INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib)
 
 find_library(GRPC++_LIBRARY
         NAMES grpc++
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib)
+        PATHS ${INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib)
 
 find_library(GRPC++_REFLECTION_LIBRARY
         NAMES grpc++_reflection
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib)
+        PATHS ${INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib)
 
 # Use No_DEFAULT_PATH to avoid picking up the protobuf lib already installed
 find_library(PROTOBUF_LIBRARY
         NAMES protobuf
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib
+        PATHS ${INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib
         NO_DEFAULT_PATH)
 
 if(GRPC_LIBRARY)

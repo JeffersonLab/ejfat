@@ -73,7 +73,7 @@ endif()
 
 if (NOT DEFINED INSTALL_DIR)
     if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(FATAL_ERROR "Define EJFAT_ERSAP_INSTALL_DIR or specify -DINSTALL_DIR=<...> for installation")
+        message(FATAL_ERROR "Define EJFAT_ERSAP_INSTALL_DIR or specify -DINSTALL_DIR=<...> for installation & lib/header location")
     else()
         set(INSTALL_DIR $ENV{EJFAT_ERSAP_INSTALL_DIR})
     endif()
@@ -284,10 +284,8 @@ endif()
 option(BUILD_DIS "Build Disruptor-related code" OFF)
 
 if (BUILD_DIS)
-    # Find where Disruptor libs and includes are installed for ejfat use
-    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{DISRUPTOR_CPP_HOME}))
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or DISRUPTOR_CPP_HOME env var so Disruptor libs and includes can be found")
-    endif()
+    # Find where Disruptor libs and includes are installed for ejfat use.
+    # If nothing is found in INSTALL_DIR, then DISRUPTOR_CPP_HOME will be searched
 
     find_package(DISRUPTOR)
     if (DISRUPTOR_FOUND)
@@ -315,10 +313,7 @@ endif()
 option(BUILD_ET "Build ET-related code" OFF)
 
 if (BUILD_ET)
-    # Find where ET libs and includes are installed for ejfat use
-    if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR env var so ET libs and includes can be found")
-    endif()
+    # Find where ET libs and includes are installed for ejfat use (INSTALL_DIR)
 
     find_package(ET)
     if (ET_FOUND)
@@ -335,10 +330,8 @@ endif()
 option(BUILD_GRPC "Build grpc-related code" OFF)
 
 if (BUILD_GRPC)
-    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
-    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{GRPC_INSTALL_DIR}))
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or GRPC_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
-    endif()
+    # Find where GRPC libs and includes are installed for ejfat use.
+    # If nothing is found in INSTALL_DIR, then GRPC_INSTALL_DIR will be searched
 
     find_package(GRPC)
     if (NOT GRPC_FOUND)
@@ -369,10 +362,8 @@ option(BUILD_CLAS "Build CLAS 12 source code" OFF)
 
 # if you tell cmake to have code use USE_CLAS preprocessor macro
 if (BUILD_CLAS)
-    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
-    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{HIPO_HOME}))
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or HIPO_HOME env var so HIPO backend libs and includes can be found")
-    endif()
+    # Find where CLAS libs and includes are installed for ejfat use.
+    # If nothing is found in INSTALL_DIR, then HIPO_HOME will be searched
 
     find_package(HIPO)
     if (NOT HIPO_FOUND)
@@ -406,7 +397,7 @@ if (DEFINED MAKE_EXEC)
         target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
 
         # Only install if installation directory has been defined
-        if (DEFINED INSTALL_DIR_DEFINED)
+        if (INSTALL_DIR_DEFINED)
             # Install into bin dir
             install(TARGETS ${execName} RUNTIME DESTINATION bin)
         endif()
@@ -429,7 +420,7 @@ if (DEFINED MAKE_EXEC)
             target_link_libraries(${execName} pthread ${HIPO_LIBRARIES})
 
             # Only install if installation directory has been defined
-            if (DEFINED INSTALL_DIR_DEFINED)
+            if (INSTALL_DIR_DEFINED)
                 # Install into bin dir
                 install(TARGETS ${execName} RUNTIME DESTINATION bin)
             endif()
@@ -459,7 +450,7 @@ if (DEFINED MAKE_EXEC)
             target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
-            if (DEFINED INSTALL_DIR_DEFINED)
+            if (INSTALL_DIR_DEFINED)
                 # Install into bin dir
                 install(TARGETS ${execName} RUNTIME DESTINATION bin)
             endif()
@@ -495,7 +486,7 @@ if (DEFINED MAKE_EXEC)
     if (BUILD_GRPC AND GRPC_FOUND)
         message(STATUS "TRY GRPC CODE:")
 
-        # -------- Prometheus staff ---------------------
+        # -------- Prometheus stuff ---------------------
 
 #        include(FetchContent)
 #
@@ -532,12 +523,12 @@ if (DEFINED MAKE_EXEC)
 
         target_link_libraries(packetBlasteeEtMTPRT PRIVATE prometheus-cpp::core prometheus-cpp::pull pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
-        if (DEFINED INSTALL_DIR_DEFINED)
+        if (INSTALL_DIR_DEFINED)
             # Install into bin dir
             install(TARGETS packetBlasteeEtMTPRT RUNTIME DESTINATION bin)
         endif()
 
-        # -------- Prometheus staff ----------------------------------------
+        # -------- Prometheus stuff ----------------------------------------
 
 
         # This files need util files added to executable
@@ -562,7 +553,7 @@ if (DEFINED MAKE_EXEC)
             target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
-            if (DEFINED INSTALL_DIR_DEFINED)
+            if (INSTALL_DIR_DEFINED)
                 # Install into bin dir
                 install(TARGETS ${execName} RUNTIME DESTINATION bin)
             endif()
@@ -573,7 +564,7 @@ endif()
 
 
 # Only install if installation directory has been defined
-if (DEFINED INSTALL_DIR_DEFINED)
+if (INSTALL_DIR_DEFINED)
     install(FILES ${CPP_HEADER_FILES} DESTINATION include)
     install(FILES ${CPP_HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()

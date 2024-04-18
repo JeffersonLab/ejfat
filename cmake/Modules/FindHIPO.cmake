@@ -7,22 +7,22 @@ pkg_check_modules(PC_LIBHIPO QUIET libhipo4)
 set(HIPO_VERSION ${PC_LIBHIPO_VERSION})
 
 find_path(HIPO_INCLUDE_DIR reader.h
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/include $ENV{HIPO_HOME}/hipo4)
+        PATHS ${INSTALL_DIR}/include $ENV{HIPO_HOME}/hipo4)
 message(STATUS "Looking in dir = " $ENV{HIPO_HOME})
 message(STATUS "HIPO_INCLUDE_DIR = " ${HIPO_INCLUDE_DIR})
 
 find_path(HIPO_LZ4_INCLUDE_DIR lz4.h
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/include $ENV{HIPO_HOME}/lz4/lib)
+        PATHS ${INSTALL_DIR}/include $ENV{HIPO_HOME}/lz4/lib)
 message(STATUS "HIPO_LZ4_INCLUDE_DIR = " ${HIPO_LZ4_INCLUDE_DIR})
 
 find_library(HIPO_LIBRARY
         NAMES hipo4
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{HIPO_HOME}/slib)
+        PATHS ${INSTALL_DIR}/lib $ENV{HIPO_HOME}/slib)
 message(STATUS "HIPO_LIBRRY = " ${HIPO_LIBRARY})
 
 find_library(HIPO_LZ4_LIBRARY
         NAMES lz4
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{HIPO_HOME}/slib)
+        PATHS ${INSTALL_DIR}/lib $ENV{HIPO_HOME}/slib)
 message(STATUS "HIPO_LZ4_LIBRRY = " ${HIPO_LZ4_LIBRARY})
 
 if(HIPO_LIBRARY)

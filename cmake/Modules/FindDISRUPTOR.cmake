@@ -11,11 +11,10 @@ pkg_check_modules(PC_LIBDISRUPTOR QUIET libDisruptor)
 set(DISRUPTOR_VERSION ${PC_LIBDISRUPTOR_VERSION})
 
 find_path(DISRUPTOR_INCLUDE_DIR Disruptor/Disruptor.h
-        PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/include $ENV{DISRUPTOR_CPP_HOME})
-
+        PATHS ${INSTALL_DIR}/include $ENV{DISRUPTOR_CPP_HOME})
 find_library(DISRUPTOR_LIBRARY
              NAMES Disruptor
-             PATHS $ENV{EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{DISRUPTOR_CPP_HOME}/build/Disruptor
+             PATHS ${INSTALL_DIR}/lib $ENV{DISRUPTOR_CPP_HOME}/build/Disruptor
              NO_DEFAULT_PATH
             )
 

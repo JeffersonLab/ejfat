@@ -45,13 +45,13 @@ foreach(fileName ${EXECUTABLE_FILES})
     target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${GRPC_LIBRARIES} ejfat_simple)
 
     # Only install if installation directory has been defined
-    if (DEFINED INSTALL_DIR_DEFINED)
+    if (INSTALL_DIR_DEFINED)
         # Install into bin dir
         install(TARGETS ${execName} RUNTIME DESTINATION bin)
     endif()
 endforeach(fileName)
 
 
-if (DEFINED INSTALL_DIR_DEFINED)
+if (INSTALL_DIR_DEFINED)
     install(TARGETS ejfat_simple LIBRARY DESTINATION lib)
 endif()
