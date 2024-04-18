@@ -58,8 +58,8 @@ endif()
 # Assuming prometheus-cpp is available and find_package can locate it
 find_package(prometheus-cpp REQUIRED)
 
-#add_executable(prometheus_exporter simulation/packetBlasteeEtMTPRT.cc)
-#target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
+add_executable(prometheus_exporter simulation/packetBlasteeEtMTPRT.cc)
+target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
 
 # -------- Prometheus staff
 
@@ -473,8 +473,8 @@ if (DEFINED MAKE_EXEC)
             # UTIL_FILES and GRPC_SRC_FILES are only really needed for packetBlasteeEtMT
 
 
-            add_executable(prometheus_exporter ${execName} ${fileName} ${UTIL_FILES} ${GRPC_SRC_FILES})
-            #add_executable(${execName} ${fileName} ${UTIL_FILES} ${GRPC_SRC_FILES})
+            #add_executable(prometheus_exporter ${execName} ${fileName} ${UTIL_FILES} ${GRPC_SRC_FILES})
+            add_executable(${execName} ${fileName} ${UTIL_FILES} ${GRPC_SRC_FILES})
 
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
@@ -487,8 +487,8 @@ if (DEFINED MAKE_EXEC)
                     ${DISRUPTOR_INCLUDE_DIRS})
 
             # Needs these libs
-            target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull ${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
-            #target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
+            #target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull ${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
+            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)
