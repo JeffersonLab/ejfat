@@ -224,7 +224,7 @@ namespace ejfat {
 
     public:
 
-        EjfatProducer(const std::string& uri, const std::string& fileName,
+        EjfatProducer(const std::string& uri = "", const std::string& fileName = "/tmp/ejfat_uri",
                       uint16_t id = 0, int entropy = 0,
                       int delay = 0, int delayPrescale = 1, bool connect = false,
                       int mtu = 9000,
