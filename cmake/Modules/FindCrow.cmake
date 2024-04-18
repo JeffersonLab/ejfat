@@ -1,8 +1,3 @@
-# Note to user:
-# 99.999% of folks are only interested in ET_LIBRARY.
-# The only users who would find ET_REMOTE_LIBRARY useful are those
-# who are running on an operating system that can only use sockets
-# (not memory mapped file), for example vxWorks.
 
 set(PKG_CONFIG_USE_CMAKE_PREFIX_PATH ON)
 find_package(PkgConfig)
@@ -19,6 +14,9 @@ if(CROW_INCLUDE_DIR)
 endif()
 
 set ( CROW_INCLUDE_DIRS  ${CROW_INCLUDE_DIR} )
+
+message(STATUS "CROW_INSTALL_DIR: " $ENV{CROW_INSTALL_DIR})
+message(STATUS "CROW_INCLUDE_DIR: " ${CROW_INCLUDE_DIR})
 
 
 include ( FindPackageHandleStandardArgs )

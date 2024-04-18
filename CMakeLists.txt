@@ -497,20 +497,24 @@ if (DEFINED MAKE_EXEC)
 
         # -------- Prometheus staff ---------------------
 
-        include(FetchContent)
+#        include(FetchContent)
+#
+#        FetchContent_Declare(
+#                crow
+#                GIT_REPOSITORY https://github.com/ipkn/crow.git
+#                GIT_TAG        master # or a specific commit/branch/tag
+#        )
+#
+#        FetchContent_GetProperties(crow)
+#        if(NOT crow_POPULATED)
+#            FetchContent_Populate(crow)
+#            set(CROW_INCLUDE_DIR ${crow_SOURCE_DIR}/include)
+#            include_directories(${CROW_INCLUDE_DIR})
+#        endif()
 
-        FetchContent_Declare(
-                crow
-                GIT_REPOSITORY https://github.com/ipkn/crow.git
-                GIT_TAG        master # or a specific commit/branch/tag
-        )
+        find_package(asio REQUIRED)
+        find_package(Crow REQUIRED)
 
-        FetchContent_GetProperties(crow)
-        if(NOT crow_POPULATED)
-            FetchContent_Populate(crow)
-            set(CROW_INCLUDE_DIR ${crow_SOURCE_DIR}/include)
-            include_directories(${CROW_INCLUDE_DIR})
-        endif()
 
         # Assuming prometheus-cpp is available and find_package can locate it
         find_package(prometheus-cpp REQUIRED)
@@ -518,6 +522,8 @@ if (DEFINED MAKE_EXEC)
         add_executable(packetBlasteeEtMTPRT simulation/packetBlasteeEtMTPRT.cc ${UTIL_FILES} ${GRPC_SRC_FILES})
 
         target_include_directories(packetBlasteeEtMTPRT PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                ${ASIO_INCLUDE_DIRS}
+                ${CROW_INCLUDE_DIRS}
                 ${CMAKE_SOURCE_DIR}/util
                 ${GRPC_INCLUDE_DIRS}
                 ${ET_INCLUDE_DIRS}
