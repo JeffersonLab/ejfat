@@ -487,8 +487,8 @@ if (DEFINED MAKE_EXEC)
                     ${DISRUPTOR_INCLUDE_DIRS})
 
             # Needs these libs
-            #target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull ${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
-            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
+            target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull ${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
+            #target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (DEFINED INSTALL_DIR_DEFINED)
