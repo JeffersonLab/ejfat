@@ -675,6 +675,9 @@ int main(int argc, char **argv) {
                         file.close();
                         return 1;
                     }
+                    else {
+                        haveEverything = true;
+                    }
                 }
             }
 
