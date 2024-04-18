@@ -458,10 +458,7 @@ if (DEFINED MAKE_EXEC)
         # Assuming prometheus-cpp is available and find_package can locate it
         find_package(prometheus-cpp REQUIRED)
 
-        #add_executable(packetBlasteeEtMTPRT simulation/packetBlasteeEtMTPRT.cc)
         add_executable(packetBlasteeEtMTPRT simulation/packetBlasteeEtMTPRT.cc ${UTIL_FILES} ${GRPC_SRC_FILES})
-
-        #target_link_libraries(packetBlasteeEtMTPRT PRIVATE prometheus-cpp::core prometheus-cpp::pull)
 
         target_include_directories(packetBlasteeEtMTPRT PUBLIC ${CMAKE_SOURCE_DIR}/simulation
                 ${CMAKE_SOURCE_DIR}/util
