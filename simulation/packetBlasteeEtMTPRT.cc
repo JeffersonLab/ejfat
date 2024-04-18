@@ -995,17 +995,12 @@ static void *rateThread(void *arg) {
     prometheus::Exposer exposer{"0.0.0.0:8080"};
 
     // Create a metrics registry
-    auto& registry = prometheus::BuildRegistry();
-
+    auto registry = std::make_shared<prometheus::Registry>();
     // Add a gauge to the registry
-    auto& gauge_family = prometheus::BuildGauge()
+    auto& ejfat_be = prometheus::BuildGauge()
                              .Name("ejfat_be")
                              .Help("Ejfat Back-End statistics")
-                             .Register(registry);
-
-    // Start the metrics update in a separate thread
-    std::thread metrics_thread(update_metrics, std::ref(ejfat_be));
-    metrics_thread.detach();
+                             .Register(*registry);
 
     // Use Crow to handle HTTP requests
     crow::SimpleApp app;
