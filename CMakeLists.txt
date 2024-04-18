@@ -38,16 +38,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DEBUG_POSTFIX -dbg)
 
-# -------- Prometheus staff
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
-find_package(prometheus-cpp REQUIRED)
-find_package(Crow REQUIRED)
 
-add_executable(prometheus_exporter main.cpp)
-target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
-target_link_libraries(prometheus_exporter PRIVATE Crow::Crow)
-
-# -------- Prometheus staff
+# -------- Prometheus stuff
+#
+#find_package(prometheus-cpp REQUIRED)
+#find_package(Crow REQUIRED)
+#
+#add_executable(prometheus_exporter main.cpp)
+#target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
+#target_link_libraries(prometheus_exporter PRIVATE Crow::Crow)
+#
+# -------- Prometheus stuff
 
 # Make executables
 set(MAKE_EXEC 1)
@@ -102,7 +105,7 @@ endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
+#list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 
 # Michael's old files used with static LB, now obsolete, not compiled by default
@@ -161,18 +164,15 @@ set(UTIL_FILES
 
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
+        clas_source/clasBlasterNTP.cc
         )
 
 # List of all test files
 set(TEST_FILES
         )
 
-# List of all header files
-set(CPP_HEADER_FILES
-        simulation/ejfat.hpp
-        simulation/ejfat_packetize.hpp
-        simulation/ejfat_assemble_ersap.hpp
-        simulation/EtFifoEntryItem.h
+# List of all util directory header files
+set(UTIL_HEADER_FILES
         util/ByteOrder.h
         util/ByteBuffer.h
         util/BufferSupplyItem.h
@@ -187,6 +187,66 @@ set(CPP_HEADER_FILES
         util/PacketRefItem.h
         util/ejfatUtil.h
         )
+
+# List of all header files
+set(CPP_HEADER_FILES
+        simulation/ejfat.hpp
+        simulation/ejfat_packetize.hpp
+        simulation/ejfat_assemble_ersap.hpp
+        simulation/EtFifoEntryItem.h
+        ${UTIL_HEADER_FILES}
+        )
+
+# For doxygen purposes, list of all simple API files
+set(SIMPLE_API_FILES
+        simpleAPI/EjfatException.h
+        simpleAPI/EjfatConsumer.cpp
+        simpleAPI/EjfatConsumer.h
+        simpleAPI/EjfatProducer.cpp
+        simpleAPI/EjfatProducer.h
+        )
+
+
+
+
+## first we can indicate the documentation build as an option and set it to ON by default
+#option(BUILD_DOC "Build documentation" ON)
+
+
+# do: make doxygen
+
+find_package( Doxygen )
+
+if ( DOXYGEN_FOUND )
+    set( DOXYGEN_OUTPUT_DIRECTORY ../docs/doxygen )
+    set( DOXYGEN_COLLABORATION_GRAPH YES )
+    set( DOXYGEN_EXTRACT_ALL YES )
+    set( DOXYGEN_CLASS_DIAGRAMS YES )
+    set( DOXYGEN_HIDE_UNDOC_RELATIONS NO )
+    set( DOXYGEN_HAVE_DOT YES )
+    set( DOXYGEN_CLASS_GRAPH YES )
+    set( DOXYGEN_CALL_GRAPH YES )
+    set( DOXYGEN_CALLER_GRAPH YES )
+    set( DOXYGEN_COLLABORATION_GRAPH YES )
+    set( DOXYGEN_BUILTIN_STL_SUPPORT YES )
+#    set( DOXYGEN_EXTRACT_PRIVATE YES )
+#    set( DOXYGEN_EXTRACT_PACKAGE YES )
+    set( DOXYGEN_EXTRACT_STATIC YES )
+#    set( DOXYGEN_EXTRACT_LOCALMETHODS YES )
+    set( DOXYGEN_UML_LOOK YES )
+    set( DOXYGEN_UML_LIMIT_NUM_FIELDS 50 )
+    set( DOXYGEN_TEMPLATE_RELATIONS YES )
+    set( DOXYGEN_DOT_GRAPH_MAX_NODES 100 )
+    set( DOXYGEN_MAX_DOT_GRAPH_DEPTH 0 )
+    set( DOXYGEN_DOT_TRANSPARENT YES )
+
+    doxygen_add_docs( doxygen  ${SIMPLE_API_FILES} ${UTIL_FILES} ${CPP_HEADER_FILES})
+
+else()
+
+    message( "Doxygen need to be installed to generate the doxygen documentation" )
+
+endif()
 
 
 # List the files with no dependencies, made by default
