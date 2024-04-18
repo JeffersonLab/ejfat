@@ -150,7 +150,9 @@ set(UTIL_FILES
 
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
+        clas_source/clasBlasterNTP.cc
         )
+
 
 # List of all test files
 set(TEST_FILES
