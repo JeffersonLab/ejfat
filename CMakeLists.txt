@@ -38,20 +38,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_DEBUG_POSTFIX -dbg)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
-
-
-# -------- Prometheus stuff
-#
-#find_package(prometheus-cpp REQUIRED)
-#find_package(Crow REQUIRED)
-#
-#add_executable(prometheus_exporter main.cpp)
-#target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
-#target_link_libraries(prometheus_exporter PRIVATE Crow::Crow)
-#
-# -------- Prometheus stuff
-
 # Make executables
 set(MAKE_EXEC 1)
 
@@ -105,7 +91,7 @@ endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
 
-#list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 
 # Michael's old files used with static LB, now obsolete, not compiled by default
@@ -508,6 +494,45 @@ if (DEFINED MAKE_EXEC)
 
     if (BUILD_GRPC AND GRPC_FOUND)
         message(STATUS "TRY GRPC CODE:")
+
+        # -------- Prometheus staff ---------------------
+
+        include(FetchContent)
+
+        FetchContent_Declare(
+                crow
+                GIT_REPOSITORY https://github.com/ipkn/crow.git
+                GIT_TAG        master # or a specific commit/branch/tag
+        )
+
+        FetchContent_GetProperties(crow)
+        if(NOT crow_POPULATED)
+            FetchContent_Populate(crow)
+            set(CROW_INCLUDE_DIR ${crow_SOURCE_DIR}/include)
+            include_directories(${CROW_INCLUDE_DIR})
+        endif()
+
+        # Assuming prometheus-cpp is available and find_package can locate it
+        find_package(prometheus-cpp REQUIRED)
+
+        add_executable(packetBlasteeEtMTPRT simulation/packetBlasteeEtMTPRT.cc ${UTIL_FILES} ${GRPC_SRC_FILES})
+
+        target_include_directories(packetBlasteeEtMTPRT PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                ${CMAKE_SOURCE_DIR}/util
+                ${GRPC_INCLUDE_DIRS}
+                ${ET_INCLUDE_DIRS}
+                ${Boost_INCLUDE_DIRS}
+                ${DISRUPTOR_INCLUDE_DIRS})
+
+        target_link_libraries(packetBlasteeEtMTPRT PRIVATE prometheus-cpp::core prometheus-cpp::pull pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
+
+        if (DEFINED INSTALL_DIR_DEFINED)
+            # Install into bin dir
+            install(TARGETS packetBlasteeEtMTPRT RUNTIME DESTINATION bin)
+        endif()
+
+        # -------- Prometheus staff ----------------------------------------
+
 
         # This files need util files added to executable
         foreach(fileName ${GRPC_EXEC_FILES})

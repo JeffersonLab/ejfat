@@ -13,7 +13,7 @@
 
 
     
-###-------------------------------------------------------------
+### -------------------------------------------------------------
 ### Latest code with no dependencies
 
     cmake ..
@@ -37,7 +37,7 @@ send data and sync messages. The following is created:
 
 
 
-###-------------------------------------------------------------
+### -------------------------------------------------------------
 ### Older code with no dependencies & a static Control Plane
 
     cmake .. -DBUILD_OLD=1
@@ -66,7 +66,7 @@ The following programs will be created:
 
 
 
-###-------------------------------------------------------------
+### -------------------------------------------------------------
 ### Latest "simple" API code
 
 #### General
@@ -151,12 +151,24 @@ The following will be created:
 
 #### More details
 
-For more details, look at simpleAPI/README.md
+For more details, look at [README.md](./simpleAPI/README.md)
 
 
-###-------------------------------------------------------------
-###-------------------------------------------------------------
-#### Where to look for libs & headers
+### -------------------------------------------------------------
+### -------------------------------------------------------------
+
+### Generating doxygen documentation:
+
+        make doxygen
+        
+Point your browser to:
+
+        docs/doxygen/html/index.html
+
+
+
+### -------------------------------------------------------------
+### Where to look for libs & headers
 
 Be sure to define the following environmental variables, depending on what
 you're compiling so that cmake know where to find it:
@@ -200,7 +212,7 @@ you're compiling so that cmake know where to find it:
         
 
 
-###-------------------------------------------------------------
+### -------------------------------------------------------------
 #### Compile everything (except staticLB and simpleAPI dirs)
 
     cmake -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1 ..
@@ -237,8 +249,8 @@ Among other things, this will make all grpc-enabled reassembly code.
     make
 
 
-###-------------------------------------------------------------
-## Installation of headers, libs, and executables:
+### -------------------------------------------------------------
+### Installation of headers, libs, and executables:
 
         export EJFAT_ERSAP_INSTALL_DIR=/home/me/install_dir
         cmake ..
@@ -248,14 +260,14 @@ Among other things, this will make all grpc-enabled reassembly code.
         make install
 
 
-###-------------------------------------------------------------
-## Uninstalling headers, libs, and executables:
+### -------------------------------------------------------------
+### Uninstalling headers, libs, and executables:
    
         make uninstall
 
 
-###-------------------------------------------------------------
-## Where to find dependencies
+### -------------------------------------------------------------
+### Where to find dependencies
 
 - **et**  at  https://github.com/JeffersonLab/et
 - **ejfat-grpc**  at  https://github.com/JeffersonLab/ersap-grpc
@@ -285,7 +297,7 @@ The source code for gRPC is hosted on GitHub:
 
 
 
-###-------------------------------------------------------------
+### -------------------------------------------------------------
 ### Libraries that may need to be built:
 
 #### From ET
@@ -325,8 +337,8 @@ directory for more details.**
 
 
 
-###-------------------------------------------------------------
-## Building clas12 data sender in java
+### -------------------------------------------------------------
+### Building clas12 data sender in java
 Do the following:
 
     ant jar
@@ -338,8 +350,8 @@ Clas12DataSender class. To run this and get its help output:
 
 
 
-###-------------------------------------------------------------
-## Using the ET system as a FIFO for EJFAT backend
+### -------------------------------------------------------------
+### Using the ET system as a FIFO for EJFAT backend
 
 #### Create and run the ET system for ejfat reassembler by calling
 

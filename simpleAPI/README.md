@@ -1,22 +1,10 @@
-## Instructions on using the "simple" API for using EJFAT
+## Using the "simple" API for using EJFAT
 
 ### **************************************************************
 ### Building
 
-  #### Getting the dependencies in place
-  
-  
-  
-
-  #### Compile the simple API library and executables
-  
-In the top ejfat directory:
-
-    mkdir build  
-    cd build  
-    cmake .. -DBUILD_SIMPLE=1  
-    make  
-
+  Compile the code according to the instructions in the top level
+  [README.md](../README.md)
 
 
 
@@ -47,13 +35,15 @@ There are 2 C++ classes to use, one for sending data and the other for receiving
   
   #### Interacting with the Load Balancer (LB) & Control Plane (CP)
 
-There are 2 programs used to talk to the CP:
+There are 3 programs used to talk to the CP:
 
  - lbreserve
  - lbfree
+ - lbmonitor
  
- The lbreserve program will reserve an instance of a Load Balancer
- while lbfree will release it.
+ **lbreserve** reserves an instance of a LB  
+ **lbfree** releases a reserved LB  
+ **lbmonitor** periodically prints the status of registered users of a CP
  
 ### **************************************************************
 ### Steps to running
@@ -64,22 +54,37 @@ There are 2 programs used to talk to the CP:
 
     lbreserve -h  
 
-  At bare minimum, specify the IP addr of the CP
+  At a bare minimum, specify the IP addr of the CP:
 
     lbreserve -host 129.57.177.135
     
-  This will reserve the LB for 10 minutes and store the resulting URI
-  in the file /tmp/ejfat_uri by default.  
+  This will reserve an LB for 10 minutes and store the resulting URI
+  in the file /tmp/ejfat_uri by default. That URI will contain the LB's name
+  and all connection info. 
     
   One can capture the resulting URI into an environmental variable (using bash):
     
     export EJFAT_URI=$(lbreserve -name myLB -host 129.57.177.135)  
     env | grep EJFAT
  
+ Note: the amount of time an LB is reserved can be set on the command line.
+ Currently, even though the reservation is for 10 minutes, it will actually
+ last forever.
  
  #### 2) Run a data sender
  
-        Now type stuff  
+ An example of a data sender is the program simpleSender.cpp.
+ Of course, it just sends nonsense data and is only useful as an example and
+ for testing data transfer rates.  
+ 
+ To send meaningful data, modify that program or use the EjfatProducer class
+ directly. Doxygen documentation of this class is available if the
+ **"make doxygen"** command was executed.
+ 
+ 
+    // The simplest implementation is:
+        
+         
         
  #### 3) Run a data consumer
  
