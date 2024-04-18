@@ -14,17 +14,29 @@
 
     
 ### -------------------------------------------------------------
+### Setting environmental variables
+
+The environmental variable **EJFAT_ERSAP_INSTALL_DIR** must be set.
+Either that or **-DINSTALL_DIR** must be specified on the cmake command
+which takes precedence over the environmental variable.
+This allows for needed libraries and headers to be found. It also
+allows for generated files to be stored there.
+
+    export EJFAT_ERSAP_INSTALL_DIR=/daqfs/ersap/installation
+        or
+    cmake .. -DINSTALL_DIR=/daqfs/ersap/installation
+    
+
+### -------------------------------------------------------------
 ### Latest code with no dependencies
 
-    cmake ..
-    make
 
-Or if you want to place files into an installation directory:
+This builds the no-dependency code:
 
-    export EJFAT_ERSAP_INSTALL_DIR=/home/me/install_dir
+    export EJFAT_ERSAP_INSTALL_DIR=/daqfs/ersap/installation
     cmake ..
         or
-    cmake .. -DINSTALL_DIR=/home/me/install_dir
+    cmake .. -DINSTALL_DIR=/daqfs/ersap/installation
     
     make install
     
