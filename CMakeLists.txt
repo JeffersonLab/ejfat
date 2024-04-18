@@ -58,7 +58,9 @@ endif()
 # Assuming prometheus-cpp is available and find_package can locate it
 find_package(prometheus-cpp REQUIRED)
 
-add_executable(prometheus_exporter simulation/packetBlasteeEtMTPRT.cc)
+#add_executable(prometheus_exporter simulation/packetBlasteeEtMTPRT.cc)
+add_executable(prometheus_exporter simulation/packetBlasteeEtMTPRT.cc ${UTIL_FILES} ${GRPC_SRC_FILES})
+
 #target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull)
 target_link_libraries(prometheus_exporter PRIVATE prometheus-cpp::core prometheus-cpp::pull pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
 
