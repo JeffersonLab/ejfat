@@ -899,8 +899,11 @@ namespace ejfat {
                 veryLastPacket = true;
             }
 
-            if (debug) fprintf(stderr, "Send %lu bytes, last buf = %s, very first = %s, very last = %s\n",
-                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
+//            if (debug) fprintf(stderr, "Send %lu bytes, last buf = %s, very first = %s, very last = %s\n",
+//                               bytesToWrite, btoa(lastBuffer), btoa(veryFirstPacket), btoa(veryLastPacket));
+
+            if (debug) fprintf(stderr, "bytesToWrite %lu, remaining %lu, max payld = %d\n",
+                               bytesToWrite, remainingBytes, maxUdpPayload);
 
             if (!direct) {
                 // Write LB meta data into buffer
@@ -947,7 +950,7 @@ namespace ejfat {
             }
 
             if (err != (bytesToWrite + allHeadersSize)) {
-                fprintf(stderr, "sendPacketizedBufferSend: wanted to send %d, but only sent %d\n",
+                fprintf(stderr, "sendPacketizedBufferSendNew: wanted to send %d, but only sent %d\n",
                         (int)(bytesToWrite + allHeadersSize), (int)err);
             }
 

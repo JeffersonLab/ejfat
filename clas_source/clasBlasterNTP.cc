@@ -171,7 +171,6 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       char *filename,
                       std::vector<int>& cores) {
 
-    *mtu = 0;
     int c, i_tmp;
     int64_t tmp;
     bool help = false;
