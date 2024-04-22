@@ -94,7 +94,8 @@ mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 
-# Michael's old files used with static LB, now obsolete, not compiled by default
+# Michael's old files used with static LB, now obsolete, not compiled by default,
+# no dependencies
 set(EMU_EXEC_FILES
         emulation/lb_emu.cc
         emulation/lb_rcv.cc
@@ -103,7 +104,8 @@ set(EMU_EXEC_FILES
         emulation/lb_send.cc
         )
 
-# Carl's old files used with static LB, now obsolete, not compiled by default
+# Carl's old files used with static LB, now obsolete, not compiled by default,
+# no dependencies
 set(STATIC_EXEC_FILES
         staticLB/udp_rcv_order.cc
         staticLB/udp_send_order.cc
@@ -118,18 +120,21 @@ set(NODEP_EXEC_FILES
         simulation/packetBlaster.cc
         )
 
-set(GRPC_EXEC_FILES
-        simulation/packetBlasteeEtMT.cc
+# Regular backends: boost, grpc, ejfat_grpc, protobuf
+set(BACKEND_EXEC_FILES
         simulation/packetBlasteeFastMP.cc
         simulation/packetBlasteeFullNewMP.cc
         )
 
-set(GRPC_SRC_FILES
+# To be used with other utilities files (and therefore disruptor) and ET for use in backends
+set(BACKEND_SRC_FILES
         simulation/EtFifoEntryItem.cpp
         )
 
-# ET system dependency only
-set(ET_EXEC_FILES
+# ET, boost, grpc, ejfa_grpc, protobuf, Disruptor, Prometheus, asio, crow dependencies. Basically everything.
+set(ERSAP_EXEC_FILES
+        simulation/packetBlasteeEtMT.cc
+        simulation/packetBlasteeEtMTPRT.cc
         simulation/ersap_et_consumer.cc
         )
 
@@ -147,7 +152,7 @@ set(UTIL_FILES
         util/PacketRefItem.cpp
         )
 
-
+# Files for sending clas 12 data: hipo lib
 set(CLAS_EXEC_FILES
         clas_source/clasBlaster.cc
         clas_source/clasBlasterNTP.cc
@@ -193,14 +198,7 @@ set(SIMPLE_API_FILES
         )
 
 
-
-
-## first we can indicate the documentation build as an option and set it to ON by default
-#option(BUILD_DOC "Build documentation" ON)
-
-
-# do: make doxygen
-
+# Make the doxygen documentation
 find_package( Doxygen )
 
 if ( DOXYGEN_FOUND )
@@ -227,11 +225,8 @@ if ( DOXYGEN_FOUND )
     set( DOXYGEN_DOT_TRANSPARENT YES )
 
     doxygen_add_docs( doxygen  ${SIMPLE_API_FILES} ${UTIL_FILES} ${CPP_HEADER_FILES})
-
 else()
-
     message( "Doxygen need to be installed to generate the doxygen documentation" )
-
 endif()
 
 
@@ -247,101 +242,139 @@ if (BUILD_OLD)
 endif()
 
 
-
 # Simple API build is optional and set it to OFF by default.
 option(BUILD_SIMPLE "Build simple api library and executables" OFF)
 
 if (BUILD_SIMPLE)
-    # Need boost libs for disruptor
-    find_package(Boost REQUIRED system thread chrono)
-
-    if (Boost_FOUND)
-        message(STATUS "Boost Found: libs = " ${Boost_LIBRARIES} ", include dirs = " ${Boost_INCLUDE_DIRS})
-        link_directories(${Boost_LIBRARY_DIRS})
-    else()
+    # Need boost for Simple API
+    if (NOT DEFINED Boost_FOUND)
+        find_package(Boost REQUIRED system thread chrono)
+    endif()
+    if (NOT Boost_FOUND)
         message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
     endif()
 
-    # Find where GRPC and ERSAP backend libs and includes are installed for ejfat use
-    if (NOT(DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR} OR DEFINED ENV{GRPC_INSTALL_DIR}))
-        message(FATAL_ERROR "Set EJFAT_ERSAP_INSTALL_DIR or GRPC_INSTALL_DIR env var so GRPC and ERSAP backend libs and includes can be found")
+    # Find Protobuf installation
+    # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
+    if (NOT DEFINED Protobuf_FOUND)
+        find_package(Protobuf CONFIG REQUIRED)
+        message(STATUS "Using protobuf ${Protobuf_VERSION}")
+        set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
+    endif()
+    if (NOT Protobuf_FOUND)
+        message(FATAL_ERROR "Protobuf cannot be found, cmake will exit." )
     endif()
 
-    find_package(GRPC)
-    if (NOT GRPC_FOUND)
-        message(STATUS "GRPC cannot be found, compile without it")
-    else()
-        message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
+    # Find gRPC installation
+    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
+    if (NOT DEFINED gRPC_FOUND)
+        find_package(gRPC)
+    endif()
+    if (NOT gRPC_FOUND)
+        # Grpc cannot be found, let's try again by using env var
+        if (NOT DEFINED ENV{GRPC_INSTALL_DIR})
+            if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
+                message(FATAL_ERROR "Define GRPC_INSTALL_DIR or EJFAT_ERSAP_INSTALL_DIR so gRPC can be found")
+            else()
+                set(GRPC_INSTALL_DIR $ENV{EJFAT_ERSAP_INSTALL_DIR})
+            endif()
+        else()
+            set(GRPC_INSTALL_DIR $ENV{GRPC_INSTALL_DIR})
+        endif()
+
+        find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
     endif()
 
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    set(_REFLECTION gRPC::grpc++_reflection)
+    set(_GRPC_GRPCPP gRPC::grpc++)
+    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
 
+    # Find where ejfat_grpc lib and includes are installed
+    if (NOT DEFINED Ejfat_grpc_FOUND)
+        find_package(Ejfat_grpc)
+    endif()
+    if (NOT Ejfat_grpc_FOUND)
+        message(STATUS "ejfat_grpc lib cannot be found, compile without it")
+    endif()
+
+    # Go to the cmake file in simpleAPI directory
     add_subdirectory(simpleAPI)
 endif()
 
 
+# Building regular EJFAT backends is optional and set it to OFF by default
+option(BUILD_BACKEND "Build EJFAT backend related code" OFF)
 
-# Disruptor build is optional and set it to OFF by default
-option(BUILD_DIS "Build Disruptor-related code" OFF)
-
-if (BUILD_DIS)
-    # Find where Disruptor libs and includes are installed for ejfat use.
-    # If nothing is found in INSTALL_DIR, then $ENV{DISRUPTOR_CPP_HOME} will be searched
-
-    find_package(DISRUPTOR)
-    if (DISRUPTOR_FOUND)
-        message(STATUS "Disruptor include dir = "  ${DISRUPTOR_INCLUDE_DIRS})
-
-        # Need boost libs for disruptor
+if (BUILD_BACKEND)
+    # Need boost for Disruptor
+    if (NOT DEFINED Boost_FOUND)
         find_package(Boost REQUIRED system thread chrono)
+    endif()
+    if (NOT Boost_FOUND)
+        message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
+    endif()
 
-        if (Boost_FOUND)
-            message(STATUS "Boost Found: libs = " ${Boost_LIBRARIES} ", include dirs = " ${Boost_INCLUDE_DIRS})
-            link_directories(${Boost_LIBRARY_DIRS})
+
+    # Find where Disruptor libs and includes are installed for ejfat use
+    if (NOT DEFINED DISRUPTOR_FOUND)
+        find_package(DISRUPTOR)
+    endif()
+    if (NOT DISRUPTOR_FOUND)
+        message(FATAL_ERROR "Disruptor cannot be found, cmake will exit." )
+    endif()
+
+
+    # Find Protobuf installation
+    # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
+    if (NOT DEFINED Protobuf_FOUND)
+        find_package(Protobuf CONFIG REQUIRED)
+        message(STATUS "Using protobuf ${Protobuf_VERSION}")
+        set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
+    endif()
+    if (NOT Protobuf_FOUND)
+        message(FATAL_ERROR "Protobuf cannot be found, cmake will exit." )
+    endif()
+
+
+    # Find gRPC installation
+    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
+    if (NOT DEFINED gRPC_FOUND)
+        find_package(gRPC)
+    endif()
+    if (NOT gRPC_FOUND)
+        # Grpc cannot be found, let's try again by using env var
+        if (NOT DEFINED ENV{GRPC_INSTALL_DIR})
+            if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
+                message(FATAL_ERROR "Define GRPC_INSTALL_DIR or EJFAT_ERSAP_INSTALL_DIR so gRPC can be found")
+            else()
+                set(GRPC_INSTALL_DIR $ENV{EJFAT_ERSAP_INSTALL_DIR})
+            endif()
         else()
-            message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
+            set(GRPC_INSTALL_DIR $ENV{GRPC_INSTALL_DIR})
         endif()
 
-    else()
-        message(STATUS "Disruptor cannot be found, compile without it")
+        find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
     endif()
-else()
-    message(STATUS "Compile without Disruptor")
+
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    set(_REFLECTION gRPC::grpc++_reflection)
+    set(_GRPC_GRPCPP gRPC::grpc++)
+    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+
+
+    # Find where ejfat_grpc lib and includes are installed
+    if (NOT DEFINED Ejfat_grpc_FOUND)
+        find_package(Ejfat_grpc)
+    endif()
+    if (NOT Ejfat_grpc_FOUND)
+        message(STATUS "ejfat_grpc lib cannot be found, compile without it")
+    endif()
+
 endif()
 
 
-# ET build is optional and set it to OFF by default
-option(BUILD_ET "Build ET-related code" OFF)
 
-if (BUILD_ET)
-    # Find where ET libs and includes are installed for ejfat use (INSTALL_DIR)
-
-    find_package(ET)
-    if (ET_FOUND)
-        set(EXEC_FILES ${EXEC_FILES} ${ET_EXEC_FILES})
-    else()
-        message(STATUS "Et cannot be found, compile without it")
-    endif()
-else()
-    message(STATUS "Compile without ET")
-endif()
-
-
-# GRPC build is optional and set it to OFF by default
-option(BUILD_GRPC "Build grpc-related code" OFF)
-
-if (BUILD_GRPC)
-    # Find where GRPC libs and includes are installed for ejfat use.
-    # If nothing is found in INSTALL_DIR, then $ENV{GRPC_INSTALL_DIR} will be searched
-
-    find_package(GRPC)
-    if (NOT GRPC_FOUND)
-        message(STATUS "GRPC cannot be found, compile without it")
-    else()
-        message(STATUS "GRPC_LIBRARIES = " ${GRPC_LIBRARIES})
-    endif()
-else()
-    message(STATUS "Compile without GRPC")
-endif()
 
 
 # Ersap build is optional and set it to OFF by default.
@@ -349,10 +382,89 @@ endif()
 option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
 
 if (BUILD_ERSAP)
+    # Need ET for ERSAP CODE
+    find_package(ET)
+    if (NOT ET_FOUND)
+        message(FATAL_ERROR "Et cannot be found, cmake will exit")
+    endif()
+
+
+    # Need boost for Disruptor
+    if (NOT DEFINED Boost_FOUND)
+        find_package(Boost REQUIRED system thread chrono)
+    endif()
+    if (NOT Boost_FOUND)
+        message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
+    endif()
+
+
+    # Find where Disruptor libs and includes are installed for ejfat use
+    if (NOT DEFINED DISRUPTOR_FOUND)
+        find_package(DISRUPTOR)
+    endif()
+    if (NOT DISRUPTOR_FOUND)
+        message(FATAL_ERROR "Disruptor cannot be found, cmake will exit." )
+    endif()
+
+
+    # Find Protobuf installation
+    # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
+    if (NOT DEFINED Protobuf_FOUND)
+        find_package(Protobuf CONFIG REQUIRED)
+        message(STATUS "Using protobuf ${Protobuf_VERSION}")
+        set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
+    endif()
+    if (NOT Protobuf_FOUND)
+        message(FATAL_ERROR "Protobuf cannot be found, cmake will exit." )
+    endif()
+
+
+    # Find gRPC installation
+    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
+    if (NOT DEFINED gRPC_FOUND)
+        find_package(gRPC)
+    endif()
+    if (NOT gRPC_FOUND)
+        # Grpc cannot be found, let's try again by using env var
+        if (NOT DEFINED ENV{GRPC_INSTALL_DIR})
+            if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
+                message(FATAL_ERROR "Define GRPC_INSTALL_DIR or EJFAT_ERSAP_INSTALL_DIR so gRPC can be found")
+            else()
+                set(GRPC_INSTALL_DIR $ENV{EJFAT_ERSAP_INSTALL_DIR})
+            endif()
+        else()
+            set(GRPC_INSTALL_DIR $ENV{GRPC_INSTALL_DIR})
+        endif()
+
+        find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
+    endif()
+
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    set(_REFLECTION gRPC::grpc++_reflection)
+    set(_GRPC_GRPCPP gRPC::grpc++)
+    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+
+
+    # Find where ejfat_grpc lib and includes are installed
+    if (NOT DEFINED Ejfat_grpc_FOUND)
+        find_package(Ejfat_grpc)
+    endif()
+    if (NOT Ejfat_grpc_FOUND)
+        message(STATUS "ejfat_grpc lib cannot be found, compile without it")
+    endif()
+
+    # for clasBlasteeEtNTPRT
+    find_package(asio REQUIRED)
+    find_package(Crow REQUIRED)
+    find_package(prometheus-cpp REQUIRED)
+
+    # Where is this??
     find_package(Ersap REQUIRED)
 
+    # requires zmq
     add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
     add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
+
 endif()
 
 
@@ -364,13 +476,10 @@ option(BUILD_CLAS "Build CLAS 12 source code" OFF)
 if (BUILD_CLAS)
     # Find where CLAS libs and includes are installed for ejfat use.
     # If nothing is found in INSTALL_DIR, then $ENV{HIPO_HOME} will be searched
-
     find_package(HIPO)
     if (NOT HIPO_FOUND)
-        message(STATUS "Hipo cannot be found, compile without it")
+        message(FATAL_ERROR "Hipo cannot be found, exit cmake")
     endif()
-else()
-    message(STATUS "Compile without hipo")
 endif()
 
 
@@ -379,8 +488,7 @@ if (BUILD_TEST)
 endif()
 
 
-# Test programs
-if (DEFINED MAKE_EXEC)
+    # No outside dependency programs
     foreach(fileName ${EXEC_FILES})
         # Get file name with no directory or extension as executable name
         get_filename_component(execName ${fileName} NAME_WE)
@@ -390,11 +498,10 @@ if (DEFINED MAKE_EXEC)
         # Put debug extension on if applicable
         set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
         # Location of include files
-        target_include_directories(${execName} PUBLIC   ${ET_INCLUDE_DIRS}
-                                                        ${CMAKE_SOURCE_DIR}/simulation
-                                                        ${CMAKE_SOURCE_DIR}/util)
+        target_include_directories(${execName} PUBLIC  ${CMAKE_SOURCE_DIR}/simulation
+                                                       ${CMAKE_SOURCE_DIR}/util)
         # Needs these libs
-        target_link_libraries(${execName} pthread ${ZeroMQ_LIBRARIES} ${ET_LIBRARY})
+        target_link_libraries(${execName} pthread)
 
         # Only install if installation directory has been defined
         if (INSTALL_DIR_DEFINED)
@@ -404,7 +511,7 @@ if (DEFINED MAKE_EXEC)
     endforeach(fileName)
 
 
-    if (BUILD_CLAS AND HIPO_FOUND)
+    if (BUILD_CLAS)
         foreach(fileName ${CLAS_EXEC_FILES})
             # Get file name with no directory or extension as executable name
             get_filename_component(execName ${fileName} NAME_WE)
@@ -428,26 +535,33 @@ if (DEFINED MAKE_EXEC)
     endif()
 
 
-    if (BUILD_DIS AND DISRUPTOR_FOUND)
-        message(STATUS "TRY DISRUPTOR CODE:")
+    if (BUILD_BACKEND)
+        message(STATUS "TRY BACKEND CODE:")
 
         # This files need util files added to executable
-        foreach(fileName ${DIS_EXEC_FILES})
+        foreach(fileName ${BACKEND_EXEC_FILES})
             # Get file name with no directory or extension as executable name
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
-            message(STATUS "Create disruptor-related executable " ${execName})
-            add_executable(${execName} ${fileName} ${UTIL_FILES})
+            message(STATUS "Create backend-related executable " ${execName})
+            add_executable(${execName} ${fileName} ${UTIL_FILES} ${BACKEND_SRC_FILES})
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
             target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
                     ${CMAKE_SOURCE_DIR}/util
                     ${Boost_INCLUDE_DIRS}
+                    ${gRPC_INCLUDE_DIRS}
+                    ${Ejfat_grpc_INCLUDE_DIRS}
                     ${DISRUPTOR_INCLUDE_DIRS}
-                    ${ET_INCLUDE_DIRS})
+                    )
             # Needs these libs
-            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${ET_LIBRARY})
+            target_link_libraries(${execName} pthread
+                    ${Boost_LIBRARIES}
+                    ${gRPC_LIBRARIES}
+                    ${EJfat_grpcLIBRARIES}
+                    ${DISRUPTOR_LIBRARY}
+                    )
 
             # Only install if installation directory has been defined
             if (INSTALL_DIR_DEFINED)
@@ -560,7 +674,6 @@ if (DEFINED MAKE_EXEC)
         endforeach(fileName)
     endif()
 
-endif()
 
 
 # Only install if installation directory has been defined
