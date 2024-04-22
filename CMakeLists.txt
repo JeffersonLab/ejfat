@@ -544,7 +544,7 @@ endif()
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
             message(STATUS "Create backend-related executable " ${execName})
-            add_executable(${execName} ${fileName} ${UTIL_FILES} ${BACKEND_SRC_FILES})
+            add_executable(${execName} ${fileName} ${UTIL_FILES})
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
@@ -558,8 +558,9 @@ endif()
             # Needs these libs
             target_link_libraries(${execName} pthread
                     ${Boost_LIBRARIES}
-                    ${gRPC_LIBRARIES}
-                    ${EJfat_grpcLIBRARIES}
+                    ${_REFLECTION}
+                    ${_GRPC_GRPCPP}
+                    ${Ejfat_grpc_LIBRARIES}
                     ${DISRUPTOR_LIBRARY}
                     )
 
