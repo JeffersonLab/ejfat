@@ -971,16 +971,26 @@ int main(int argc, char **argv) {
     time_t ntpTime = synchronizeWithNtpServer();
     std::cout << "NTP serber synchronized time: " << ctime(&ntpTime) << std::endl;
 
-    // Get NTP time in seconds. Note that is the pressision
-    auto ntpTimeChrono = std::chrono::system_clock::from_time_t(ntpTime);
+//    // Get NTP time in seconds. Note that is the precision
+//    auto ntpTimeChrono = std::chrono::system_clock::from_time_t(ntpTime);
+//
+//    // Get the local time in seconds
+//    auto localTime = std::chrono::high_resolution_clock::now();
+//    auto localTimeInSec = std::chrono::time_point_cast<std::chrono::seconds>(localTime);
+//    time_t localTime_t = std::chrono::system_clock::to_time_t(localTimeInSec);
+//    // Calculate the difference, presented in nanoseconds
+//    auto timeDifference = std::chrono::duration_cast<std::chrono::nanoseconds>(ntpTimeChrono - localTimeInSec);
 
-    // Get the local time in seconds
+    // Get the current time point
     auto localTime = std::chrono::high_resolution_clock::now();
-    auto localTimeInSec = std::chrono::time_point_cast<std::chrono::seconds>(localTime);
-    time_t localTime_t = std::chrono::system_clock::to_time_t(localTimeInSec);
-
+    // Convert time_point to duration
+    auto durationSinceEpoch = localTime.time_since_epoch();
+    // Extract the number of seconds
+    auto secondsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
+    // Convert to time_t
+    time_t localTime_t = static_cast<time_t>(secondsSinceEpoch.count());
     // Calculate the difference, presented in nanoseconds
-    auto timeDifference = std::chrono::duration_cast<std::chrono::nanoseconds>(ntpTimeChrono - localTimeInSec);
+    auto timeDifference = std::chrono::nanoseconds(ntpTime - localTime_t);
 
     while (true) {
 
