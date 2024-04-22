@@ -561,7 +561,7 @@ endif()
                     ${_REFLECTION}
                     ${_GRPC_GRPCPP}
                     ${Ejfat_grpc_LIBRARIES}
-                    ${DISRUPTOR_LIBRARY}
+                    ${DISRUPTOR_LIBRARIES}
                     )
 
             # Only install if installation directory has been defined
@@ -581,6 +581,7 @@ endif()
                 ${CMAKE_SOURCE_DIR}/util
                 ${Boost_INCLUDE_DIRS}
                 ${DISRUPTOR_INCLUDE_DIRS})
+        target_link_libraries(${UTIL_LIB_NAME} pthread ${DISRUPTOR_LIBRARIES})
 
         add_library(${UTIL_LIB_NAME_STATIC} STATIC ${UTIL_FILES})
         target_include_directories(${UTIL_LIB_NAME_STATIC} PUBLIC
@@ -588,6 +589,7 @@ endif()
                 ${CMAKE_SOURCE_DIR}/util
                 ${Boost_INCLUDE_DIRS}
                 ${DISRUPTOR_INCLUDE_DIRS})
+        target_link_libraries(${UTIL_LIB_NAME_STATIC} pthread ${DISRUPTOR_LIBRARIES})
 
         if (DEFINED INSTALL_DIR_DEFINED)
             # Install library into lib dir
