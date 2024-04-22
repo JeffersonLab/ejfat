@@ -27,13 +27,13 @@ set(Ejfat_grpc_INCLUDE_DIRS ${Ejfat_grpc_INCLUDE_DIR})
 message(STATUS "Ejfat_grpc_LIBRARIES = " ${Ejfat_grpc_LIBRARIES})
 message(STATUS "Ejfat_grpc_INCLUDE_DIRS = " ${Ejfat_grpc_INCLUDE_DIRS})
 
-#if(NOT TARGET libejfatGrpcLib)
-#    add_library(ejfat_grpc UNKNOWN IMPORTED)
-#
-#    set_target_properties(ejfat_grpc PROPERTIES
-#            IMPORTED_LOCATION ${GRPC_LIBRARY}
-#            INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
-#endif()
+if(NOT TARGET libejfatGrpcLib)
+    add_library(ejfat_grpc UNKNOWN IMPORTED)
+
+    set_target_properties(ejfat_grpc PROPERTIES
+            IMPORTED_LOCATION ${GRPC_LIBRARY}
+            INTERFACE_INCLUDE_DIRECTORIES ${GRPC_INCLUDE_DIRS})
+endif()
 
 include (FindPackageHandleStandardArgs )
 # handle the QUIETLY and REQUIRED arguments and set GRPC_FOUND to TRUE
