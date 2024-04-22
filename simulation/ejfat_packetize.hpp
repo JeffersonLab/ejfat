@@ -923,7 +923,6 @@ namespace ejfat {
             // (masking, selecting interface, etc.), saving the cost of doing so on every ::sendto call.
             // This book claims that ::send vs ::sendto can be up to 3x faster because of this reduced overhead -
             // data can go straight to the NIC driver bypassing most IP stack processing.
-            // In our case, the calling function connected the socket, so we call "send".
 
             // Send message to receiver
             if (noConnect) {
