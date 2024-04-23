@@ -654,7 +654,6 @@ endif()
                     ${_GRPC_GRPCPP}
                     ${Ejfat_grpc_LIBRARIES}
                     ${DISRUPTOR_LIBRARIES}
-                    ${Prometheus_LIBRARIES}
                     ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
