@@ -647,7 +647,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
             return;
         }
 
-        this->tick = tick;
+        this->tick = eventNumber;
 
         uint32_t offset = 0;
         int64_t packetsSent;
