@@ -127,8 +127,8 @@ static void printHelp(char *programName) {
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]\n",
 
+            "        -a <data receiving address to register w/ CP>",
             "        [-p <data receiving port, 17750 default>]",
-            "        [-a <data receiving address to register w/ CP>]",
             "        [-baddr <bind data receiving socket to this address, default INADDR_ANY>]\n",
 
 
@@ -524,6 +524,11 @@ static void parseArgs(int argc, char **argv,
         fprintf(stderr, "Need to define ET system (-f) and receiving addr (-a) on cmd line\n\n");
         printHelp(argv[0]);
         exit(2);
+    }
+
+    if (strlen(dataAddr) < 7) {
+        fprintf(stderr, "Must specify -a\n");
+        exit(-1);
     }
 }
 
@@ -1207,8 +1212,6 @@ int main(int argc, char **argv) {
     uint16_t cpPort    = uriInfo.cpPort;
     std::string lbId   = uriInfo.lbId;
     std::string instanceToken = uriInfo.instanceToken;
-
-    //printUri(std::cerr, uriInfo);
 
     // Need to give this back end a name (no, not "horse's"),
     // base part of it on least significant 6 digits of current time in microsec

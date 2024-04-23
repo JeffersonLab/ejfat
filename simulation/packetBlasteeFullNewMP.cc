@@ -149,9 +149,9 @@ static void printHelp(char *programName) {
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
 
+            "        -addr <data receiving address to register w/ CP>",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
-            "        [-p <starting listening UDP port (increment for each source, 17750 default)>]",
-            "        [-addr <data receiving address to register w/ CP>]\n",
+            "        [-p <starting listening UDP port (increment for each source, 17750 default)>]\n",
 
             "        [-b <internal buffer byte size, 100kB default>]",
             "        [-r <UDP receive buffer byte size, system default>]\n",
@@ -448,6 +448,10 @@ static void parseArgs(int argc, char **argv,
 
     if (*dump && *lump) {
         fprintf(stderr, "Only one of -dump or -lump may be specified\n");
+        exit(-1);
+    }
+    if (strlen(dataAddr) < 7) {
+        fprintf(stderr, "Must specify -addr\n");
         exit(-1);
     }
 }
@@ -2284,8 +2288,6 @@ int main(int argc, char **argv) {
     uint16_t cpPort    = uriInfo.cpPort;
     std::string lbId   = uriInfo.lbId;
     std::string instanceToken = uriInfo.instanceToken;
-
-    //printUri(std::cerr, uriInfo);
 
     // Need to give this back end a name (no, not "horse's"),
     // base part of it on least significant 6 digits of current time in microsec
