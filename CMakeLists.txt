@@ -236,7 +236,6 @@ set(EXEC_FILES ${NODEP_EXEC_FILES})
 
 # OLD code build is optional, set it to OFF by default
 option(BUILD_OLD "Build old static-LB code" OFF)
-
 if (BUILD_OLD)
     list(APPEND EXEC_FILES ${EMU_EXEC_FILES} ${STATIC_EXEC_FILES})
 endif()
@@ -454,9 +453,9 @@ if (BUILD_ERSAP)
     endif()
 
     # for clasBlasteeEtNTPRT
-    find_package(asio REQUIRED)
-    find_package(Crow REQUIRED)
-    find_package(prometheus-cpp REQUIRED)
+    find_package(ASIO REQUIRED)
+    find_package(CROW REQUIRED)
+    find_package(prometheus-cpp REQUIRED CONFIG)
 
     # Where is this??
     find_package(Ersap REQUIRED)
@@ -600,56 +599,34 @@ endif()
 
     endif()
 
-    if (BUILD_GRPC AND GRPC_FOUND)
-        message(STATUS "TRY GRPC CODE:")
 
-        # -------- Prometheus stuff ---------------------
 
-#        include(FetchContent)
+    if (BUILD_ERSAP)
+        message(STATUS "TRY ERSAP CODE:")
+
+#        add_executable(packetBlasteeEtMTPRT simulation/packetBlasteeEtMTPRT.cc ${UTIL_FILES} ${GRPC_SRC_FILES})
 #
-#        FetchContent_Declare(
-#                crow
-#                GIT_REPOSITORY https://github.com/ipkn/crow.git
-#                GIT_TAG        master # or a specific commit/branch/tag
-#        )
+#        target_include_directories(packetBlasteeEtMTPRT PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+#                ${ASIO_INCLUDE_DIRS}
+#                ${CROW_INCLUDE_DIRS}
+#                ${CMAKE_SOURCE_DIR}/util
+#                ${GRPC_INCLUDE_DIRS}
+#                ${ET_INCLUDE_DIRS}
+#                ${Boost_INCLUDE_DIRS}
+#                ${DISRUPTOR_INCLUDE_DIRS})
 #
-#        FetchContent_GetProperties(crow)
-#        if(NOT crow_POPULATED)
-#            FetchContent_Populate(crow)
-#            set(CROW_INCLUDE_DIR ${crow_SOURCE_DIR}/include)
-#            include_directories(${CROW_INCLUDE_DIR})
+#        target_link_libraries(packetBlasteeEtMTPRT PRIVATE prometheus-cpp::core prometheus-cpp::pull pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
+#
+#        if (INSTALL_DIR_DEFINED)
+#            # Install into bin dir
+#            install(TARGETS packetBlasteeEtMTPRT RUNTIME DESTINATION bin)
 #        endif()
-
-        find_package(asio REQUIRED)
-        find_package(Crow REQUIRED)
-
-
-        # Assuming prometheus-cpp is available and find_package can locate it
-        find_package(prometheus-cpp REQUIRED)
-
-        add_executable(packetBlasteeEtMTPRT simulation/packetBlasteeEtMTPRT.cc ${UTIL_FILES} ${GRPC_SRC_FILES})
-
-        target_include_directories(packetBlasteeEtMTPRT PUBLIC ${CMAKE_SOURCE_DIR}/simulation
-                ${ASIO_INCLUDE_DIRS}
-                ${CROW_INCLUDE_DIRS}
-                ${CMAKE_SOURCE_DIR}/util
-                ${GRPC_INCLUDE_DIRS}
-                ${ET_INCLUDE_DIRS}
-                ${Boost_INCLUDE_DIRS}
-                ${DISRUPTOR_INCLUDE_DIRS})
-
-        target_link_libraries(packetBlasteeEtMTPRT PRIVATE prometheus-cpp::core prometheus-cpp::pull pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
-
-        if (INSTALL_DIR_DEFINED)
-            # Install into bin dir
-            install(TARGETS packetBlasteeEtMTPRT RUNTIME DESTINATION bin)
-        endif()
-
-        # -------- Prometheus stuff ----------------------------------------
+#
+#        # -------- Prometheus stuff ----------------------------------------
 
 
         # This files need util files added to executable
-        foreach(fileName ${GRPC_EXEC_FILES})
+        foreach(fileName ${ERSAP_EXEC_FILES})
             # Get file name with no directory or extension as executable name
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
@@ -660,14 +637,23 @@ endif()
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
             target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+                    ${ASIO_INCLUDE_DIRS}
+                    ${CROW_INCLUDE_DIRS}
                     ${CMAKE_SOURCE_DIR}/util
-                    ${GRPC_INCLUDE_DIRS}
+                    ${gRPC_INCLUDE_DIRS}
+                    ${Ejfat_grpc_INCLUDE_DIRS}
                     ${ET_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
                     ${DISRUPTOR_INCLUDE_DIRS})
 
             # Needs these libs
-            target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${DISRUPTOR_LIBRARY} ${GRPC_LIBRARIES} ${ET_LIBRARY})
+            target_link_libraries(${execName} pthread
+                    ${Boost_LIBRARIES}
+                    ${_REFLECTION}
+                    ${_GRPC_GRPCPP}
+                    ${Ejfat_grpc_LIBRARIES}
+                    ${DISRUPTOR_LIBRARIES}
+                    ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
             if (INSTALL_DIR_DEFINED)
