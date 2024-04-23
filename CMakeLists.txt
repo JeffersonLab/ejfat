@@ -631,8 +631,8 @@ endif()
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
             message(STATUS "Create grpc-related executable " ${execName})
-            # UTIL_FILES and GRPC_SRC_FILES are only really needed for packetBlasteeEtMT
-            add_executable(${execName} ${fileName} ${UTIL_FILES} ${GRPC_SRC_FILES})
+            # UTIL_FILES and BACKEND_SRC_FILES are only really needed for packetBlasteeEtMT
+            add_executable(${execName} ${fileName} ${UTIL_FILES} ${BACKEND_SRC_FILES})
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
@@ -647,12 +647,14 @@ endif()
                     ${DISRUPTOR_INCLUDE_DIRS})
 
             # Needs these libs
-            target_link_libraries(${execName} pthread
+            target_link_libraries(${execName} PRIVATE pthread
+                    prometheus-cpp::core prometheus-cpp::pull
                     ${Boost_LIBRARIES}
                     ${_REFLECTION}
                     ${_GRPC_GRPCPP}
                     ${Ejfat_grpc_LIBRARIES}
                     ${DISRUPTOR_LIBRARIES}
+                    ${Prometheus_LIBRARIES}
                     ${ET_LIBRARY})
 
             # Only install if installation directory has been defined
