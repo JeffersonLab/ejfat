@@ -14,17 +14,18 @@ set(EXECUTABLE_FILES
    )
 
 add_library(ejfat_simple SHARED ${SIMPLE_SRC})
-#target_link_libraries(ejfat_simple PUBLIC  ${ET_LIBRARY})
-#target_include_directories(ejfat_simple PUBLIC${ET_INCLUDE_DIRS}
-#        ${CMAKE_SOURCE_DIR}/simulation
-#        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-#        )
-target_link_libraries(ejfat_simple PUBLIC pthread ${Boost_LIBRARIES} ${GRPC_LIBRARIES})
 
 target_include_directories(ejfat_simple PUBLIC
         ${Boost_INCLUDE_DIRS}
-        ${GRPC_INCLUDE_DIRS}
+        ${gRPC_INCLUDE_DIRS}
+        ${Ejfat_grpc_INCLUDE_DIRS}
         ${CMAKE_SOURCE_DIR}/simulation
+        )
+target_link_libraries(ejfat_simple PUBLIC pthread
+        ${Boost_LIBRARIES}
+        ${_REFLECTION}
+        ${_GRPC_GRPCPP}
+        ${Ejfat_grpc_LIBRARIES}
         )
 
 # This files need util files added to executable
@@ -38,11 +39,18 @@ foreach(fileName ${EXECUTABLE_FILES})
     set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
     # Location of include files
     target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
-            ${GRPC_INCLUDE_DIRS}
-            ${Boost_INCLUDE_DIRS})
+            ${Boost_INCLUDE_DIRS}
+            ${gRPC_INCLUDE_DIRS}
+            ${Ejfat_grpc_INCLUDE_DIRS}
+            )
 
     # Needs these libs
-    target_link_libraries(${execName} pthread ${Boost_LIBRARIES} ${GRPC_LIBRARIES} ejfat_simple)
+    target_link_libraries(${execName}  pthread
+            ${Boost_LIBRARIES}
+            ${_REFLECTION}
+            ${_GRPC_GRPCPP}
+            ${Ejfat_grpc_LIBRARIES}
+            ejfat_simple)
 
     # Only install if installation directory has been defined
     if (INSTALL_DIR_DEFINED)
