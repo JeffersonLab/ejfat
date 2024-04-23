@@ -56,7 +56,7 @@
 
 
 #ifdef __linux__
-#ifndef _GNU_SOURCE
+    #ifndef _GNU_SOURCE
         #define _GNU_SOURCE
     #endif
 
@@ -684,6 +684,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    //printUri(std::cerr, uriInfo);
+
     if (!haveEverything) {
         std::cerr << "no LB/CP info in uri or file" << std::endl;
         return 1;
@@ -747,11 +749,12 @@ int main(int argc, char **argv) {
 
         int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
         if (err < 0) {
-            if (debug) perror("Error connecting UDP sync socket:");
+            perror("Error connecting UDP sync socket:");
             close(syncSocket);
             exit(1);
         }
-    } else {
+    }
+    else {
         struct sockaddr_in serverAddr;
 
         if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -767,7 +770,7 @@ int main(int argc, char **argv) {
 
         int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
         if (err < 0) {
-            if (debug) perror("Error connecting UDP sync socket:");
+            perror("Error connecting UDP sync socket:");
             close(syncSocket);
             return err;
         }
@@ -807,8 +810,6 @@ int main(int argc, char **argv) {
     for (int i = 0; i < socks; i++) {
 
         if (useIPv6Data) {
-            struct sockaddr_in6 serverAddr6;
-
             /* create a DGRAM (UDP) socket in the INET/INET6 protocol */
             if ((clientSockets[i] = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
                 perror("creating IPv6 client socket");
@@ -826,18 +827,18 @@ int main(int argc, char **argv) {
             getsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
             fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-            int err = connect(clientSockets[i], (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP socket:");
-                for (int j = 0; j < lastIndex + 1; j++) {
-                    close(clientSockets[j]);
+            if (!noConnect) {
+                int err = connect(clientSockets[i], (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+                if (err < 0) {
+                    if (debug) perror("Error connecting UDP socket:");
+                    for (int j = 0; j < lastIndex + 1; j++) {
+                        close(clientSockets[j]);
+                    }
+                    exit(1);
                 }
-                exit(1);
             }
         }
         else {
-            struct sockaddr_in serverAddr;
-
             // Create UDP socket
             if ((clientSockets[i] = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
                 perror("creating IPv4 client socket");
@@ -856,14 +857,16 @@ int main(int argc, char **argv) {
             getsockopt(clientSockets[i], SOL_SOCKET, SO_SNDBUF, &sendBufBytes, &size);
             fprintf(stderr, "UDP socket send buffer = %d bytes\n", sendBufBytes);
 
-            fprintf(stderr, "Connection socket to host %s, port %hu\n", dataAddr.c_str(), dataPort);
-            int err = connect(clientSockets[i], (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP socket:");
-                for (int j = 0; j < lastIndex + 1; j++) {
-                    close(clientSockets[j]);
+            if (!noConnect) {
+                fprintf(stderr, "Connection socket to host %s, port %hu\n", dataAddr.c_str(), dataPort);
+                int err = connect(clientSockets[i], (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+                if (err < 0) {
+                    if (debug) perror("Error connecting UDP socket:");
+                    for (int j = 0; j < lastIndex + 1; j++) {
+                        close(clientSockets[j]);
+                    }
+                    return err;
                 }
-                return err;
             }
         }
 
@@ -1050,7 +1053,7 @@ int main(int argc, char **argv) {
                                                   clientSockets[portIndex],
                                                   tick, protocol, entropy, version, dataId,
                                                   (uint32_t) byteSize, &offset,
-                                                  0, 1, &delayCounter,
+                                                  0, 1, nullptr,
                                                   firstBuffer, lastBuffer, debug,
                                                   direct, noConnect,
                                                   &packetsSent, 0,
@@ -1061,7 +1064,7 @@ int main(int argc, char **argv) {
                                                   clientSockets[portIndex],
                                                   tick, protocol, entropy, version, dataId,
                                                   (uint32_t) byteSize, &offset,
-                                                  0, 1, &delayCounter,
+                                                  0, 1, nullptr,
                                                   firstBuffer, lastBuffer, debug,
                                                   direct, noConnect,
                                                   &packetsSent, 0,
@@ -1073,7 +1076,7 @@ int main(int argc, char **argv) {
                                               clientSockets[portIndex],
                                               tick, protocol, entropy, version, dataId,
                                               (uint32_t) byteSize, &offset,
-                                              0, 1, &delayCounter,
+                                              0, 1, nullptr,
                                               firstBuffer, lastBuffer, debug, direct, &packetsSent);
         }
 
