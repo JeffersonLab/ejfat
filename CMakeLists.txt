@@ -457,12 +457,14 @@ if (BUILD_ERSAP)
     find_package(CROW REQUIRED)
     find_package(prometheus-cpp REQUIRED CONFIG)
 
-    # Where is this??
-    find_package(Ersap REQUIRED)
+    if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        # Only on Linux
+        find_package(Ersap REQUIRED)
 
-    # requires zmq
-    add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
-    add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
+        # requires zmq
+        add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
+        add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
+    endif()
 
 endif()
 
