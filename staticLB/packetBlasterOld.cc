@@ -1086,7 +1086,7 @@ int main(int argc, char **argv) {
                 // Send sync message to same destination
 if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
                 setSyncData(syncBuf, version, dataId, tick, evtRate, currentTimeNanos);
-                err = (int)send(clientSockets[portIndex], syncBuf, 28, 0);
+                err = (int)send(syncSocket, syncBuf, 28, 0);
                 if (err == -1) {
                     fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
                     return (-1);
