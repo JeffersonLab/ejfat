@@ -3,8 +3,6 @@ set(PKG_CONFIG_USE_CMAKE_PREFIX_PATH ON)
 find_package(PkgConfig)
 
 
-set(CROW_VERSION ${PC_LIBCROW_VERSION})
-
 find_path(CROW_INCLUDE_DIR crow.h
         PATHS $ENV{CROW_INSTALL_DIR}/include)
 

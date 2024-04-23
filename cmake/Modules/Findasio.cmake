@@ -8,7 +8,7 @@ find_path(ASIO_INCLUDE_DIR asio.hpp
 
 
 if(ASIO_INCLUDE_DIR)
-    set(CROW_FOUND ON)
+    set(ASIO_FOUND ON)
 endif()
 
 set ( ASIO_INCLUDE_DIRS  ${ASIO_INCLUDE_DIR} )
@@ -17,4 +17,4 @@ set ( ASIO_INCLUDE_DIRS  ${ASIO_INCLUDE_DIR} )
 include ( FindPackageHandleStandardArgs )
 # handle the QUIETLY and REQUIRED arguments and set ASIO_FOUND to TRUE
 # if all listed variables are TRUE
-find_package_handle_standard_args ( CROW DEFAULT_MSG ASIO_INCLUDE_DIRS)
+find_package_handle_standard_args (ASIO DEFAULT_MSG ASIO_INCLUDE_DIRS)
