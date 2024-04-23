@@ -13,8 +13,8 @@
 
 
     
-### -------------------------------------------------------------
-### Setting environmental variables
+## -------------------------------------------------------------
+## Setting environmental variables
 
 The environmental variable **EJFAT_ERSAP_INSTALL_DIR** must be set.
 Either that or **-DINSTALL_DIR** must be specified on the cmake command
@@ -27,8 +27,8 @@ allows for generated files to be stored there.
     cmake .. -DINSTALL_DIR=/daqfs/ersap/installation
     
 
-### -------------------------------------------------------------
-### Latest code with no dependencies
+## -------------------------------------------------------------
+## Latest code with no dependencies
 
 
 This builds the no-dependency code:
@@ -49,8 +49,8 @@ send data and sync messages. The following is created:
 
 
 
-### -------------------------------------------------------------
-### Older code with no dependencies & a static Control Plane
+## -------------------------------------------------------------
+## Older code with no dependencies & a static Control Plane
 
     cmake .. -DBUILD_OLD=1
     make
@@ -78,10 +78,10 @@ The following programs will be created:
 
 
 
-### -------------------------------------------------------------
-### Latest "simple" API code
+## -------------------------------------------------------------
+## Latest "simple" API code
 
-#### General
+### General
 
 The **simpleAPI** directory contains classes EjfatConsumer and EjfatProducer
 which are held in a library along with a couple of executables based on them.
@@ -102,7 +102,7 @@ In addition, there is a library of ejfat commands for talking grpc to the CP:
 - libejfat-grpc.so
 
 
-#### Find existing external libs
+### Find existing external libs if any
 
 If the mentioned libs have been already installed on your system, cmake can
 find them by setting an environmental variable to the location of all 4 libs.
@@ -113,43 +113,60 @@ find them by setting an environmental variable to the location of all 4 libs.
     export GRPC_INSTALL_DIR=<installation dir>
         
 
-#### Install GRPC dependencies
+### Install dependencies if necessary
 
-If these libs are **not** already installed, then more work needs to be done.
-Find the requisite packages at:
+If these libs are **not** already installed, then more work needs to be done.  
 
-- **ejfat-grpc**  at  https://github.com/JeffersonLab/ersap-grpc
-
-- **protobuf** can be obtained as follows:
+#### 1) install the protobuf package
 
 On ubuntu
 
     sudo apt install protobuf-compiler
     sudo apt install libprotobuf-dev
 
-- **grpc** can be obtained as follows:
+On Mac
 
+    brew install protobuf
+
+#### 2) install the grpc package
 
 On ubuntu
 
     sudo apt search grpc
     sudo apt install libgrpc-dev
 
+On Mac
 
-Or download gRPC directly from the official website: https://grpc.io  
+    brew install grpc
+
+Or download gRPC directly from the official website: https://grpc.io
 
 Or the source code for gRPC is hosted on GitHub:
 
     git clone https://github.com/grpc/grpc.git
 
-All these packages need to be installed and available in one of the installation
-directories mentioned above.
+
+#### 3) install the ejfat_grpc library
+
+Find the package at
+
+    https://github.com/JeffersonLab/ersap-grpc
 
 
-#### Build
+Follow the instructions to build it
 
-    cmake .. -DBUILD_SIMPLE=1
-    make
+    mkdir -p cmake/build
+    cd cmake/build
+    cmake ../.. -DINSTALL_DIR=<installation dir>
+    make install
+
+
+### Build the simple API lib and example programs
+
+    cmake .. -DBUILD_SIMPLE=1 -DINSTALL_DIR=<installation dir>
+    make install
+
+If the ejfat_grpc lib cannot be found in INSTALL_DIR, cmake will look in GRPC_INSTALL_DIR
 
 The following will be created:
 
@@ -202,15 +219,27 @@ you're compiling so that cmake know where to find it:
         export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
         # then here
         export HIPO_HOME=<installation dir>
-        
+
 - **disruptor**
 
         # first look here
         export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
         # then here
         export DISRUPTOR_CPP_HOME=<disruptor dir>
-        
-        
+
+
+- **crow**
+
+        # look here
+        export CROW_INSTALL_DIR=<installation dir>
+
+
+- **asio**
+
+        # look here
+        export ASIO_INSTALL_DIR=<installation dir>
+
+
 - **zeroMQ**
 
         # first look here
@@ -221,53 +250,54 @@ you're compiling so that cmake know where to find it:
         export PC_LIBZMQ_LIBRARY_DIRS=<>
         # then here
         /usr/lib/x86_64-linux-gnu
-        
+
 
 
 ### -------------------------------------------------------------
-#### Compile everything (except staticLB and simpleAPI dirs)
+#### Compile old code that used static LB
 
-    cmake -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1 ..
+    cmake .. -DBUILD_OLD=1
     make
 
 
+### -------------------------------------------------------------
+#### Compile non-ET/ERSAP reassembly backends
 
-#### Compile disruptor-related utility libs
-Creating **libejfat_util.so** and **libejfat_util_st.a**.
-
-    cmake -DBUILD_DIS=1 ..
+    cmake .. -DBUILD_BACKEND=1
     make
 
 
+### -------------------------------------------------------------
+#### Compile clasBlaster and clasBlasterNTP
 
-#### Compile everything in simulation and util directories
-
-Among other things, this will make all grpc-enabled reassembly code.
-
-    cmake -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_ET=1 ..
+    export HIPO_HOME=<location of HIPO package>
+    cmake .. -DBUILD_CLAS=1
     make
 
 
+### -------------------------------------------------------------
+#### Compile simple API
 
-#### Compile clas_blaster
-
-    cmake -DBUILD_CLAS=1 ..
+    cmake .. -DBUILD_SIMPLE=1
     make
 
 
-#### Compile ERSAP engines
+### -------------------------------------------------------------
+#### Compile ERSAP (engines are linux only)
 
-    cmake -DBUILD_ERSAP=1 -DBUILD_ET=1 ..
+    export ASIO_INSTALL_DIR=<location of asio directory>
+    export CROW_INSTALL_DIR=<location of Crow directory>
+    cmake .. -DBUILD_ERSAP=1
     make
 
 
 ### -------------------------------------------------------------
 ### Installation of headers, libs, and executables:
 
-        export EJFAT_ERSAP_INSTALL_DIR=/home/me/install_dir
+        export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
         cmake ..
             or
-        cmake .. -DINSTALL_DIR=/home/me/install_dir
+        cmake .. -DINSTALL_DIR=<installation dir>
         
         make install
 
@@ -285,27 +315,56 @@ Among other things, this will make all grpc-enabled reassembly code.
 - **ejfat-grpc**  at  https://github.com/JeffersonLab/ersap-grpc
 - **Disruptor** at https://github.com/JeffersonLab/Disruptor-cpp
 - **boost** (commonly available)
-- **protobuf** can be obtained as follows:
+- **protobuf** (commonly available)
+- **Crow** at https://github.com/CrowCpp/Crow.git  and https://crowcpp.org/master/
+- **asio** at https://think-async.com/Asio/
+
+
+### -------------------------------------------------------------
+### How to install the easy packages
+
+#### 1) install the protobuf package
 
 On ubuntu
 
     sudo apt install protobuf-compiler
     sudo apt install libprotobuf-dev
 
-- **grpc** can be obtained as follows:
+On Mac
 
+    brew install protobuf
+
+#### 2) install the grpc package
 
 On ubuntu
 
     sudo apt search grpc
     sudo apt install libgrpc-dev
 
+On Mac
 
-Download gRPC directly from the official website: https://grpc.io
+    brew install grpc
 
-The source code for gRPC is hosted on GitHub:
+Or download gRPC directly from the official website: https://grpc.io
+
+Or the source code for gRPC is hosted on GitHub:
 
     git clone https://github.com/grpc/grpc.git
+
+
+#### 3) install the ejfat_grpc library
+
+Find the package at
+
+    https://github.com/JeffersonLab/ersap-grpc
+
+
+Follow the instructions to build it
+
+    mkdir -p cmake/build
+    cd cmake/build
+    cmake ../.. -DINSTALL_DIR=<installation dir>
+    make install
 
 
 
@@ -341,6 +400,11 @@ The source code for gRPC is hosted on GitHub:
 #### Other necessary libs
 
 - boost libraries
+
+#### Header only code
+
+- Crow
+- asio
 
 
 **Note: not all executables need all libs.
