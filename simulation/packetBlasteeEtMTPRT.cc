@@ -1024,17 +1024,17 @@ static void *rateThread(void *arg) {
     // Expose the metrics via Prometheus-cpp's exposer
     exposer.RegisterCollectable(registry);
 
-    print("DDD-1");
+    printf("DDD-1");
 
     // Use Crow to handle HTTP requests
     crow::SimpleApp app;
 
-    print("DDD-2");
+    printf("DDD-2");
 
     // Start serving HTTP requests
     app.port(8081).multithreaded().run();
 
-    print("DDD-3");
+    printf("DDD-3");
 
     while (true) {
 
