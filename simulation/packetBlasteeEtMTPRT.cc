@@ -963,7 +963,13 @@ static void *pidThread(void *arg) {
     return (nullptr);
 }
 
+// Function that runs the Crow server
+void run_crow_server() {
+    crow::SimpleApp app;
 
+    // Configure and run the server on port 8081
+    app.port(8081).multithreaded().run();
+}
 
 // Statistics
 static volatile int64_t totalBytes=0, totalPackets=0, totalEvents=0;
@@ -1031,8 +1037,8 @@ static void *rateThread(void *arg) {
 
     printf("DDD-2");
 
-    // Start serving HTTP requests
-    app.port(8081).multithreaded().run();
+    // Start the Crow server in a separate thread
+    std::thread crow_server_thread(run_crow_server);
 
     printf("DDD-3");
 
@@ -1135,6 +1141,9 @@ static void *rateThread(void *arg) {
 
         t1 = t2;
     }
+
+    // Wait for the crow_server thread to complete
+     crow_server_thread.join();
 
     return (nullptr);
 }
