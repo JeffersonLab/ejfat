@@ -1001,34 +1001,40 @@ static void *rateThread(void *arg) {
 
     // Create a metrics registry
     auto registry = std::make_shared<prometheus::Registry>();
+
     // Add a gauge to the registry
     auto& ejfat_be = prometheus::BuildGauge()
                              .Name("ejfat_be")
                              .Help("Ejfat Back-End statistics")
                              .Register(*registry);
 
-    // Use Crow to handle HTTP requests
-    crow::SimpleApp app;
+    // Initialize metrics
+    auto& dataRateP = ejfat_be.Add({{"dataRate", "value"}});
+    auto& totalRateP = ejfat_be.Add({{"totalRate", "value"}});
+    auto& dataAvgRateP = ejfat_be.Add({{"dataAvgRate", "value"}});
+    auto& totalAvgRateP = ejfat_be.Add({{"totalAvgRate", "value"}});
+    auto& evRateP = ejfat_be.Add({{"evRate", "value"}});
+    auto& avgEvRateP = ejfat_be.Add({{"avgEvRate", "value"}});
+    auto& totalEventsP = ejfat_be.Add({{"totalEvents", "value"}});
+    auto& dropEventCountP = ejfat_be.Add({{"dropEventCount", "value"}});
+    auto& currDropTotalEventsP = ejfat_be.Add({{"currDropTotalEvents", "value"}});
+    auto& dropPacketCountP = ejfat_be.Add({{"dropPacketCount", "value"}});
+    auto& currDropTotalPacketsP = ejfat_be.Add({{"currDropTotalPackets", "value"}});
 
     // Expose the metrics via Prometheus-cpp's exposer
     exposer.RegisterCollectable(registry);
 
+    print("DDD-1");
+
+    // Use Crow to handle HTTP requests
+    crow::SimpleApp app;
+
+    print("DDD-2");
+
     // Start serving HTTP requests
     app.port(8081).multithreaded().run();
 
-   auto& dataRateP = ejfat_be.Add({{"dataRate", "value"}});
-   auto& totalRateP = ejfat_be.Add({{"totalRate", "value"}});
-   auto& dataAvgRateP = ejfat_be.Add({{"dataAvgRate", "value"}});
-   auto& totalAvgRateP = ejfat_be.Add({{"totalAvgRate", "value"}});
-
-   auto& evRateP = ejfat_be.Add({{"evRate", "value"}});
-   auto& avgEvRateP = ejfat_be.Add({{"avgEvRate", "value"}});
-   auto& totalEventsP = ejfat_be.Add({{"totalEvents", "value"}});
-
-   auto& dropEventCountP = ejfat_be.Add({{"dropEventCount", "value"}});
-   auto& currDropTotalEventsP = ejfat_be.Add({{"currDropTotalEvents", "value"}});
-   auto& dropPacketCountP = ejfat_be.Add({{"dropPacketCount", "value"}});
-   auto& currDropTotalPacketsP = ejfat_be.Add({{"currDropTotalPackets", "value"}});
+    print("DDD-3");
 
     while (true) {
 
