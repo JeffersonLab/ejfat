@@ -99,7 +99,7 @@ The following grpc-related libs are also necessary:
 
 In addition, there is a library of ejfat commands for talking grpc to the CP:
 
-- libejfat-grpc.so
+- libejfat_grpc.so
 
 
 ### Find existing external libs if any
@@ -166,7 +166,8 @@ Follow the instructions to build it
     cmake .. -DBUILD_SIMPLE=1 -DINSTALL_DIR=<installation dir>
     make install
 
-If the ejfat_grpc lib cannot be found in INSTALL_DIR, cmake will look in GRPC_INSTALL_DIR
+If the ejfat_grpc lib cannot be found in INSTALL_DIR, cmake will look in
+EJFAT_ERSAP_INSTALL_DIR and then in GRPC_INSTALL_DIR
 
 The following will be created:
 
@@ -206,7 +207,7 @@ you're compiling so that cmake know where to find it:
 
         export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
         
-- **grpc**, **protobuf**
+- **grpc**, **protobuf**, **ejfat_grpc**
 
         # first look here
         export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
