@@ -207,7 +207,29 @@ you're compiling so that cmake know where to find it:
 
         export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
         
-- **grpc**, **protobuf**, **ejfat_grpc**
+- **protobuf**
+
+        # It's not clear exactly where these lib(s) are.
+        # The CMakeLists.txt file calls find_package(Protobuf CONFIG REQUIRED)
+        # Looks for protobuf-config.cmake file created by Protobuf's installation.
+        # This lib is necessary for successfully finding grpc.
+        
+- **grpc**
+
+        # It's not clear exactly where these libs are.
+        # The CMakeLists.txt file calls find_package(gRPC CONFIG REQUIRED)
+        # Looks for gRPCConfig.cmake file created by gRPC's installation.
+
+        # If this is unsuccessful, then the grpc libs are looked for in:
+        export GRPC_INSTALL_DIR=<installation dir>
+        # then here
+        export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
+        
+        # If this is unsuccessful, then CMakeLists.txt file calls
+        find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
+
+        
+- **ejfat_grpc**
 
         # first look here
         export EJFAT_ERSAP_INSTALL_DIR=<installation dir>
