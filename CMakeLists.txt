@@ -283,6 +283,9 @@ if (BUILD_SIMPLE)
 
         find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
     endif()
+    if (NOT gRPC_FOUND)
+        message(FATAL_ERROR "grpc cannot be found, cmake will exit." )
+    endif()
 
     message(STATUS "Using gRPC ${gRPC_VERSION}")
     set(_REFLECTION gRPC::grpc++_reflection)
@@ -339,7 +342,7 @@ if (BUILD_BACKEND)
     # Find gRPC installation
     # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
     if (NOT DEFINED gRPC_FOUND)
-        find_package(gRPC)
+        find_package(gRPC CONFIG REQUIRED)
     endif()
     if (NOT gRPC_FOUND)
         # Grpc cannot be found, let's try again by using env var
@@ -354,6 +357,9 @@ if (BUILD_BACKEND)
         endif()
 
         find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
+    endif()
+    if (NOT gRPC_FOUND)
+        message(FATAL_ERROR "grpc cannot be found, cmake will exit." )
     endif()
 
     message(STATUS "Using gRPC ${gRPC_VERSION}")
@@ -436,6 +442,9 @@ if (BUILD_ERSAP)
         endif()
 
         find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
+    endif()
+    if (NOT gRPC_FOUND)
+        message(FATAL_ERROR "grpc cannot be found, cmake will exit." )
     endif()
 
     message(STATUS "Using gRPC ${gRPC_VERSION}")
