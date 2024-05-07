@@ -11,11 +11,11 @@ pkg_check_modules(PC_LIBGRPC QUIET ejfat_grpc)
 set(GRPC_VERSION 1.0)
 
 find_path(Ejfat_grpc_INCLUDE_DIR lb_cplane.h
-        PATHS ${INSTALL_DIR}/include $ENV{GRPC_INSTALL_DIR}/include ${EJFAT_ERSAP_INSTALL_DIR}/include)
+        PATHS ${INSTALL_DIR}/include ${EJFAT_ERSAP_INSTALL_DIR}/include $ENV{GRPC_INSTALL_DIR}/include)
 
 find_library(Ejfat_grpc_LIBRARY
         NAMES ejfat_grpc
-        PATHS ${INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib ${EJFAT_ERSAP_INSTALL_DIR}/lib)
+        PATHS ${INSTALL_DIR}/lib ${EJFAT_ERSAP_INSTALL_DIR}/lib $ENV{GRPC_INSTALL_DIR}/lib)
 
 if(Ejfat_grpc_LIBRARY)
     set(Ejfat_grpc_FOUND ON)
