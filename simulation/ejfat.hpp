@@ -27,6 +27,12 @@
 #include <string>
 #include <regex>
 
+#include <cstring>
+#include <netdb.h>
+#include <arpa/inet.h>
+
+
+
 #define btoa(x) ((x)?"true":"false")
 
 namespace ejfat {
@@ -181,6 +187,55 @@ namespace ejfat {
     static bool isIPv6(const std::string& str) {
         std::regex ipv6_regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$");
         return std::regex_match(str, ipv6_regex);
+    }
+
+
+    /**
+     * Function to take a host name and turn it into IP addresses, IPv4 and IPv6.
+     *
+     * @param host_name name of host to examine.
+     * @param ipv4 IP version 4 dot-decimal form of host_name if available.
+     * @param ipv6 IP version 6 dot-decimal form of host_name if available.
+     * @return true if successfully ran function, else false if no address info available.
+     */
+    static bool resolveHost(const std::string& host_name, std::string& ipv4, std::string& ipv6) {
+        struct addrinfo hints, *result;
+        std::memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC; // Allow IPv4 or IPv6
+        hints.ai_socktype = SOCK_STREAM;
+
+        int status = getaddrinfo(host_name.c_str(), nullptr, &hints, &result);
+        if (status != 0) {
+            std::cerr << "resolveHost: getaddrinfo error: " << gai_strerror(status) << std::endl;
+            return false;
+        }
+
+        void* addr;
+        char ipstr[INET6_ADDRSTRLEN];
+        for (struct addrinfo* p = result; p != nullptr; p = p->ai_next) {
+            if (p->ai_family == AF_INET) { // IPv4
+                struct sockaddr_in* ipv4 = reinterpret_cast<struct sockaddr_in*>(p->ai_addr);
+                addr = &(ipv4->sin_addr);
+            } else { // IPv6
+                struct sockaddr_in6* ipv6 = reinterpret_cast<struct sockaddr_in6*>(p->ai_addr);
+                addr = &(ipv6->sin6_addr);
+            }
+            // Convert the IP to a string and return it
+            inet_ntop(p->ai_family, addr, ipstr, sizeof(ipstr));
+
+            if (isIPv4(ipstr)) {
+                ipv4 = ipstr;
+                //std::cerr << "got IP v4 addr: " << ipstr << std::endl;
+            }
+
+            if (isIPv6(ipstr)) {
+                ipv6 = ipstr;
+                //std::cerr << "got IP v6 addr: " << ipstr << std::endl;
+            }
+        }
+
+        freeaddrinfo(result); // Free memory
+        return true;
     }
 
 
