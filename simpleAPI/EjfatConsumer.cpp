@@ -218,7 +218,7 @@ namespace ejfat {
     bool EjfatConsumer::setFromURI(ejfatURI & uri) {
         if (!uri.haveInstanceToken) return false;
 
-        cpAddr = uri.cpAddrV4;
+        cpAddr = uri.cpAddr;
         cpPort = uri.cpPort;
         instanceToken = uri.instanceToken;
         lbId = uri.lbId;

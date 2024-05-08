@@ -41,6 +41,9 @@ namespace ejfat {
         bool haveData;
         /** Is there a valid sync addr & port? */
         bool haveSync;
+
+        /** Is CP addr IPv6? */
+        bool useIPv6Cp;
         /** Is data addr IPv6? */
         bool useIPv6Data;
         /** Is sync addr IPv6? Not used, include for future expansion. */
@@ -67,8 +70,9 @@ namespace ejfat {
         std::string syncAddrV4;
         /** IPv6 address to send sync messages to. Not used, for future expansion. */
         std::string syncAddrV6;
-        /** IPv4 address for grpc communication with CP. */
-        std::string cpAddrV4;
+
+        /** IP address for grpc communication with CP. */
+        std::string cpAddr;
 
         /** String given by user, during registration, to label an LB instance. */
         std::string lbName;
@@ -85,6 +89,7 @@ namespace ejfat {
         uri.haveInstanceToken = false;
         uri.haveData          = false;
         uri.haveSync          = false;
+        uri.useIPv6Cp         = false;
         uri.useIPv6Data       = false;
         uri.useIPv6Sync       = false;
 
@@ -99,7 +104,7 @@ namespace ejfat {
         uri.dataAddrV6.clear();
         uri.syncAddrV4.clear();
         uri.syncAddrV6.clear();
-        uri.cpAddrV4.clear();
+        uri.cpAddr.clear();
 
         uri.lbName.clear();
     }
@@ -116,8 +121,9 @@ namespace ejfat {
         out << "Have data info:      " << btoa(uri.haveData) << std::endl;
         out << "Have sync info:      " << btoa(uri.haveSync) << std::endl;
         out << "Have instance Token: " << btoa(uri.haveInstanceToken) << std::endl;
+        out << "CP host is IPv6:     " << btoa(uri.useIPv6Cp) << std::endl;
 
-        out << "CP host:             " << uri.cpAddrV4 << std::endl;
+        out << "CP host:             " << uri.cpAddr << std::endl;
         out << "CP port:             " << uri.cpPort << std::endl;
 
         if (!uri.adminToken.empty()) {
@@ -199,12 +205,16 @@ namespace ejfat {
      * They're also optional and not used by the consumer.
      * The order of data= and sync= must be kept, data first, sync second.
      * If data= is not there, &sync must become ?sync.
-     * Distinction is made between ipV6 and ipV4 addresses.
+     * </p><p>
+     * Addresses may be either ipV6 or ipV4, and a distinction is made between them.
+     * Each address may be surrounded with square brackets [] which are stripped off.
+     * This is nice for ipV6 which includes colons (:) as part of the address and
+     * which may get confusing when separated from the port by another colon.
      * </p>
      *
      * @param uri URI to parse.
      * @param uriInfo ref to ejfatURI struct to fill with parsed values.
-     * @return true if parse sucessful, else false.
+     * @return true if parse successful, else false.
      */
     static bool parseURI(const std::string uri, ejfatURI &uriInfo) {
 
@@ -212,7 +222,9 @@ namespace ejfat {
         clearUri(uriInfo);
 
         // URI must match this regex pattern
-        std::regex pattern(R"regex(ejfat://(?:([^@]+)@)?([^:]+):(\d+)/lb/([^?]+)(?:\?(?:(?:data=(.*?):(\d+)){1}(?:&sync=(.*?):(\d+))?|(?:sync=(.*?):(\d+)){1}))?)regex");
+        // Note: the pattern (\[?[a-fA-F\d:.]+\]?) matches either IPv6 or IPv4 addresses
+        // in which the addr may be surrounded by [] and thus is stripped off.
+        std::regex pattern(R"regex(ejfat://(?:([^@]+)@)?(\[?[a-fA-F\d:.]+\]?):(\d+)/lb/([^?]+)(?:\?(?:(?:data=(\[?[a-fA-F\d:.]+\]?):(\d+)){1}(?:&sync=(\[?[a-fA-F\d:.]+\]?):(\d+))?|(?:sync=(\[?[a-fA-F\d:.]+\]?):(\d+)){1}))?)regex");
 
         std::smatch match;
         if (std::regex_match(uri, match, pattern)) {
@@ -229,22 +241,38 @@ namespace ejfat {
                 uriInfo.haveInstanceToken = false;
             }
 
-            uriInfo.cpAddrV4    = match[2];
-            uriInfo.cpPort      = std::stoi(match[3]);
-            uriInfo.lbId        = match[4];
+            // Remove square brackets from address if present
+            std::string addr = match[2];
+            if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
+                addr = addr.substr(1, addr.size() - 2);
+            }
 
-            // in this case only syncAddr and syncPort defined
+            uriInfo.cpAddr = addr;
+            uriInfo.cpPort = std::stoi(match[3]);
+            uriInfo.lbId   = match[4];
+
+            if (isIPv6(addr)) {
+                uriInfo.useIPv6Cp = true;
+            }
+
+                // in this case only syncAddr and syncPort defined
             if (!match[9].str().empty()) {
                 uriInfo.haveSync = true;
                 uriInfo.haveData = false;
 
+                // Remove square brackets if present
+                std::string addr = match[9];
+                if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
+                    addr = addr.substr(1, addr.size() - 2);
+                }
+
                 // decide if this is IPv4 or IPv6 or neither
-                if (isIPv6(match[9])) {
-                    uriInfo.syncAddrV6  = match[9];
+                if (isIPv6(addr)) {
+                    uriInfo.syncAddrV6  = addr;
                     uriInfo.useIPv6Sync = true;
                 }
-                else if (isIPv4(match[9])) {
-                    uriInfo.syncAddrV4 = match[9];
+                else if (isIPv4(addr)) {
+                    uriInfo.syncAddrV4 = addr;
                 }
                 else {
                     // invalid IP addr
@@ -272,12 +300,17 @@ namespace ejfat {
                 if (!match[5].str().empty()) {
                     uriInfo.haveData = true;
 
-                    if (isIPv6(match[5])) {
-                        uriInfo.dataAddrV6  = match[5];
+                    std::string addr = match[5];
+                    if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
+                        addr = addr.substr(1, addr.size() - 2);
+                    }
+
+                    if (isIPv6(addr)) {
+                        uriInfo.dataAddrV6  = addr;
                         uriInfo.useIPv6Data = true;
                     }
-                    else if (isIPv4(match[5])) {
-                        uriInfo.dataAddrV4 = match[5];
+                    else if (isIPv4(addr)) {
+                        uriInfo.dataAddrV4 = addr;
                     }
                     else {
                         uriInfo.haveData = false;
@@ -308,13 +341,18 @@ namespace ejfat {
                 if (!match[7].str().empty()) {
                     uriInfo.haveSync = true;
 
+                    std::string addr = match[7];
+                    if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
+                        addr = addr.substr(1, addr.size() - 2);
+                    }
+
                     // decide if this is IPv4 or IPv6 or neither
-                    if (isIPv6(match[7])) {
-                        uriInfo.syncAddrV6  = match[7];
+                    if (isIPv6(addr)) {
+                        uriInfo.syncAddrV6  = addr;
                         uriInfo.useIPv6Sync = true;
                     }
-                    else if (isIPv4(match[7])) {
-                        uriInfo.syncAddrV4 = match[7];
+                    else if (isIPv4(addr)) {
+                        uriInfo.syncAddrV4 = addr;
                     }
                     else {
                         uriInfo.haveSync = false;
@@ -345,6 +383,7 @@ namespace ejfat {
 
         return false;
     }
+
 
 
     /**
