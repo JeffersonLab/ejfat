@@ -107,8 +107,8 @@ static void parseArgs(int argc, char **argv,
 
             case 2:
                 // DESTINATION HOST
-                if (strlen(optarg) >= 15) {
-                    fprintf(stderr, "Invalid argument to -host, host name must be dotted-decimal format\n");
+                if (strlen(optarg) >= 60) {
+                    fprintf(stderr, "Invalid argument to -host, no more than 60 chars\n");
                     exit(-1);
                 }
                 strcpy(host, optarg);
@@ -204,8 +204,8 @@ int main(int argc, char **argv) {
     bool debug   = false;
     bool useIPv6 = false;
 
-    char cp_host[16];
-    memset(cp_host, 0, 16);
+    char cp_host[61];
+    memset(cp_host, 0, 61);
 
     char name[INPUT_LENGTH_MAX];
     memset(name, 0, INPUT_LENGTH_MAX);
