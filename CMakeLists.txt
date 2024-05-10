@@ -558,11 +558,12 @@ endif()
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
-            target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+            target_include_directories(${execName} PUBLIC
+                    ${CMAKE_SOURCE_DIR}/simulation
                     ${CMAKE_SOURCE_DIR}/util
                     ${Boost_INCLUDE_DIRS}
-                    ${gRPC_INCLUDE_DIRS}
                     ${Ejfat_grpc_INCLUDE_DIRS}
+                    ${gRPC_INCLUDE_DIRS}
                     ${DISRUPTOR_INCLUDE_DIRS}
                     )
             # Needs these libs
@@ -647,12 +648,13 @@ endif()
             # Put debug extension on if applicable
             set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
             # Location of include files
-            target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+            target_include_directories(${execName} PUBLIC
+                    ${CMAKE_SOURCE_DIR}/simulation
                     ${ASIO_INCLUDE_DIRS}
                     ${CROW_INCLUDE_DIRS}
                     ${CMAKE_SOURCE_DIR}/util
-                    ${gRPC_INCLUDE_DIRS}
                     ${Ejfat_grpc_INCLUDE_DIRS}
+                    ${gRPC_INCLUDE_DIRS}
                     ${ET_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
                     ${DISRUPTOR_INCLUDE_DIRS})

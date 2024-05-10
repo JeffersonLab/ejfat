@@ -16,10 +16,11 @@ set(EXECUTABLE_FILES
 add_library(ejfat_simple SHARED ${SIMPLE_SRC})
 
 target_include_directories(ejfat_simple PUBLIC
-        ${Boost_INCLUDE_DIRS}
-        ${gRPC_INCLUDE_DIRS}
-        ${Ejfat_grpc_INCLUDE_DIRS}
+        ${CMAKE_SOURCE_DIR}/simpleAPI
         ${CMAKE_SOURCE_DIR}/simulation
+        ${Boost_INCLUDE_DIRS}
+        ${Ejfat_grpc_INCLUDE_DIRS}
+        ${gRPC_INCLUDE_DIRS}
         )
 target_link_libraries(ejfat_simple PUBLIC pthread
         ${Boost_LIBRARIES}
@@ -38,10 +39,12 @@ foreach(fileName ${EXECUTABLE_FILES})
     # Put debug extension on if applicable
     set_target_properties(${execName} PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
     # Location of include files
-    target_include_directories(${execName} PUBLIC ${CMAKE_SOURCE_DIR}/simulation
+    target_include_directories(${execName} PUBLIC
+            ${CMAKE_SOURCE_DIR}/simpleAPI
+            ${CMAKE_SOURCE_DIR}/simulation
             ${Boost_INCLUDE_DIRS}
-            ${gRPC_INCLUDE_DIRS}
             ${Ejfat_grpc_INCLUDE_DIRS}
+            ${gRPC_INCLUDE_DIRS}
             )
 
     # Needs these libs
