@@ -1208,7 +1208,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    std::string cpAddr = uriInfo.cpAddrV4;
+    std::string cpAddr = uriInfo.cpAddr;
     uint16_t cpPort    = uriInfo.cpPort;
     std::string lbId   = uriInfo.lbId;
     std::string instanceToken = uriInfo.instanceToken;
@@ -1218,7 +1218,7 @@ int main(int argc, char **argv) {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     int time = now.tv_nsec/1000L;
-    sprintf(beName, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
+    snprintf(beName, 256, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
 
 
 #ifdef __linux__
