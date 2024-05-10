@@ -105,7 +105,7 @@ int main (int argc, char *argv[])
     ofstream rs[max_data_ids];
     for (uint16_t s = 0; s < max_data_ids; s++) {
         char x[64];
-        sprintf(x,"/tmp/rs_%d_%d",lstn_prt,s);
+        snprintf(x, 64, "/tmp/rs_%d_%d",lstn_prt,s);
 //fprintf (stdout, "Open file %s\n", x);
         rs[s].open(x,std::ios::binary | std::ios::out);
     }

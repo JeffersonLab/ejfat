@@ -59,7 +59,7 @@ namespace ejfat {
         ctx  = zmq_ctx_new();
         sock = zmq_socket(ctx, ZMQ_PUSH);
         char dest[25];
-        sprintf(dest, "tcp://%s:%hu", destIP.c_str(), destPort);
+        snprintf(dest, 25, "tcp://%s:%hu", destIP.c_str(), destPort);
         int err = zmq_connect(sock, dest);
         return err;
     }

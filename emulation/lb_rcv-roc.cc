@@ -125,11 +125,11 @@ int main (int argc, char *argv[])
     ofstream rs;
     ofstream rslg;
     char x[64];
-//  sprintf(x,"/tmp/rs_%d",lstn_prt);
-    sprintf(x,"/dev/stdout"); //for ersap test //sprintf(x,"/nvme/goodrich/rs_%d",lstn_prt);   // on ejfat-fs
+//  snprintf(x, 64, "/tmp/rs_%d",lstn_prt);
+    snprintf(x, 64, "/dev/stdout"); //for ersap test //sprintf(x,"/nvme/goodrich/rs_%d",lstn_prt);   // on ejfat-fs
     rs.open(x,std::ios::binary | std::ios::out);
     char xlg[64];
-    sprintf(xlg,"/tmp/rs_%d_log",lstn_prt);//for ersap test //sprintf(xlg,"/nvme/goodrich/rs_%d_log",lstn_prt);
+    snprintf(xlg, 64, "/tmp/rs_%d_log",lstn_prt);//for ersap test //sprintf(xlg,"/nvme/goodrich/rs_%d_log",lstn_prt);
     rslg.open(xlg,std::ios::out);
 
 //===================== data reception setup ===================================
@@ -296,14 +296,14 @@ int main (int argc, char *argv[])
 
         if(passedV) {
             char s[1024];
-            sprintf ( s, "Received %d bytes: ", nBytes);
-            sprintf ( s, "Capture %d bytes for offset %d: ", int(nBytes-mdlen), int(off));
+            snprintf ( s, 1024, "Received %d bytes: ", nBytes);
+            snprintf ( s, 1024, "Capture %d bytes for offset %d: ", int(nBytes-mdlen), int(off));
             rslg.write((char*)s, strlen(s));
-            sprintf ( s, "frst = %s / lst = %s ", btoa(frst), btoa(lst));
+            snprintf ( s, 1024, "frst = %s / lst = %s ", btoa(frst), btoa(lst));
             rslg.write((char*)s, strlen(s));
-            sprintf ( s, " / data_id = %hu / off = %u / len = %u / tick = %" PRIu64 "\n", data_id, off, len, tick);
+            snprintf ( s, 1024, " / data_id = %hu / off = %u / len = %u / tick = %" PRIu64 "\n", data_id, off, len, tick);
             rslg.write((char*)s, strlen(s));
-            sprintf( s, "cpu\t%d\n", cpu);
+            snprintf( s, 1024, "cpu\t%d\n", cpu);
             rslg.write((char*)s, strlen(s));
         }
 
@@ -334,7 +334,7 @@ int main (int argc, char *argv[])
             rs.write((char*) in_buff, totalBytesRead);
             if(passedV) {
                 char s[1024];
-                sprintf ( s, "Assembled %u bytes for tick %" PRIu64 " from id %hu\n ", totalBytesRead, tick, data_id);
+                snprintf ( s, 1024, "Assembled %u bytes for tick %" PRIu64 " from id %hu\n ", totalBytesRead, tick, data_id);
                 rslg.write((char*)s, strlen(s));
             }
 

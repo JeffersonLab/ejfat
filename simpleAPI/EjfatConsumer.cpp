@@ -167,7 +167,7 @@ namespace ejfat {
         clock_gettime(CLOCK_MONOTONIC, &now);
         int time = now.tv_nsec/1000L;
         char name[256];
-        sprintf(name, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
+        snprintf(name, 256, "be_%06d/lb/%s", (time % 1000000), lbId.c_str());
         myName = name;
 
 

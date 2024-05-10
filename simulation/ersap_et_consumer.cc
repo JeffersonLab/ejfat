@@ -51,7 +51,7 @@ static void writeBufToFile(const char *data, uint32_t bytes, const char *filenam
 
     char name[512];
     memset(name, 0, 512);
-    sprintf(name, "%s_%d_%hu", filename, loop, dataId);
+    snprintf(name, 512, "%s_%d_%hu", filename, loop, dataId);
 
     std::fstream file;
     file.open(name, std::ios::app | std::ios::binary);
