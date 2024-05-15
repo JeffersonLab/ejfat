@@ -37,7 +37,7 @@ TEST(DaosTest, QueryPoolUsage) {
     daos_handle_t coh = DAOS_HDL_INVAL;
 
     // Connect to an existing pool with Read-only mode.
-    EXPECT_EQ(daos_pool_connect(pool_label,
+    ASSERT_EQ(daos_pool_connect(pool_label,
         /* sys */ NULL,
         /* read-only mode */ DAOS_PC_RO,
         &poh,
@@ -47,7 +47,7 @@ TEST(DaosTest, QueryPoolUsage) {
     // Query the pool usage
     daos_pool_info_t pool_info = {0};
     pool_info.pi_bits = DPI_SPACE;  // IMPORTANT!!! Set daos_pool_info_bit (pi_bits) to 1.
-    EXPECT_EQ(daos_pool_query(poh, NULL, &pool_info, NULL, NULL), 0);
+    ASSERT_EQ(daos_pool_query(poh, NULL, &pool_info, NULL, NULL), 0);
 
     // pool_info.pi_space.ps_space.s_xx[0] is for tier 0 (SCM)
     // pool_info.pi_space.ps_space.s_xx[1] is for tier 1 (NVME)
@@ -66,7 +66,7 @@ TEST(DaosTest, QueryPoolUsage) {
     ASSERT_GT(pool_info.pi_space.ps_space.s_total[1], pool_info.pi_space.ps_space.s_free[1]);
 
     // Disconnect from the pool.
-    EXPECT_EQ(daos_pool_disconnect(poh, NULL), 0);
+    ASSERT_EQ(daos_pool_disconnect(poh, NULL), 0);
 
     // Finalize the DAOS call.
     daos_fini();

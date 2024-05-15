@@ -28,9 +28,9 @@ find_library(DAOS_LIBRARY
   PATHS /usr/lib64
 )
 
-# The DAOS header files require `yum install daos-devel` first
+# To get the DAOS header files, `yum install daos-devel` first.
 find_path(DAOS_INCLUDE_DIR
-  NAMES daos.h
+  NAMES daos.h daos_fs_sys.h daos_fs.h
   PATHS /usr/include
 )
 
@@ -42,13 +42,27 @@ else()
   message(FATAL_ERROR "libdaos is required!")
 endif()
 
+# Locate DFS
+find_library(DFS_LIBRARY
+  NAMES libdfs.so
+  PATHS /usr/lib64
+)
+
+if(DFS_LIBRARY)
+  set(DFS_LIBRARIES ${DFS_LIBRARY})
+  set(DFS_INCLUDE_DIRS  ${DAOS_INCLUDE_DIR})
+  message(STATUS "DFS_LIBRARIES = " ${DFS_LIBRARIES})
+else()
+  message(FATAL_ERROR "libdfs is required!")
+endif()
+
 # Locate GTest
 enable_testing()
 
-set(TEST_NAME "daos_test")
+set(DAOS_TEST_NAME "daos_test")
 
 add_executable(
-  ${TEST_NAME}
+  ${DAOS_TEST_NAME}
   test_daos_version.cc
   test_daos_pool.cc
   test_daos_cont.cc
@@ -57,15 +71,37 @@ add_executable(
 )
 
 target_link_libraries(
-  ${TEST_NAME}
+  ${DAOS_TEST_NAME}
   GTest::gtest_main
   ${DAOS_LIBRARIES}
 )
 
 target_include_directories(
-  ${TEST_NAME}
+  ${DAOS_TEST_NAME}
   PUBLIC ${DAOS_INCLUDE_DIRS}
 )
 
 include(GoogleTest)
-gtest_discover_tests(${TEST_NAME})
+gtest_discover_tests(${DAOS_TEST_NAME})
+
+set(DFS_TEST_NAME "dfs_sys_test")
+
+add_executable(
+  ${DFS_TEST_NAME}
+  test_daos_fs_sys.cc
+)
+
+target_link_libraries(
+  ${DFS_TEST_NAME}
+  GTest::gtest_main
+  ${DAOS_LIBRARIES}
+  ${DFS_LIBRARIES}
+)
+
+target_include_directories(
+  ${DFS_TEST_NAME}
+  PUBLIC ${DAOS_INCLUDE_DIRS}
+)
+
+include(GoogleTest)
+gtest_discover_tests(${DFS_TEST_NAME})
