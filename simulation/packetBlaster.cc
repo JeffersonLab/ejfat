@@ -102,8 +102,11 @@ static void printHelp(char *programName) {
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        Data is copied into a buffer once and \"send()\" is used (connect is called).\n");
     fprintf(stderr, "        This program cycles thru the use of up to 16 UDP sockets for better switch performance.\n");
-    fprintf(stderr, "          One can specify -uri or -file for sending data thru the LB, OR\n");
-    fprintf(stderr, "          one can specify -direct with IP:port for sending data directly to backend\n");
+    fprintf(stderr, "        There are 2 ways to know how to send data:\n");
+    fprintf(stderr, "           1) specify -uri, or\n");
+    fprintf(stderr, "           2) specify -file for file that contains URI.\n");
+    fprintf(stderr, "        To bypass the LB and send data direct to consumer:\n");
+    fprintf(stderr, "           1) specify -direct (and NOT -uri/-file)\n");
 }
 
 
@@ -1117,7 +1120,6 @@ int main(int argc, char **argv) {
         //---------------------------------------
         // send the sync
         //---------------------------------------
-
         if (!direct) {
             // Get the current time point
             auto endT = std::chrono::high_resolution_clock::now();
