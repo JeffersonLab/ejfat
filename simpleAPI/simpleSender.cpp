@@ -32,6 +32,7 @@
 #include <iostream>
 #include <cinttypes>
 #include <chrono>
+#include <regex>
 
 #include <sstream>
 #include <vector>
@@ -50,12 +51,14 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6]\n",
 
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
             "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
+
+            "        [-direct <ip_addr:port>]\n",
 
             "        [-nc  (no connect on socket)]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, 1200 min>]\n",
@@ -70,8 +73,11 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        EJFAT UDP packet sender, using the new simple API, that will\n");
     fprintf(stderr, "        packetize and send buffers repeatedly and keep stats.\n");
-    fprintf(stderr, "        There are 2 ways to know how to send data: 1) specify -uri, or\n");
+    fprintf(stderr, "        There are 2 ways to know how to send data:\n");
+    fprintf(stderr, "           1) specify -uri, or\n");
     fprintf(stderr, "           2) specify -file for file that contains URI.\n");
+    fprintf(stderr, "        To bypass the LB and send data direct to consumer:\n");
+    fprintf(stderr, "           1) specify -direct (and NOT -uri/-file)\n");
 }
 
 
@@ -91,6 +97,7 @@ static void printHelp(char *programName) {
  * @param debug           true for debug output.
  * @param useIPv6         use ipV6 for ...
  * @param noConnect       true means connect() NOT called on sending sockets.
+ * @param direct          consumerIP:consumerPort for sending directly to consumer and bypassing LB.
  * @param uri             URI containing LB/CP connection info.
  * @param filename        name of file in which to read URI.
  */
@@ -99,7 +106,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
                       uint64_t *bufSize,
                       int *delayPrescale, std::vector<int> &cores,
                       bool *debug, bool *useIPv6, bool *noConnect,
-                      char* uri, char* file) {
+                      char *direct, char *uri, char *file) {
 
     int c, i_tmp;
     int64_t tmp;
@@ -115,7 +122,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
              {"cores",    1, nullptr, 6},
              {"nc",       0, nullptr, 7},
              {"uri",      1, nullptr, 8},
-             {"file"   ,  1, nullptr, 9},
+             {"file",     1, nullptr, 9},
+             {"direct",   1, nullptr, 10},
              {nullptr,    0, 0,    0}
             };
 
@@ -252,6 +260,14 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
                 strcpy(file, optarg);
                 break;
 
+            case 10:
+                // do we send direct to backend? arg is addr:port
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -direct, too long\n");
+                    exit(-1);
+                }
+                strcpy(direct, optarg);
+                break;
 
             case 'v':
                 // VERBOSE
@@ -266,6 +282,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
                 printHelp(argv[0]);
                 exit(2);
         }
+    }
+
+    if (strlen(direct) > 0 && (strlen(uri) > 0 || strlen(file) > 0)) {
+        fprintf(stderr, "Specify either -direct OR (-uri and/or -file), but not both\n");
+        exit(-1);
     }
 
     if (help) {
@@ -295,6 +316,14 @@ int main(int argc, char **argv) {
     bool useIPv6 = false;
     bool noConnect = false;
 
+    // Direct connection to consumer stuff
+    char directArg[256];
+    memset(directArg, 0, 256);
+    std::string directIP;
+    uint16_t directPort = 0;
+    bool direct = false;
+    //-----------------------------------
+
     char uri[INPUT_LENGTH_MAX];
     memset(uri, 0, INPUT_LENGTH_MAX);
 
@@ -309,7 +338,7 @@ int main(int argc, char **argv) {
               &dataId, &delay, &bufSize,
               &delayPrescale, cores, &debug,
               &useIPv6, &noConnect,
-              uri, fileName);
+              directArg, uri, fileName);
 
 #ifdef __linux__
 
@@ -338,16 +367,54 @@ int main(int argc, char **argv) {
 
 #endif
 
+    // Perhaps -direct was specified. parseArgs ensures this is not defined
+    // if either -uri or -file is defined.
+    if (strlen(directArg) > 0) {
+        direct = true;
+
+        // Let's parse the arg with regex (arg = ipaddr:port where ipaddr can be ipv4 or ipv6)
+        // Note: the pattern (\[?[a-fA-F\d:.]+\]?) matches either IPv6 or IPv4 addresses
+        // in which the addr may be surrounded by [] and thus is stripped off.
+        std::regex pattern(R"regex((\[?[a-fA-F\d:.]+\]?):(\d+))regex");
+
+        std::smatch match;
+        // change char* to string
+        std::string dArg = directArg;
+
+        if (std::regex_match(dArg, match, pattern)) {
+            // We're here if directArg is in the proper format ...
+
+            // Remove square brackets from address if present
+            directIP = match[1];
+            if (!directIP.empty() && directIP.front() == '[' && directIP.back() == ']') {
+                directIP = directIP.substr(1, directIP.size() - 2);
+            }
+
+            directPort = std::stoi(match[2]);
+        }
+    }
+
+
+    fprintf(stderr, "Direct         = %s\n", btoa(direct));
     fprintf(stderr, "Delay          = %u microsec\n", delay);
     fprintf(stderr, "No connect     = %s\n", btoa(noConnect));
     fprintf(stderr, "Using MTU      = %d\n", mtu);
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
 
-    // Create the producer
+    // Create the producer. Used shared_ptr since we need to use different constructors
+    std::shared_ptr<EjfatProducer> producer;
 
-    EjfatProducer producer(std::string(uri), std::string(fileName),
-                           dataId, entropy, delay, delayPrescale,
-                           !noConnect, mtu, cores);
+    if (direct) {
+        producer = std::make_shared<EjfatProducer>(std::string(directIP), std::string(""),
+                                                   directPort, 0, direct,
+                                                   dataId, entropy, delay, delayPrescale,
+                                                   !noConnect, mtu, cores);
+    }
+    else {
+        producer = std::make_shared<EjfatProducer>(std::string(uri), std::string(fileName),
+                                                   dataId, entropy, delay, delayPrescale,
+                                                   !noConnect, mtu, cores);
+    }
 
 
     //--------------------------------------------
@@ -385,12 +452,12 @@ int main(int argc, char **argv) {
     while (true) {
         if (blocking) {
             // Blocking send (slightly faster than the internal queue method below).
-            producer.sendEvent(buf, bufSize);
+            producer->sendEvent(buf, bufSize);
         }
         else {
             // Non-blocking placement of event on queue
             // which an internal thread dequeues and sends.
-            bool added = producer.addToSendQueue(buf, bufSize);
+            bool added = producer->addToSendQueue(buf, bufSize);
             if (!added) {
                 // If not added to queue, because it's full, delay and try again later
                 std::this_thread::sleep_for(std::chrono::nanoseconds(200));

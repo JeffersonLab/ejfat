@@ -125,6 +125,7 @@ namespace ejfat {
      * @param syncAddr       IP address (currently only ipv4) to send sync msgs to.
      * @param dataPort       UDP port to send data to.
      * @param syncPort       UDP port to send sync msgs to.
+     * @param direct         if true, bypass LB and send data direct to consumer (dataAdddr, dataPort).
      * @param id             id number of this sender: 0,1,2 ... (defaults to 0).
      * @param entropy        number (0,1,2, ...) to add to the base destination port for a given destination host.
      *                       Used on receiving end to read different sources on different UDP ports
@@ -144,6 +145,7 @@ namespace ejfat {
     EjfatProducer::EjfatProducer(const std::string& dataAddr,
                                  const std::string& syncAddr,
                                  uint16_t dataPort, uint16_t syncPort,
+                                 bool direct,
                                  uint16_t id, int entropy,
                                  int delay, int delayPrescale,
                                  bool connect, int mtu,
@@ -152,7 +154,7 @@ namespace ejfat {
 
             dataAddr(dataAddr), syncAddr(syncAddr),
             dataPort(dataPort), syncPort(syncPort),
-            id(id), entropy(entropy),
+            direct(direct), id(id), entropy(entropy),
             delay(delay), delayPrescale(delayPrescale),
             connectSocket(connect), mtu(mtu),
             cores(cores),
@@ -169,15 +171,22 @@ namespace ejfat {
         bool ipv4Sync = isIPv4(syncAddr);
 
         // Check for valid IP addrs
-        if ((!ipv6Data && !ipv4Data) || (!ipv6Sync && !ipv4Sync)) {
-            // no valid data or sync IP addrs
-            throwEjfatLine("invalid IP addr arg(s)");
+        if (!ipv6Data && !ipv4Data) {
+            throwEjfatLine("invalid data IP addr arg");
+        }
+
+        if (!direct && (!ipv6Sync && !ipv4Sync)) {
+            // invalid sync IP addr (not needed for direct)
+            throwEjfatLine("invalid sync IP addr arg");
         }
 
         // Check for valid ports
-        if ((dataPort < 1024 || dataPort > 65535) ||
-            (syncPort < 1024 || syncPort > 6553))   {
-            // no valid data or sync ports
+        if (dataPort < 1024 || dataPort > 65535) {
+            throwEjfatLine("invalid data port arg");
+        }
+
+        if (!direct && (syncPort < 1024 || syncPort > 65535)) {
+            // invalid sync port (not needed for direct)
             throwEjfatLine("invalid port arg(s)");
         }
 
@@ -195,7 +204,7 @@ namespace ejfat {
         // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
         maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
 
-        createSyncSocket();
+        if (!direct) createSyncSocket();
         createDataSocket();
 
         startupSendThread();
@@ -659,7 +668,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                                               tick, protocol, entropy, version, id,
                                               (uint32_t)bytes, &offset,
                                               0, 1, nullptr,
-                                              true, true, debug, false, &packetsSent);
+                                              true, true, debug, direct, &packetsSent);
         }
         else {
             if (ipv6Data) {
@@ -669,7 +678,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                                                   bytes, &offset,
                                                   0, 1, nullptr,
                                                   true, true, debug,
-                                                  false, true,
+                                                  direct, true,
                                                   &packetsSent, 0,
                                                   (sockaddr * ) & sendAddrStruct6, sizeof(struct sockaddr_in6));
             }
@@ -680,7 +689,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                                                   bytes, &offset,
                                                   0, 1, nullptr,
                                                   true, true, debug,
-                                                  false, true,
+                                                  direct, true,
                                                   &packetsSent, 0,
                                                   (sockaddr * ) & sendAddrStruct, sizeof(struct sockaddr_in));
             }
@@ -694,28 +703,29 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
 
         //------------------------------------------------
         // Deal with sync message to CP
+        if (!direct) {
+            // Get the current time point
+            auto nowT = std::chrono::high_resolution_clock::now();
+            // Convert the time point to nanoseconds since the epoch
+            auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(nowT.time_since_epoch()).count();
+            uint64_t currentTimeNanos = static_cast<uint64_t>(now);
 
-        // Get the current time point
-        auto nowT = std::chrono::high_resolution_clock::now();
-        // Convert the time point to nanoseconds since the epoch
-        auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(nowT.time_since_epoch()).count();
-        uint64_t currentTimeNanos = static_cast<uint64_t>(now);
+            // Calculate the time difference in nanoseconds
+            auto timeDiff = currentTimeNanos - lastSyncTimeNanos;
 
-        // Calculate the time difference in nanoseconds
-        auto timeDiff = currentTimeNanos - lastSyncTimeNanos;
+            // if >= 1 sec ...
+            if (timeDiff >= 1000000000UL) {
+                // Calculate event rate in Hz
+                uint32_t evtRate = eventsSinceLastSync / (timeDiff / 1000000000UL);
 
-        // if >= 1 sec ...
-        if (timeDiff >= 1000000000UL) {
-            // Calculate event rate in Hz
-            uint32_t evtRate = eventsSinceLastSync/(timeDiff/1000000000UL);
+                if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
 
-            if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
+                // Send sync message which will throw exception if problem
+                sendSyncMsg(tick, currentTimeNanos, evtRate);
 
-            // Send sync message which will throw exception if problem
-            sendSyncMsg(tick, currentTimeNanos, evtRate);
-
-            lastSyncTimeNanos = currentTimeNanos;
-            eventsSinceLastSync = 0;
+                lastSyncTimeNanos = currentTimeNanos;
+                eventsSinceLastSync = 0;
+            }
         }
 
         // delay if any

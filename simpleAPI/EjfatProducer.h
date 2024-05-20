@@ -137,6 +137,8 @@ namespace ejfat {
         bool ipv6Sync = false;
 
 
+        /** If true, bypass LB and send data directly to consumer (dataAddr, dataPort). No sync necessary. */
+        bool direct = false;
         /** If true, call connect() for both sync and data sockets. */
         bool connectSocket = false;
 
@@ -232,7 +234,7 @@ namespace ejfat {
                       int version = 2, int protocol = 1);
 
         EjfatProducer(const std::string& dataAddress, const std::string& syncAddress,
-                      uint16_t dataPort, uint16_t syncPort,
+                      uint16_t dataPort, uint16_t syncPort, bool direct = false,
                       uint16_t id = 0, int entropy = 0,
                       int delay = 0, int delayPrescale = 1,
                       bool connect = false, int mtu = 9000,
