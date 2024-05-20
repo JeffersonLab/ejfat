@@ -684,7 +684,7 @@ int main(int argc, char **argv) {
                 directIpV6 = true;
             }
             haveEverything = true;
-            std::cerr << "-direct gived ipaddr = " << directIP << ", port = " << directPort << ", ipv6 = " << directIpV6 << std::endl;
+            std::cerr << "-direct with ipaddr = " << directIP << ", port = " << directPort << ", ipv6 = " << directIpV6 << std::endl;
         }
     }
 
@@ -707,6 +707,7 @@ int main(int argc, char **argv) {
         dataAddr    = directIP;
         dataPort    = directPort;
         useIPv6Data = directIpV6;
+        std::cerr << "-direct with ipaddr = " << dataAddr << ", port = " << dataPort << ", ipv6 = " << useIPv6Data << std::endl;
     }
     else {
         // data address and port
