@@ -673,7 +673,7 @@ int main(int argc, char **argv) {
             // We're here if directArg is in the proper format ...
 
             // Remove square brackets from address if present
-            std::string directIP = match[1];
+            directIP = match[1];
             if (!directIP.empty() && directIP.front() == '[' && directIP.back() == ']') {
                 directIP = directIP.substr(1, directIP.size() - 2);
             }
