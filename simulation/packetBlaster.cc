@@ -45,6 +45,7 @@
 #include <vector>
 #include <sstream>
 #include <fstream>
+#include <regex>
 
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -70,13 +71,15 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v]",
             "        [-nc (no connect on socket)]\n",
 
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
             "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
+
+            "        [-direct <ip_addr:port>]\n",
 
             "        [-sock <# of UDP sockets, 16 max>]",
             "        [-mtu <desired MTU size, 9000 default/max, 0 system default, else 1200 minimum>]",
@@ -99,6 +102,8 @@ static void printHelp(char *programName) {
     fprintf(stderr, "        EJFAT UDP packet sender that will packetize and send buffer repeatedly and get stats\n");
     fprintf(stderr, "        Data is copied into a buffer once and \"send()\" is used (connect is called).\n");
     fprintf(stderr, "        This program cycles thru the use of up to 16 UDP sockets for better switch performance.\n");
+    fprintf(stderr, "          One can specify -uri or -file for sending data thru the LB, OR\n");
+    fprintf(stderr, "          one can specify -direct with IP:port for sending data directly to backend\n");
 }
 
 
@@ -111,9 +116,8 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                       uint64_t *byteRate, uint32_t *sendBufSize,
                       uint32_t *delayPrescale, uint32_t *tickPrescale,
                       uint32_t *sockets,
-                      bool *debug,
-                      bool *noConnect,
-                      char* uri, char* file,
+                      bool *debug, bool *noConnect,
+                      char *direct, char *uri, char *file,
                       std::vector<int>& cores) {
 
     int c, i_tmp;
@@ -129,6 +133,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
              {"id",       1, nullptr, 4},
              {"pro",      1, nullptr, 5},
 
+             {"direct",   1, nullptr, 6},
 
              {"dpre",     1, nullptr, 9},
              {"tpre",     1, nullptr, 10},
@@ -249,6 +254,15 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
                     exit(-1);
                 }
                 *protocol = i_tmp;
+                break;
+
+            case 6:
+                // do we send direct to backend? arg is addr:port
+                if (strlen(optarg) >= 256) {
+                    fprintf(stderr, "Invalid argument to -direct, too long\n");
+                    exit(-1);
+                }
+                strcpy(direct, optarg);
                 break;
 
             case 9:
@@ -395,6 +409,11 @@ static void parseArgs(int argc, char **argv, int* mtu, int *protocol,
         *delay = 0;
     }
 
+    if (strlen(direct) > 0 && (strlen(uri) > 0 || strlen(file) > 0)) {
+        fprintf(stderr, "Specify either -direct OR (-uri and/or -file), but not both\n");
+        exit(-1);
+    }
+
     if (help) {
         printHelp(argv[0]);
         exit(2);
@@ -526,10 +545,16 @@ int main(int argc, char **argv) {
 
     bool debug = false;
     bool setBufRate = false, setByteRate = false;
-    bool direct = false;
     bool noConnect = false;
 
-    char syncBuf[28];
+    // Direct connection to backend stuff
+    char directArg[256];
+    memset(directArg, 0, 256);
+    std::string directIP;
+    uint16_t directPort = 0;
+    bool direct = false;
+    bool directIpV6 = false;
+    //-----------------------------------
 
     char uri[256];
     memset(uri, 0, 256);
@@ -537,12 +562,14 @@ int main(int argc, char **argv) {
     char fileName[256];
     memset(fileName, 0, 256);
 
+    char syncBuf[28];
 
-        parseArgs(argc, argv, &mtu, &protocol, &entropy,
+
+    parseArgs(argc, argv, &mtu, &protocol, &entropy,
               &version, &dataId, &tick,
               &delay, &bufSize, &bufRate, &byteRate, &sendBufSize,
               &delayPrescale, &tickPrescale, &sockCount, &debug,
-              &noConnect,
+              &noConnect, directArg,
               uri, fileName, cores);
 
 #ifdef __linux__
@@ -626,11 +653,44 @@ int main(int argc, char **argv) {
             file.close();
         }
     }
-
     //printUri(std::cerr, uriInfo);
 
+    // Perhaps -direct was specified. parseArgs ensures this is not defined
+    // if either -uri or -file is defined.
+    if (!haveEverything && strlen(directArg) > 0) {
+        direct = true;
+
+        // Let's parse the arg with regex (arg = ipaddr:port where ipaddr can be ipv4 or ipv6)
+        // Note: the pattern (\[?[a-fA-F\d:.]+\]?) matches either IPv6 or IPv4 addresses
+        // in which the addr may be surrounded by [] and thus is stripped off.
+        std::regex pattern(R"regex((\[?[a-fA-F\d:.]+\]?):(\d+))regex");
+
+        std::smatch match;
+        // change char* to string
+        std::string dArg = directArg;
+
+        if (std::regex_match(dArg, match, pattern)) {
+            // We're here if directArg is in the proper format ...
+
+            // Remove square brackets from address if present
+            std::string directIP = match[1];
+            if (!directIP.empty() && directIP.front() == '[' && directIP.back() == ']') {
+                directIP = directIP.substr(1, directIP.size() - 2);
+            }
+
+            directPort = std::stoi(match[2]);
+
+            if (isIPv6(directIP)) {
+                directIpV6 = true;
+            }
+            haveEverything = true;
+            std::cerr << "-direct gived ipaddr = " << directIP << ", port = " << directPort << ", ipv6 = " << directIpV6 << std::endl;
+        }
+    }
+
+
     if (!haveEverything) {
-        std::cerr << "no LB/CP info in uri or file" << std::endl;
+        std::cerr << "no LB/CP info in uri or file or direct" << std::endl;
         return 1;
     }
 
@@ -640,26 +700,36 @@ int main(int argc, char **argv) {
     bool useIPv6Data = false;
     bool useIPv6Sync = false;
 
-    // data address and port
-    if (uriInfo.useIPv6Data) {
-        dataAddr = uriInfo.dataAddrV6;
-        useIPv6Data = true;
+    uint16_t dataPort = 0;
+    uint16_t syncPort = 0;
+
+    if (direct) {
+        dataAddr    = directIP;
+        dataPort    = directPort;
+        useIPv6Data = directIpV6;
     }
     else {
-        dataAddr = uriInfo.dataAddrV4;
-    }
+        // data address and port
+        if (uriInfo.useIPv6Data) {
+            dataAddr = uriInfo.dataAddrV6;
+            useIPv6Data = true;
+        }
+        else {
+            dataAddr = uriInfo.dataAddrV4;
+        }
 
-    // sync address and port
-    if (uriInfo.useIPv6Sync) {
-        syncAddr = uriInfo.syncAddrV6;
-        useIPv6Sync = true;
-    }
-    else {
-        syncAddr = uriInfo.syncAddrV4;
-    }
+        // sync address and port
+        if (uriInfo.useIPv6Sync) {
+            syncAddr = uriInfo.syncAddrV6;
+            useIPv6Sync = true;
+        }
+        else {
+            syncAddr = uriInfo.syncAddrV4;
+        }
 
-    uint16_t dataPort = uriInfo.dataPort;
-    uint16_t syncPort = uriInfo.syncPort;
+        dataPort = uriInfo.dataPort;
+        syncPort = uriInfo.syncPort;
+    }
 
 
     fprintf(stderr, "Delay = %u microsec\n", delay);
@@ -680,48 +750,49 @@ int main(int argc, char **argv) {
 
 
     // Socket for sending sync message to CP
-    if (useIPv6Sync) {
-        struct sockaddr_in6 serverAddr6;
+    if (!direct) {
+        if (useIPv6Sync) {
+            struct sockaddr_in6 serverAddr6;
 
-        if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv6 sync socket");
-            return -1;
+            if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv6 sync socket");
+                return -1;
+            }
+
+            memset(&serverAddr6, 0, sizeof(serverAddr6));
+            serverAddr6.sin6_family = AF_INET6;
+            serverAddr6.sin6_port = htons(syncPort);
+            inet_pton(AF_INET6, syncAddr.c_str(), &serverAddr6.sin6_addr);
+
+            int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP sync socket:");
+                close(syncSocket);
+                exit(1);
+            }
         }
+        else {
+            struct sockaddr_in serverAddr;
 
-        memset(&serverAddr6, 0, sizeof(serverAddr6));
-        serverAddr6.sin6_family = AF_INET6;
-        serverAddr6.sin6_port = htons(syncPort);
-        inet_pton(AF_INET6, syncAddr.c_str(), &serverAddr6.sin6_addr);
+            if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+                perror("creating IPv4 sync socket");
+                return -1;
+            }
 
-        int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
-        if (err < 0) {
-            if (debug) perror("Error connecting UDP sync socket:");
-            close(syncSocket);
-            exit(1);
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(syncPort);
+            serverAddr.sin_addr.s_addr = inet_addr(syncAddr.c_str());
+            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+            int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
+            if (err < 0) {
+                if (debug) perror("Error connecting UDP sync socket:");
+                close(syncSocket);
+                return err;
+            }
         }
     }
-    else {
-        struct sockaddr_in serverAddr;
-
-        if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-            perror("creating IPv4 sync socket");
-            return -1;
-        }
-
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(syncPort);
-        serverAddr.sin_addr.s_addr = inet_addr(syncAddr.c_str());
-        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-
-        int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
-        if (err < 0) {
-            if (debug) perror("Error connecting UDP sync socket:");
-            close(syncSocket);
-            return err;
-        }
-    }
-
 
 
     // Create UDP maxSocks sockets for efficient switch operation
@@ -1047,31 +1118,34 @@ int main(int argc, char **argv) {
         // send the sync
         //---------------------------------------
 
-        // Get the current time point
-        auto endT = std::chrono::high_resolution_clock::now();
-        // Convert the time point to nanoseconds since the epoch
-        auto tEnd = std::chrono::duration_cast<std::chrono::nanoseconds>(endT.time_since_epoch()).count();
-        uint64_t currentTimeNanos = static_cast<uint64_t>(tEnd);
+        if (!direct) {
+            // Get the current time point
+            auto endT = std::chrono::high_resolution_clock::now();
+            // Convert the time point to nanoseconds since the epoch
+            auto tEnd = std::chrono::duration_cast<std::chrono::nanoseconds>(endT.time_since_epoch()).count();
+            uint64_t currentTimeNanos = static_cast<uint64_t>(tEnd);
 
-        // Calculate the time difference in nanoseconds
-        auto timeDiff = currentTimeNanos - startTimeNanos;
+            // Calculate the time difference in nanoseconds
+            auto timeDiff = currentTimeNanos - startTimeNanos;
 
-        // if >= 1 sec ...
-        if (timeDiff >= 1000000000UL) {
-            // Calculate buf or event rate in Hz
-            evtRate = bufsSent/(timeDiff/1000000000UL);
+            // if >= 1 sec send sync msg to CP, unless sending data directly to backend
+            if ((timeDiff >= 1000000000UL)) {
+                // Calculate buf or event rate in Hz
+                evtRate = bufsSent / (timeDiff / 1000000000UL);
 
-            // Send sync message to same destination
-            if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
-            setSyncData(syncBuf, version, dataId, tick, evtRate, currentTimeNanos);
-            err = send(syncSocket, syncBuf, 28, 0);
-            if (err == -1) {
-                fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno, strerror(errno));
-                return (-1);
+                // Send sync message to same destination
+                if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
+                setSyncData(syncBuf, version, dataId, tick, evtRate, currentTimeNanos);
+                err = send(syncSocket, syncBuf, 28, 0);
+                if (err == -1) {
+                    fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno,
+                            strerror(errno));
+                    return (-1);
+                }
+
+                startTimeNanos = currentTimeNanos;
+                bufsSent = 0;
             }
-
-            startTimeNanos = currentTimeNanos;
-            bufsSent = 0;
         }
         //---------------------------------------
 
