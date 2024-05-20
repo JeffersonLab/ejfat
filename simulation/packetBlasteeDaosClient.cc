@@ -599,7 +599,7 @@ typedef struct threadStruct_t {
     uint32_t reportTime;
     uint32_t sampleTime;
 
-    DAOSConnector thd_daos_client;
+    KVObject thd_kv_client;
 
 } threadStruct;
 
@@ -620,7 +620,7 @@ static void *daosMetricThread(void *arg) {
     const float Ki = targ->Ki;
     const float Kd = targ->Kd;
 
-    DAOSConnector daos_client = targ->thd_daos_client;
+    DAOSConnector daos_client = targ->thd_kv_client;
 
     // # of fill level to average together
     uint32_t fcount = targ->fcount;
@@ -1268,7 +1268,7 @@ int main(int argc, char **argv) {
 
     char host[256];
 
-    DAOSConnector daos_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
+    KVObject kv_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
 
     ////////////////////////////
     /// Control Plane  Stuff ///
@@ -1317,7 +1317,7 @@ int main(int argc, char **argv) {
                 targ->statFile = stat_file_name;
             }
 
-            targ->thd_daos_client = daos_client;
+            targ->thd_kv_client = kv_client;
 
             pthread_t cpThread;
             status = pthread_create(&cpThread, NULL, daosMetricThread, (void *) targ);
@@ -1390,10 +1390,9 @@ int main(int argc, char **argv) {
         // Send data to DAOS
         if (sendToDaos) {
 
-            daos_obj_id_t daos_oid = daos_client.createKVObject(tick);
+            kv_client.create(tick);
             /// TODO: discuss DAOS object keys with team members.
-            daos_client.push2KVObject(daos_oid,
-                        generate_daos_kv_key(totalEvents), nBytes, dataBuf);
+            kv_client.push(generate_daos_kv_key(totalEvents), nBytes, dataBuf);
             }
     }
 

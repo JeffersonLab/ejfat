@@ -443,8 +443,8 @@ int main(int argc, char **argv) {
     bool noBuild = false;
 
     // DAOS stuff declaration
-    DAOSConnector daos_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
-    std::cout << "DAOS pool usage: " << daos_client.getPoolUsage() << "%\n" << std::endl;
+    KVObject kv_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
+    std::cout << "DAOS pool usage: " << kv_client.getPoolUsage() << "%\n" << std::endl;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -714,10 +714,9 @@ int main(int argc, char **argv) {
         discardedPackets += stats->discardedPackets;
 
         // Send data to DAOS server.
-        daos_obj_id_t daos_oid = daos_client.createKVObject(tick);
+        kv_client.create(tick);
         /// TODO: discuss DAOS object keys with team members.
-        daos_client.push2KVObject(daos_oid,
-                    generate_daos_kv_key(totalEvents), nBytes, dataBuf);
+        kv_client.push(generate_daos_kv_key(totalEvents), nBytes, dataBuf);
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.

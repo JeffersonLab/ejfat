@@ -227,10 +227,10 @@ TEST(DfsSysTest, DfsSys_WriteFile) {
     // std::cout << "read_buf: " << read_buf << std::endl;
 	EXPECT_STREQ(read_buf, wrt_buf);  // verify we get the same string
 
-	/* Punch file */
+	/* Punch file. Namely delete some contents in the file. */
 	ASSERT_EQ(dfs_sys_punch(mnt_fs_sys, EJFAT_DFS_SYS_FILE_PATH, 0, wrt_size), 0);
 
-    /* Read empty file */
+    /* Read empty file. */
     memset(read_buf, 0, wrt_size);
     ASSERT_EQ(got_size, wrt_size);
     ASSERT_EQ(dfs_sys_read(mnt_fs_sys, _dfs_obj, read_buf, 0, &got_size, NULL), 0);
