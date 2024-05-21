@@ -35,15 +35,17 @@ There are 2 C++ classes to use, one for sending data and the other for receiving
   
   #### Interacting with the Load Balancer (LB) & Control Plane (CP)
 
-There are 3 programs used to talk to the CP:
+There are 4 programs used to talk to the CP:
 
  - lbreserve
  - lbfree
  - lbmonitor
+ - lbgeturi
  
  **lbreserve** reserves an instance of a LB  
  **lbfree** releases a reserved LB  
- **lbmonitor** periodically prints the status of registered users of a CP
+ **lbmonitor** periodically prints the status of registered users of a CP  
+ **lbgeturi** given a CP and a valid lbid, it returns the URI (minus token).
  
 ### **************************************************************
 ### Steps to running
@@ -66,6 +68,12 @@ There are 3 programs used to talk to the CP:
     
     export EJFAT_URI=$(lbreserve -name myLB -host 129.57.177.135)  
     env | grep EJFAT
+ 
+ An easier way to capture the URI is to store it in a file. By default it
+ gets stored in /tmp/ejfat_uri, but it can be specified on the command line:
+ 
+     lbreserve -host 129.57.177.135 -file <myfile>
+
  
  Note: the amount of time an LB is reserved can be set on the command line.
  Currently, even though the reservation is for 10 minutes, it will actually
@@ -203,6 +211,15 @@ Under the hood, this greatly simplifies how UDP packets can be read and
 reconstructed into events without a painful amount of sorting. In fact,
 **this coordination is required**.
 
+
+#### 5) Cleaning up
+
+After a user is finished using a Load Balancer, it's good to remove it
+so others can reserve their own. Do this by running:
+
+    lbfree -host 129.57.177.135 -lbid <id>
+    
+where id is taken from the URI obtained when reserving.
 
 
 ### **************************************************************

@@ -9,6 +9,7 @@ set(EXECUTABLE_FILES
         lbmonitor.cpp
         lbfree.cpp
         lbreserve.cpp
+        lbgeturi.cpp
         simpleSender.cpp
         simpleConsumer.cpp
    )
