@@ -24,7 +24,7 @@ FetchContent_MakeAvailable(googletest)
 
 # Locate DAOS
 find_library(DAOS_LIBRARY
-  NAMES libdaos.so.2
+  NAMES libdaos.so
   PATHS /usr/lib64
 )
 

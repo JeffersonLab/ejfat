@@ -443,7 +443,7 @@ int main(int argc, char **argv) {
     bool noBuild = false;
 
     // DAOS stuff declaration
-    KVObject kv_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
+    KVClient kv_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
     std::cout << "DAOS pool usage: " << kv_client.getPoolUsage() << "%\n" << std::endl;
 
     char listeningAddr[16];
@@ -715,7 +715,6 @@ int main(int argc, char **argv) {
 
         // Send data to DAOS server.
         kv_client.create(tick);
-        /// TODO: discuss DAOS object keys with team members.
         kv_client.push(generate_daos_kv_key(totalEvents), nBytes, dataBuf);
 
         // The tick returned is what was just built.

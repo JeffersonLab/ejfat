@@ -599,8 +599,6 @@ typedef struct threadStruct_t {
     uint32_t reportTime;
     uint32_t sampleTime;
 
-    KVObject thd_kv_client;
-
 } threadStruct;
 
 
@@ -620,7 +618,7 @@ static void *daosMetricThread(void *arg) {
     const float Ki = targ->Ki;
     const float Kd = targ->Kd;
 
-    DAOSConnector daos_client = targ->thd_kv_client;
+    DAOSConnector daos_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
 
     // # of fill level to average together
     uint32_t fcount = targ->fcount;
@@ -1268,7 +1266,7 @@ int main(int argc, char **argv) {
 
     char host[256];
 
-    KVObject kv_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
+    KVClient kv_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
 
     ////////////////////////////
     /// Control Plane  Stuff ///
@@ -1316,8 +1314,6 @@ int main(int argc, char **argv) {
             if (keepLevelStats) {
                 targ->statFile = stat_file_name;
             }
-
-            targ->thd_kv_client = kv_client;
 
             pthread_t cpThread;
             status = pthread_create(&cpThread, NULL, daosMetricThread, (void *) targ);

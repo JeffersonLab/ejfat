@@ -450,7 +450,7 @@ if (DEFINED MAKE_EXEC)
                         ${DAOS_INCLUDE_DIRS})
 
                 # Needs these libs
-                target_link_libraries(${execName} pthread ${GRPC_LIBRARIES} ${DAOS_LIBRARY})
+                target_link_libraries(${execName} pthread ${GRPC_LIBRARIES} ${DAOS_LIBRARIES})
 
                 # Only install if installation directory has been defined
                 if (DEFINED INSTALL_DIR_DEFINED)

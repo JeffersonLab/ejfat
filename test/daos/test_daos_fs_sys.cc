@@ -25,7 +25,7 @@
 #define EJFAT_DAOS_POOL_LABEL "ejfat"
 
 // Create this container with parameter "--type=POSIX". Otherwise the test will fail.
-// Example: "daos create cont ejfat fs --type=POSIX"
+// Example: "daos create cont <pool_label> <cont_label> --type=POSIX"
 // Container type ref: https://docs.daos.io/v2.4/user/container/#container-type
 #define EJFAT_DAOS_CONT_LABEL "fs"
 
@@ -215,11 +215,13 @@ TEST(DfsSysTest, DfsSys_WriteFile) {
     memset(read_buf, 0, wrt_size);
     // std::cout << "read_buf [init]: " << read_buf << std::endl;
 
+    // Read first 5 bytes.
     daos_size_t got_size = 5;
     ASSERT_EQ(dfs_sys_read(mnt_fs_sys, _dfs_obj, read_buf, 0, &got_size, NULL), 0);
     // std::cout << "read_buf: " << read_buf << std::endl;
     EXPECT_STREQ("Hello", read_buf);
     
+    // Read the whole buffer.
     got_size = wrt_size;
     memset(read_buf, 0, wrt_size);
     // std::cout << "read_buf [reset]: " << read_buf << std::endl;
