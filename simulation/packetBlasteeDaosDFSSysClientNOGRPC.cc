@@ -44,7 +44,7 @@ using namespace ejfat;
 #define EJFAT_DAOS_POOL_LABEL "ejfat"
 
 // Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
-#define EJFAT_DAOS_CONT_LABEL "cont1"
+#define EJFAT_DAOS_CONT_LABEL "fs"
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -443,8 +443,8 @@ int main(int argc, char **argv) {
     bool noBuild = false;
 
     // DAOS stuff declaration
-    KVClient kv_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
-    std::cout << "DAOS pool usage: " << kv_client.getPoolUsage() << "%\n" << std::endl;
+    DFSSysClient dfs_sys_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
+    std::cout << "DAOS pool usage: " << 100.0 * dfs_sys_client.getPoolUsage() << "%\n" << std::endl;
 
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
@@ -714,8 +714,9 @@ int main(int argc, char **argv) {
         discardedPackets += stats->discardedPackets;
 
         // Send data to DAOS server.
-        kv_client.create(tick);
-        kv_client.push(generate_daos_kv_key(totalEvents), nBytes, dataBuf);
+        const char* fileName = generate_daos_kv_key(totalEvents);
+        dfs_sys_client.create(fileName);
+        dfs_sys_client.push(fileName, nBytes, dataBuf);
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.

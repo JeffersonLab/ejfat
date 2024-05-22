@@ -145,11 +145,12 @@ set(CLAS_EXEC_FILES
         )
 
 set(DAOS_EXEC_FILES
-        simulation/packetBlasteeDaosClientNOGRPC.cc
+        simulation/packetBlasteeDaosKVClientNOGRPC.cc
+        simulation/packetBlasteeDaosDFSSysClientNOGRPC.cc
         )
 
 set(DAOS_GRPC_EXEC_FILES
-        simulation/packetBlasteeDaosClient.cc
+        simulation/packetBlasteeDaosKVClient.cc
         )
 
 set(TEST_FILES

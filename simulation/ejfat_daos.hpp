@@ -143,21 +143,29 @@ namespace ejfat {
 
         int close(dfs_obj_t* dfs_obj);
         void processDFSSysError(dfs_obj_t*, const char *, const int);
-     
+
+        /**
+         * Set the file path string.
+         * \param[in]   The filename.
+         * \return      The full file path loacted at the root mounting dir with
+         *              suffix ".dat"
+        */
+        std::string setFullFilePath(const char* fileName);
     public:
         DFSSysClient(const char* pool_label, const char* cont_label);
         ~DFSSysClient() = default;
 
         /**
          * Create an empty file at the root of the mounting space.
-         * \param[in] file_name The name of the file, or the file path.
+         * \param[in] file_name The name of the file.
+         * The created file path would be `/file_name.dat`
         */
         void create(const char *file_name);
 
         /**
          * Write context to a file.
          * This include 3 dfs_sys operations: open->write->close.
-         * \param[in] file_name The name of the file, or the file path.
+         * \param[in] file_name The name of the file.
          * \param[in] size      Number of bytes to write.
          * \param[in] buf       Pointer to the context buffer.
         */
@@ -181,35 +189,49 @@ namespace ejfat {
         }
     }
 
+    std::string DFSSysClient::setFullFilePath(const char *fileName)
+    {
+        const char* prefix = "/";  // create at the root dir.
+        const char* suffix = ".dat";
+
+        std::string filePath = prefix + std::string(fileName) + suffix;
+
+        return filePath;
+    }
+
     DFSSysClient::DFSSysClient(const char *pool_label, const char *cont_label)
         : DAOSConnector(pool_label, cont_label)
-    {
+    {   
         // Mount the container to a POSIX userspace better preset with `dfuse`.
         // This will initialize @param _mnt_fs_sys.
         int rt = dfs_sys_mount(
             _poh, _coh, O_RDWR, DFS_SYS_NO_CACHE, &_mnt_fs_sys);
         if (rt != 0) {
             std::cerr << "Failed to mount the DFS userspace!" << std::endl;
+            exit(EJFAT_DAOS_MAGIC_ERROR_NUM_DFS_EXIT);
         }
-        exit(EJFAT_DAOS_MAGIC_ERROR_NUM_DFS_EXIT);
     }
 
-    inline void DFSSysClient::create(const char *file_name)
+    inline void DFSSysClient::create(const char *fileName)
     {
-        int rt = dfs_sys_mknod(_mnt_fs_sys, file_name,
-        /* User and owner can RW */ EJFAT_DFS_FILE_PERMISSION, 0, 0);
+        std::cout << "Creating file:   " << DFSSysClient::setFullFilePath(fileName) << std::endl;
+        int rt = dfs_sys_mknod(_mnt_fs_sys,
+            DFSSysClient::setFullFilePath(fileName).c_str(),
+            /* User and owner can RW */ EJFAT_DFS_FILE_PERMISSION, 0, 0);
 
         if (rt != 0) {
             DFSSysClient::processError("dfs_sys_mknod", rt);
         }
     }
 
-    inline void DFSSysClient::push(const char *file_name, daos_size_t size, const void *buf)
+    inline void DFSSysClient::push(const char *fileName, daos_size_t size, const void *buf)
     {   
         // Open the file object, which will initialize \var _dfs_obj.
         dfs_obj_t *_dfs_obj = nullptr;
         int rt = dfs_sys_open(
-            _mnt_fs_sys, file_name, EJFAT_DFS_FILE_PERMISSION, O_RDWR,0, 0, NULL, &_dfs_obj);
+            _mnt_fs_sys,
+            DFSSysClient::setFullFilePath(fileName).c_str(),
+            EJFAT_DFS_FILE_PERMISSION, O_RDWR,0, 0, NULL, &_dfs_obj);
 
         if (rt != 0) {
             DFSSysClient::processError("dfs_sys_open_fileobj", rt);
