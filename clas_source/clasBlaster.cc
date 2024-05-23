@@ -738,6 +738,8 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Delay = %u microsec\n", delay);
     fprintf(stderr, "Using MTU = %d\n", mtu);
+    fprintf(stderr, "Sending data to = %s, port %hu\n", dataAddr.c_str(), dataPort);
+    if (!direct) fprintf(stderr, "Sending sync to = %s, port %hu\n", syncAddr.c_str(), syncPort);
 
     if (bufRate > 0) {
         setBufRate = true;
