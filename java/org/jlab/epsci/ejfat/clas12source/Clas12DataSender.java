@@ -10,6 +10,12 @@ import java.time.Instant;
 import j4np.hipo5.data.Event;
 import j4np.hipo5.io.HipoReader;
 
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+import java.util.List;
+
+import static java.lang.System.exit;
+
 /**
  * <p>
  * @file Read the given HIPO data file and send each event in it
@@ -44,7 +50,7 @@ public class Clas12DataSender {
 
 
 
-    private boolean debug, sync, bufDelay, direct, connect=true;
+    private boolean debug, connect=true;
 
     private int repeat = Integer.MAX_VALUE;
     private String filename;
@@ -54,11 +60,18 @@ public class Clas12DataSender {
     private int tickPrescale = 1;
 
     private int sendBufSize = 25000000; // 50 MB UDP send buffer is default
-    private int port = 0x4c42; // 19522, FPGA port default
-    private String destHost; // no default
 
-    private int cpPort = 0x4c43; // 19523 CP port default
-    private String cpHost; // no default
+    private String file;
+    private String  uri;
+
+    //-------------------------------
+    // For sending direct to consumer, bypassing LB
+    private boolean direct;
+    private boolean directIpV6;
+    private String  directArg;
+    private String  directIP;
+    private int     directPort;
+    //-------------------------------
 
     private int socketCount = 1;
     private long tick;
@@ -94,7 +107,7 @@ public class Clas12DataSender {
 
                 if (args[i].equalsIgnoreCase("-h")) {
                     usage();
-                    System.exit(-1);
+                    exit(-1);
                 }
                 else if (args[i].equalsIgnoreCase("-f")) {
                     filename = args[i+1];
@@ -102,12 +115,6 @@ public class Clas12DataSender {
                 }
                 else if (args[i].equalsIgnoreCase("-v")) {
                     debug = true;
-                }
-                else if (args[i].equalsIgnoreCase("-sync")) {
-                    sync = true;
-                }
-                else if (args[i].equalsIgnoreCase("-direct")) {
-                    direct = true;
                 }
                 else if (args[i].equalsIgnoreCase("-nc")) {
                     connect = false;
@@ -122,9 +129,22 @@ public class Clas12DataSender {
                 }
 
 
-                else if (args[i].equalsIgnoreCase("-bufDelay")) {
-                    bufDelay = true;
+                else if (args[i].equalsIgnoreCase("-uri")) {
+                    uri = args[i+1];
+                    i++;
                 }
+                else if (args[i].equalsIgnoreCase("-file")) {
+                    file = args[i+1];
+                    i++;
+                }
+                else if (args[i].equalsIgnoreCase("-direct")) {
+                    directArg = args[i+1];
+                    if (directArg != null && directArg.length() > 0) {
+                        direct = true;
+                    }
+                }
+
+
                 else if (args[i].equalsIgnoreCase("-d")) {
                     try {
                         delay = Integer.parseInt(args[i+1]);
@@ -151,36 +171,6 @@ public class Clas12DataSender {
                 }
 
 
-                else if (args[i].equalsIgnoreCase("-host")) {
-                    destHost = args[i+1];
-                    i++;
-                }
-                else if (args[i].equalsIgnoreCase("-p")) {
-                    try {
-                        port = Integer.parseInt(args[i+1]);
-                        if (port > 65535 || port < 1024) {
-                            throw new Exception("port number must be < 65536 and > 1023");
-                        }
-                    }
-                    catch (NumberFormatException e) {}
-                    i++;
-                }
-
-
-                else if (args[i].equalsIgnoreCase("-cp_host")) {
-                    cpHost = args[i+1];
-                    i++;
-                }
-                else if (args[i].equalsIgnoreCase("-cp_port")) {
-                    try {
-                        cpPort = Integer.parseInt(args[i+1]);
-                        if (cpPort > 65535 || cpPort < 1024) {
-                            throw new Exception("port number must be < 65536 and > 1023");
-                        }
-                    }
-                    catch (NumberFormatException e) {}
-                    i++;
-                }
                 else if (args[i].equalsIgnoreCase("-sock")) {
                     try {
                         socketCount = Integer.parseInt(args[i+1]);
@@ -259,26 +249,22 @@ public class Clas12DataSender {
 
                 else {
                     usage();
-                    System.exit(-1);
+                    exit(-1);
                 }
+            }
+
+
+            if ((directArg != null && directArg.length() > 0) &&
+                    ((uri != null && uri.length() > 0) ||
+                     (file != null && file.length() > 0))) {
+                System.out.println("\nSpecify either -direct OR (-uri and/or -file), but not both\n");
+                exit(-1);
             }
 
             if (filename == null) {
                 System.out.println("\nProvide -f option\n\n");
                 usage();
-                System.exit(-1);
-            }
-
-            if (destHost == null) {
-                System.out.println("\nProvide -host option\n\n");
-                usage();
-                System.exit(-1);
-            }
-
-            if (sync && cpHost == null) {
-                System.out.println("\nProvide -cp_host option if using -sync\n\n");
-                usage();
-                System.exit(-1);
+                exit(-1);
             }
         }
         catch (Exception e) {
@@ -296,20 +282,16 @@ public class Clas12DataSender {
                 "        -f <filename>              name of data file\n" +
                 "        [-h] [-v]\n" +
                 "        [-r <# repeats>]           # times to read file (default forever)\n" +
-                "        [-sync]                    send 1 Hz msg to control plane w/ event #\n" +
-                "        [-direct]                  send data directly to back end, bypass LB\n" +
                 "        [-nc]                      do NOT connect socket\n\n" +
 
+                "        [-uri  <URI containing info for sending to LB/CP (default \"\")>]" +
+                "        [-file <file with URI (default /tmp/ejfat_uri)>]\n\n" +
+
+                "        [-direct <ip_addr:port>]   send data directly to consumer, bypass LB\n\n" +
+
                 "        [-d <delay in microsec>]\n" +
-                "        [-bufdelay]                delay between each buffer (default between packets)\n\n" +
                 "        [-tpre <tick prescale>     tick increment after each event sent)\n" +
                 "        [-dpre <delay prescale>    if -d defined, 1 delay after every prescale pkts/evts)>]" +
-
-                "        [-host <data dest>]        LB host (no default)\n" +
-                "        [-p <data dest UDP port>   LB port (default 19522)\n\n" +
-
-                "        [-cp_host <CP IP addr>]    sync msg host (no default)\n" +
-                "        [-cp_port <CP port>]       sync msg port (default 19523)\n" +
                 "        [-sock <# UDP sockets>]    sockets used to send data, 16 max (default 1)\n\n" +
 
                 "        [-mtu <desired MTU size>]\n" +
@@ -333,39 +315,138 @@ public class Clas12DataSender {
 
     /** Read events from file for testing purposes.  */
     public void run() {
-
-
         try {
+            ejfatURI uriInfo = new ejfatURI();
+            boolean haveEverything = false;
 
-            // Figure where delay is placed, between packets or events/buffers
-            int bufferDelay  = 0;
-            int packetDelay = 0;
-
-            if (delay > 0) {
-                if (bufDelay) {
-                    bufferDelay = delay;
-                }
-                else {
-                    packetDelay = delay;
+            // First see if the uri arg is defined, if so, parse it
+            if (uri != null && uri.length() > 0) {
+                boolean parsed = parseURI(uri, uriInfo);
+                if (parsed) {
+                    // URI is in correct format
+                    if (!(uriInfo.haveData && uriInfo.haveSync)) {
+                        System.out.println("no LB/CP info in URI");
+                    }
+                    else {
+                        haveEverything = true;
+                    }
                 }
             }
+
+            // If no luck with URI, look into file
+            if (!haveEverything && (file != null && file.length() > 0)) {
+
+                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                    String line;
+                    StringBuilder content = new StringBuilder();
+
+                    while ((line = reader.readLine()) != null) {
+                        content.append(line);
+                    }
+
+                    // Extract single string
+                    String urii = content.toString();
+
+                    boolean parsed = parseURI(urii, uriInfo);
+                    if (parsed) {
+                        if (!(uriInfo.haveData && uriInfo.haveSync)) {
+                            System.out.println("no LB/CP info in file");
+                        }
+                        else {
+                            haveEverything = true;
+                        }
+                    }
+                }
+                catch (Exception e) {}
+            }
+
+            //  printUri(uriInfo);
+
+            // Perhaps -direct was specified. parseArgs ensures this is not defined
+            // if either -uri or -file is defined.
+            if (!haveEverything && directArg.length() > 0) {
+                direct = true;
+
+                // Let's parse the arg with regex (arg = ipaddr:port where ipaddr can be ipv4 or ipv6)
+                // Note: the pattern \[?([a-fA-F\d:.]+)\]? matches either IPv6 or IPv4 addresses
+                // in which the addr may be surrounded by [] which is stripped off.
+
+                String regex = "\\[?([a-fA-F\\d:.]+)\\]?:(\\d+)";
+                Pattern pattern = Pattern.compile(regex);
+                Matcher matcher = pattern.matcher(uri);
+
+                if (matcher.find()) {
+                    // We're here if directArg is in the proper format ...
+                    directIP = matcher.group(1);
+                    directPort = Integer.parseInt(matcher.group(2));
+                    if (isIPv6(directIP)) {
+                        directIpV6 = true;
+                    }
+                    haveEverything = true;
+                }
+            }
+
+            if (!haveEverything) {
+                System.out.println("no LB/CP info in uri or file or direct");
+                return;
+            }
+
+            String dataAddr = "";
+            String syncAddr = "";
+
+            boolean useIPv6Data = false;
+            boolean useIPv6Sync = false;
+
+            int dataPort = 0;
+            int syncPort = 0;
+
+            if (direct) {
+                dataAddr    = directIP;
+                dataPort    = directPort;
+                useIPv6Data = directIpV6;
+                System.out.println("Send directly to ipaddr = " + dataAddr +
+                                   ", port = " + dataPort);
+            }
+            else {
+                // data address and port
+                if (uriInfo.useIPv6Data) {
+                    dataAddr = uriInfo.dataAddrV6;
+                    useIPv6Data = true;
+                }
+                else {
+                    dataAddr = uriInfo.dataAddrV4;
+                }
+
+                // sync address and port
+                if (uriInfo.useIPv6Sync) {
+                    syncAddr = uriInfo.syncAddrV6;
+                    useIPv6Sync = true;
+                }
+                else {
+                    syncAddr = uriInfo.syncAddrV4;
+                }
+
+                dataPort = uriInfo.dataPort;
+                syncPort = uriInfo.syncPort;
+            }
+
 
             // Socket for sending sync message to CP
             byte[] syncStore = new byte[28];
             DatagramPacket syncPacket = null;
             DatagramSocket syncSocket = null;
 
-            if (sync) {
-System.out.println("    Create sync UDP socket to dest " + cpHost + " port " + cpPort);
+            if (!direct) {
+System.out.println("    Create sync UDP socket to dest " + syncAddr + " port " + syncPort);
                 syncSocket = new DatagramSocket();
                 syncSocket.setSendBufferSize(sendBufSize);
-                InetAddress destAddr = InetAddress.getByName(cpHost);
+                InetAddress destAddr = InetAddress.getByName(syncAddr);
                 if (connect) {
-                    syncSocket.connect(destAddr, cpPort);
+                    syncSocket.connect(destAddr, syncPort);
                     syncPacket = new DatagramPacket(syncStore, 28);
                 }
                 else {
-                    syncPacket = new DatagramPacket(syncStore, 28, destAddr, cpPort);
+                    syncPacket = new DatagramPacket(syncStore, 28, destAddr, syncPort);
                 }
             }
 
@@ -376,19 +457,19 @@ System.out.println("    Create sync UDP socket to dest " + cpHost + " port " + c
             byte[][] packetStorage = new byte[socketCount][65535];
 
             for (int i = 0; i < socketCount; i++) {
-System.out.println("    Create data UDP socket #" + i + " to dest " + destHost + " port " + port);
+System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr + " port " + dataPort);
                 clientSockets[i] = new DatagramSocket();
                 clientSockets[i].setSendBufferSize(sendBufSize);
-                InetAddress destAddr = InetAddress.getByName(destHost);
+                InetAddress destAddr = InetAddress.getByName(dataAddr);
                 if (connect) {
-                    clientSockets[i].connect(destAddr, port);
+                    clientSockets[i].connect(destAddr, dataPort);
                 }
 
                 if (connect) {
                     udpPackets[i] = new DatagramPacket(packetStorage[i], 65535);
                 }
                 else {
-                    udpPackets[i] = new DatagramPacket(packetStorage[i], 65535, destAddr, port);
+                    udpPackets[i] = new DatagramPacket(packetStorage[i], 65535, destAddr, dataPort);
                 }
             }
 
@@ -449,7 +530,7 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + destHost +
                         clientSockets[portIndex], udpPackets[portIndex],
                         tick, entropy, lbProtocol, lbVersion,
                         srcId, reVersion,
-                        packetDelay, debug,
+                        0, debug,
                         delayPrescale, delayCounter,
                         direct, packetsSent);
 
@@ -458,10 +539,8 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + destHost +
                 totalPackets += packetsSent[0];
                 delayCounter  = packetsSent[1];
                 totalEvents++;
-                tick += tickPrescale;
 
-                if (sync) {
-
+                if (!direct) {
                     Instant.now();
                     long curTimeNanoos = instant.getEpochSecond() * 1000_000_000 + instant.getNano();
                     deltaT = curTimeNanoos - startTimeNanoos;
@@ -469,7 +548,7 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + destHost +
                     // if >= 1 sec ...
                     if (deltaT >= 1000_000_000) {
                         // Calculate buf or event rate in Hz
-                        evtRate = (int)(bufsSent/(deltaT/1000_000_000));
+                        evtRate = (int) (bufsSent / (deltaT / 1000_000_000));
 
                         // Send sync message to control plane
                         if (debug) System.out.println("sync: tick " + tick + ", evtRate " + evtRate + "\n\n");
@@ -482,12 +561,13 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + destHost +
                     }
                 }
 
+                tick += tickPrescale;
                 portIndex = (portIndex + 1) % socketCount;
 
                 // delay if any
-                if (bufDelay) {
+                if (delay > 0) {
                     if (--delayCounter < 1) {
-                        Thread.sleep(bufferDelay);
+                        Thread.sleep(delay);
                         delayCounter = delayPrescale;
                     }
                 }
@@ -503,6 +583,413 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + destHost +
         }
 
     }
+
+
+    //------------------------------------------------------------------------
+    //
+    // Dealing with URI's
+    //
+    //------------------------------------------------------------------------
+
+    /** Class to hold info parsed from an ejfat URI (and a little extra). */
+    static class ejfatURI {
+
+        /** Is there a valid instance token? */
+        boolean haveInstanceToken;
+        /** Is there a valid data addr & port? */
+        boolean haveData;
+        /** Is there a valid sync addr & port? */
+        boolean haveSync;
+
+        /** Is CP addr IPv6? */
+        boolean useIPv6Cp;
+        /** Is data addr IPv6? */
+        boolean useIPv6Data;
+        /** Is sync addr IPv6? Not used, include for future expansion. */
+        boolean useIPv6Sync;
+
+        /** UDP port to send events (data) to. */
+        int dataPort;
+        /** UDP port for event sender to send sync messages to. */
+        int syncPort;
+        /** TCP port for grpc communications with CP. */
+        int cpPort;
+
+        /** String identifier of an LB instance, set by the CP on an LB reservation. */
+        String lbId;
+        /** Admin token for the CP being used. */
+        String adminToken;
+        /** Instance token set by the CP on an LB reservation. */
+        String instanceToken;
+        /** IPv4 address to send events (data) to. */
+        String dataAddrV4;
+        /** IPv6 address to send events (data) to. */
+        String dataAddrV6;
+        /** IPv4 address to send sync messages to. */
+        String syncAddrV4;
+        /** IPv6 address to send sync messages to. Not used, for future expansion. */
+        String syncAddrV6;
+
+        /** IP address for grpc communication with CP. */
+        String cpAddr;
+
+        /** String given by user, during registration, to label an LB instance. */
+        String lbName;
+    };
+
+
+
+    /**
+     * Method to clear a ejfatURI structure.
+     * @param uri ejfatURI class object to clear.
+     */
+    static void clearUri(ejfatURI uri) {
+        uri.haveInstanceToken = false;
+        uri.haveData          = false;
+        uri.haveSync          = false;
+        uri.useIPv6Cp         = false;
+        uri.useIPv6Data       = false;
+        uri.useIPv6Sync       = false;
+
+        uri.dataPort = 0;
+        uri.syncPort = 0;
+        uri.cpPort   = 0;
+
+        uri.lbId = "";
+        uri.adminToken = "";
+        uri.instanceToken = "";
+        uri.dataAddrV4 = "";
+        uri.dataAddrV6 = "";
+        uri.syncAddrV4 = "";
+        uri.syncAddrV6 = "";
+        uri.cpAddr = "";
+        uri.lbName = "";
+    }
+
+
+
+    /**
+     * Method to print out a ejfatURI structure.
+     * @param uri reference to ejfatURI struct to print out.
+     */
+    static void printUri(ejfatURI uri) {
+
+        System.out.println("Have data info:      " + uri.haveData);
+        System.out.println("Have sync info:      " + uri.haveSync);
+        System.out.println("Have instance Token: " + uri.haveInstanceToken);
+        System.out.println("CP host is IPv6:     " + uri.useIPv6Cp);
+
+        System.out.println("CP host:             " + uri.cpAddr);
+        System.out.println("CP port:             " + uri.cpPort);
+
+        if (uri.adminToken.length() > 0) {
+            System.out.println("Admin token:         " +uri.adminToken);
+        }
+
+        if (uri.instanceToken.length() > 0) {
+            System.out.println("Instance token:      " + uri.instanceToken);
+        }
+
+        if (uri.lbId.length() > 0) {
+            System.out.println("LB id:               " + uri.lbId);
+        }
+
+        if (uri.lbName.length() > 0) {
+            System.out.println("LB name:             " + uri.lbName);
+        }
+
+        if (uri.dataAddrV4.length() > 0) {
+            System.out.println("Data host:           " + uri.dataAddrV4);
+            System.out.println("Data port:           " + uri.dataPort);
+        }
+
+        if (uri.dataAddrV6.length() > 0) {
+            System.out.println("Data host V6:        " + uri.dataAddrV6);
+            System.out.println("Data port:           " + uri.dataPort);
+        }
+
+        if (uri.syncAddrV4.length() > 0) {
+            System.out.println("Sync host:           " + uri.syncAddrV4);
+            System.out.println("Sync port:           " + uri.syncPort);
+        }
+
+        if (uri.syncAddrV6.length() > 0) {
+            System.out.println("Sync host V6:        " + uri.syncAddrV6);
+            System.out.println("Sync port:           " + uri.syncPort);
+        }
+    }
+
+
+    /**
+     * Function to determine if a string is an IPv4 address.
+     * @param addr string containing address to examine.
+     */
+    public static boolean isIPv4(String addr) {
+        String ipv4Regex = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
+        Pattern pattern = Pattern.compile(ipv4Regex);
+        Matcher matcher = pattern.matcher(addr);
+        return matcher.matches();
+    }
+
+    /**
+     * Function to determine if a string is an IPv6 address.
+     * @param addr string containing address to examine.
+     */
+    public static boolean isIPv6(String addr) {
+        String ipv4Regex = "^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$";
+        Pattern pattern = Pattern.compile(ipv4Regex);
+        Matcher matcher = pattern.matcher(addr);
+        return matcher.matches();
+    }
+
+
+    /**
+     * Function to take a host name and turn it into IP addresses, IPv4 and IPv6.
+     *
+     * @param hostName name of host to examine.
+     * @param ipv4List list of IP version 4 dot-decimal form of hostName if available.
+     * @param ipv6List list of IP version 6 dot-decimal form of hostName if available.
+     * @return true if successfully ran function, else false if no address info available.
+     */
+    public static boolean resolveHost(String hostName, List<String> ipv4List, List<String> ipv6List) {
+        try {
+            InetAddress[] addresses = InetAddress.getAllByName(hostName);
+            for (InetAddress address : addresses) {
+                if (address instanceof Inet4Address) {
+                    ipv4List.add(address.getHostAddress());
+                } else if (address instanceof Inet6Address) {
+                    ipv6List.add(address.getHostAddress());
+                }
+            }
+            return true;
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+
+    /**
+     * <p>
+     * This is a method to parse a URI which was obtained with the reservation
+     * of a load balancer. This URI contains information which both an event sender
+     * and event consumer can use to interact with the LB and CP.
+     * </p><p>
+     * The URI is of the format:
+     * ejfat://[<token>@]<cp_host>:<cp_port>/lb/<lb_id>[?data=<data_host>:<data_port>][&sync=<sync_host>:<sync_port>].
+     * </p><p>
+     * The token is optional and is the instance token with which a consumer can
+     * register with the control plane. If the instance token is not available,
+     * the administration token can be used to register. A sender will not need
+     * either token. The cp_host and cp_port are the host and port used to talk
+     * to the control plane. They are exactly the host and port used to reserve an LB.
+     * </p><p>
+     * The data_host & data_port are the IP address and UDP port to send events/data to.
+     * They are optional and not used by the consumer. Likewise the sync_host & sync_port
+     * are the IP address and UDP port to which the sender send sync messages.
+     * They're also optional and not used by the consumer.
+     * The order of data= and sync= must be kept, data first, sync second.
+     * If data= is not there, &sync must become ?sync.
+     * </p><p>
+     * Addresses may be either ipV6 or ipV4, and a distinction is made between them.
+     * Each address may be surrounded with square brackets [] which are stripped off.
+     * This is nice for ipV6 which includes colons (:) as part of the address and
+     * which may get confusing when separated from the port by another colon.
+     * </p>
+     *
+     * @param uri URI to parse.
+     * @param uriInfo ejfatURI object to fill with parsed values.
+     * @return true if parse successful, else false.
+     */
+    public static boolean parseURI(String uri, ejfatURI uriInfo) {
+        String regex = "ejfat://(?:([^@]+)@)?\\[?([a-fA-F\\d:.]+)\\]?:(\\d+)/lb/([^?]+)(?:\\?(?:(?:data=\\[?([a-fA-F\\d:.]+)\\]?:(\\d+)){1}(?:&sync=\\[?([a-fA-F\\d:.]+)\\]?:(\\d+))?|(?:sync=\\[?([a-fA-F\\d:.]+)\\]?:(\\d+)){1}))?";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(uri);
+
+        if (matcher.find()) {
+
+            // we're here if uri is in the proper format ...
+
+            // optional token
+            String token = matcher.group(1);
+
+            if (token.length() > 0) {
+                uriInfo.instanceToken = token;
+                uriInfo.haveInstanceToken = true;
+            }
+            else {
+                uriInfo.haveInstanceToken = false;
+            }
+
+            String addr = matcher.group(2);
+
+            uriInfo.cpAddr = addr;
+            uriInfo.cpPort = Integer.parseInt(matcher.group(3));
+            uriInfo.lbId   = matcher.group(4);
+
+            if (isIPv6(addr)) {
+                uriInfo.useIPv6Cp = true;
+            }
+
+            // in this case only syncAddr and syncPort defined
+            if (matcher.group(9).length() > 0) {
+                uriInfo.haveSync = true;
+                uriInfo.haveData = false;
+
+                addr = matcher.group(9);
+
+                // decide if this is IPv4 or IPv6 or neither
+                if (isIPv6(addr)) {
+                    uriInfo.syncAddrV6  = addr;
+                    uriInfo.useIPv6Sync = true;
+                }
+                else if (isIPv4(addr)) {
+                    uriInfo.syncAddrV4 = addr;
+                }
+                else {
+                    // invalid IP addr
+                    uriInfo.haveSync = false;
+                }
+
+                try {
+                    // look at the sync port
+                    int port = Integer.parseInt(matcher.group(10));
+                    if (port < 1024 || port > 65535) {
+                        // port is out of range
+                        uriInfo.haveSync = false;
+                    }
+                    else {
+                        uriInfo.syncPort = port;
+                    }
+
+                } catch (Exception e) {
+                    // string is not a valid integer
+                    uriInfo.haveSync = false;
+                }
+            }
+            else {
+                // if dataAddr and dataPort defined
+                if (matcher.group(5).length() > 0) {
+                    uriInfo.haveData = true;
+
+                    addr = matcher.group(5);
+
+                    if (isIPv6(addr)) {
+                        uriInfo.dataAddrV6  = addr;
+                        uriInfo.useIPv6Data = true;
+                    }
+                    else if (isIPv4(addr)) {
+                        uriInfo.dataAddrV4 = addr;
+                    }
+                    else {
+                        uriInfo.haveData = false;
+                    }
+
+                    try {
+                        // look at the data port
+                        int port = Integer.parseInt(matcher.group(6));
+                        if (port < 1024 || port > 65535) {
+                            // port is out of range
+                            uriInfo.haveData = false;
+                        }
+                        else {
+                            uriInfo.dataPort = port;
+                        }
+
+                    } catch (Exception e) {
+                        // string is not a valid integer
+                        uriInfo.haveData = false;
+                    }
+
+                }
+                else {
+                    uriInfo.haveData = false;
+                }
+
+                // if syncAddr and syncPort defined
+                if (matcher.group(7).length() > 0) {
+                    uriInfo.haveSync = true;
+
+                    addr = matcher.group(7);
+
+                    // decide if this is IPv4 or IPv6 or neither
+                    if (isIPv6(addr)) {
+                        uriInfo.syncAddrV6  = addr;
+                        uriInfo.useIPv6Sync = true;
+                    }
+                    else if (isIPv4(addr)) {
+                        uriInfo.syncAddrV4 = addr;
+                    }
+                    else {
+                        uriInfo.haveSync = false;
+                    }
+
+                    try {
+                        // look at the sync port
+                        int port = Integer.parseInt(matcher.group(8));
+                        if (port < 1024 || port > 65535) {
+                            // port is out of range
+                            uriInfo.haveSync = false;
+                        }
+                        else {
+                            uriInfo.syncPort = port;
+                        }
+
+                    } catch (Exception e) {
+                        // string is not a valid integer
+                        uriInfo.haveSync = false;
+                    }
+                }
+                else {
+                    uriInfo.haveSync = false;
+                }
+            }
+
+            return true;
+        }
+        return false;
+    }
+
+
+    /**
+     * Method to get the URI produced when reserving a load balancer.
+     * This can be accomplished by running lbreserve.
+     * The EJFAT_URI env var is often used to store the URI as is the
+     * file /tmp/ejfat_uri.
+     *
+     * @param envVar    name of environmental variable containing URI.
+     * @param fileName  name of environmental variable containing URI.
+     * @return string containing URI if successful, else blank string.
+     */
+    public static String getURI(String envVar, String fileName) {
+
+        // First see if the environmental variable is defined, if so, parse it
+        String uriStr = System.getenv(envVar);
+        if (uriStr != null) {
+            return uriStr;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
+            String line;
+            StringBuilder content = new StringBuilder();
+
+            while ((line = reader.readLine()) != null) {
+                content.append(line);
+            }
+
+            // Extracted single string
+            return content.toString();
+        }
+        catch (Exception e) {}
+
+        return "";
+    }
+
+    //------------------------------------------------------------------------
+
+
+
+
 
 
     /**
