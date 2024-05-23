@@ -173,20 +173,20 @@ namespace ejfat {
 
     /**
      * Function to determine if a string is an IPv4 address.
-     * @param address string containing address to examine.
+     * @param addr string containing address to examine.
      */
-    static bool isIPv4(const std::string& str) {
+    static bool isIPv4(const std::string& addr) {
         std::regex ipv4_regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
-        return std::regex_match(str, ipv4_regex);
+        return std::regex_match(addr, ipv4_regex);
     }
 
     /**
      * Function to determine if a string is an IPv6 address.
-     * @param address string containing address to examine.
+     * @param addr string containing address to examine.
      */
-    static bool isIPv6(const std::string& str) {
+    static bool isIPv6(const std::string& addr) {
         std::regex ipv6_regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$");
-        return std::regex_match(str, ipv6_regex);
+        return std::regex_match(addr, ipv6_regex);
     }
 
 
@@ -277,9 +277,9 @@ namespace ejfat {
         clearUri(uriInfo);
 
         // URI must match this regex pattern
-        // Note: the pattern (\[?[a-fA-F\d:.]+\]?) matches either IPv6 or IPv4 addresses
-        // in which the addr may be surrounded by [] and thus is stripped off.
-        std::regex pattern(R"regex(ejfat://(?:([^@]+)@)?(\[?[a-fA-F\d:.]+\]?):(\d+)/lb/([^?]+)(?:\?(?:(?:data=(\[?[a-fA-F\d:.]+\]?):(\d+)){1}(?:&sync=(\[?[a-fA-F\d:.]+\]?):(\d+))?|(?:sync=(\[?[a-fA-F\d:.]+\]?):(\d+)){1}))?)regex");
+        // Note: the pattern \[?([a-fA-F\d:.]+)\]? matches either IPv6 or IPv4 addresses
+        // in which the addr may be surrounded by [] which is stripped off.
+        std::regex pattern(R"regex(ejfat://(?:([^@]+)@)?\[?([a-fA-F\d:.]+)\]?:(\d+)/lb/([^?]+)(?:\?(?:(?:data=\[?([a-fA-F\d:.]+)\]?:(\d+)){1}(?:&sync=\[?([a-fA-F\d:.]+)\]?:(\d+))?|(?:sync=\[?([a-fA-F\d:.]+)\]?:(\d+)){1}))?)regex");
 
         std::smatch match;
         if (std::regex_match(uri, match, pattern)) {
@@ -296,11 +296,7 @@ namespace ejfat {
                 uriInfo.haveInstanceToken = false;
             }
 
-            // Remove square brackets from address if present
             std::string addr = match[2];
-            if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
-                addr = addr.substr(1, addr.size() - 2);
-            }
 
             uriInfo.cpAddr = addr;
             uriInfo.cpPort = std::stoi(match[3]);
@@ -315,11 +311,7 @@ namespace ejfat {
                 uriInfo.haveSync = true;
                 uriInfo.haveData = false;
 
-                // Remove square brackets if present
                 std::string addr = match[9];
-                if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
-                    addr = addr.substr(1, addr.size() - 2);
-                }
 
                 // decide if this is IPv4 or IPv6 or neither
                 if (isIPv6(addr)) {
@@ -356,9 +348,6 @@ namespace ejfat {
                     uriInfo.haveData = true;
 
                     std::string addr = match[5];
-                    if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
-                        addr = addr.substr(1, addr.size() - 2);
-                    }
 
                     if (isIPv6(addr)) {
                         uriInfo.dataAddrV6  = addr;
@@ -397,9 +386,6 @@ namespace ejfat {
                     uriInfo.haveSync = true;
 
                     std::string addr = match[7];
-                    if (!addr.empty() && addr.front() == '[' && addr.back() == ']') {
-                        addr = addr.substr(1, addr.size() - 2);
-                    }
 
                     // decide if this is IPv4 or IPv6 or neither
                     if (isIPv6(addr)) {
