@@ -54,12 +54,14 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-jointstats]\n",
 
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
             "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
+
+            "        [-direct]\n",
 
             "        [-a <data receiving address to register w/ CP>]",
             "        [-p <starting UDP port (default 17750)>]\n",
@@ -70,10 +72,12 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        This is an EJFAT consumer, using the new simple API,\n");
     fprintf(stderr, "        able to receive from multiple data sources.\n\n");
-    fprintf(stderr, "        One or both of the ways to get LB/CP info must be specified:\n");
-    fprintf(stderr, "           1) specify -uri, and/or\n");
+    fprintf(stderr, "        There are 2 ways to know how to receive from a LB:\n");
+    fprintf(stderr, "           1) specify -uri, or\n");
     fprintf(stderr, "           2) specify -file for file that contains URI.\n");
-    fprintf(stderr, "        Also -gaddr must be specified in order to talk to CP\n");
+    fprintf(stderr, "           *** For both, -gaddr must be specified in order to talk to CP ***\n");
+    fprintf(stderr, "        To bypass the LB and receive data directly from sender:\n");
+    fprintf(stderr, "           1) specify -direct\n");
 }
 
 
@@ -85,6 +89,7 @@ static void printHelp(char *programName) {
  * @param core          starting core id on which to run pkt reading threads.
  * @param coreCnt       number of cores on which to run each pkt reading thread.
  * @param port          filled with UDP port to listen on to send to CP.
+ * @param direct        filled with direct flag.
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param jointStats    display stats of all sources joined together.
@@ -95,7 +100,7 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* core, int* coreCnt,
-                      uint16_t* port,
+                      uint16_t* port, bool* direct,
                       bool* debug, bool* useIPv6, bool* jointStats,
                       char* uri, char* file,
                       char* dataAddr,
@@ -113,6 +118,7 @@ static void parseArgs(int argc, char **argv,
                                 // Control Plane
                           {"uri",         1, nullptr, 5},
                           {"file",        1, nullptr, 6},
+                          {"direct",      0, nullptr, 7},
                           {0,       0, 0,    0}
             };
 
@@ -223,6 +229,11 @@ static void parseArgs(int argc, char **argv,
                 *jointStats = true;
                 break;
 
+            case 7:
+                // Direct, bypass LB
+                *direct = true;
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -237,6 +248,11 @@ static void parseArgs(int argc, char **argv,
                 exit(2);
         }
 
+    }
+
+    if (*direct && (strlen(uri) > 0 || strlen(file) > 0)) {
+        fprintf(stderr, "Specify either -direct OR (-uri and/or -file), but not both\n");
+        exit(-1);
     }
 
     if (help) {
@@ -263,6 +279,7 @@ int main(int argc, char **argv) {
     int coreCnt = 1;
 
     bool debug = false;
+    bool direct = false;
     bool useIPv6 = false;
     bool jointStats = false;
 
@@ -283,7 +300,7 @@ int main(int argc, char **argv) {
 
     // Parse command line args
     parseArgs(argc, argv, &core, &coreCnt,
-              &dataPort, &debug, &useIPv6, &jointStats,
+              &dataPort, &direct, &debug, &useIPv6, &jointStats,
               uri, fileName, dataAddr, ids);
 
     // If not sources given on cmd line, assume 1 src, id=0
@@ -292,10 +309,20 @@ int main(int argc, char **argv) {
     }
 
     // Create the consumer
-    EjfatConsumer consumer(std::string(dataAddr), dataPort,
-                           ids, uri, fileName,
-                           debug, jointStats,
-                           core, coreCnt);
+    std::shared_ptr<EjfatConsumer> consumer;
+
+    if (direct) {
+        printf("Creating client to receive DIRECT from producer\n");
+        consumer = std::make_shared<EjfatConsumer>(dataPort, ids,
+                               debug, jointStats,
+                               core, coreCnt);
+    }
+    else {
+        consumer = std::make_shared<EjfatConsumer>(std::string(dataAddr), dataPort,
+                                                   ids, uri, fileName,
+                                                   debug, jointStats,
+                                                   core, coreCnt);
+    }
 
     char*    event;
     size_t   bytes;
@@ -304,7 +331,7 @@ int main(int argc, char **argv) {
 
     while (true) {
         // Non-blocking call to get a single event
-        bool gotEvent = consumer.getEvent(&event, &bytes, &eventNum, &srcId);
+        bool gotEvent = consumer->getEvent(&event, &bytes, &eventNum, &srcId);
 
         if (gotEvent) {
             if (debug) {

@@ -53,6 +53,64 @@ namespace ejfat {
     }
 
 
+
+    /**
+     * Constructor which allows data to be sent directly from sender to this consumer,
+     * bypassing the LB/CP. No communication with CP is done, hence no grpc lib is necessary.
+     *
+     * @param dataPort     starting UDP port to receive data on. The first src in ids will
+     *                     received on this port, the second will be received on dataPort + 1, etc.
+     *                     (defaults to 17750).
+     * @param ids          vector of data source ids (defaults to single source of id=0).
+     * @param debug        if true, printout debug statements (default false).
+     * @param jointStats   if true, printout combined stats for all sources (default false).
+     * @param startingCore first core to run the receiving threads on (default 0).
+     * @param coreCount    number of cores each receiving thread will run on (default 2).
+     *
+     * @throws EjfatException if no information about the LB/CP is available or could be parsed.
+     */
+    EjfatConsumer::EjfatConsumer(uint16_t dataPort,
+                                 const std::vector<int> &ids,
+                                 bool debug, bool jointStats,
+                                 int startingCore, int coreCount) :
+
+            dataPort(dataPort),
+            debug(debug), jointStats(jointStats), ids(ids),
+            startingCore(startingCore), coreCount(coreCount),
+            direct(true), endThreads(false)
+
+    {
+        queueSize = 0;
+        queue = std::make_shared<boost::lockfree::queue<qItem*, boost::lockfree::capacity<QSIZE>>>();
+
+        // Based on the number of data sources, fill in maps with real objects
+
+        // For each source ...
+        for (size_t i = 0; i < ids.size(); ++i) {
+            int srcId = ids[i];
+
+            // Create a vector of qItem objects.
+            // By using a vector we invoke the constructor qItem() for each element.
+            // This vector must be larger than QSIZE or it's possible to overwrite
+            // events while being used (in extreme cases). Doing things this way
+            // removes the need for mutex handling and contention when inserting qItems.
+            std::vector<qItem> items(VECTOR_SIZE);
+            // Move vector into map of all vectors - central storage
+            qItemVectors[srcId] = std::move(items);
+            // Element of items vector that will be placed onto Q, start with 0
+            currentQItems[srcId] = 0;
+            // Create a struct to hold stats & place into map
+            allStats.emplace(srcId, packetRecvStats());
+        }
+
+        if (debug) std::cout << "Event consumer is ready to receive!" << std::endl;
+
+        createSocketsAndStartThreads();
+    }
+
+
+
+
     /**
      * Constructor which specifies the IP address to send data to and
      * the IP address to send the sync messages to. Everything else is
@@ -91,10 +149,9 @@ namespace ejfat {
             debug(debug), jointStats(jointStats),
             ids(ids), startingCore(startingCore), coreCount(coreCount),
             Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt),
-            weight(weight), endThreads(false)
+            weight(weight), direct(false), endThreads(false)
 
     {
-
         ejfatURI uriInfo;
         bool haveEverything = false;
 
@@ -143,10 +200,7 @@ namespace ejfat {
         for (size_t i = 0; i < ids.size(); ++i) {
             int srcId = ids[i];
 
-//            // Create a (shared pointer of a) queue for this source and place into map
-//            queues.emplace(srcId, std::make_shared<boost::lockfree::spsc_queue<qItem*, boost::lockfree::capacity<QSIZE>>>());
-
-            // Create an vector of qItem objects.
+            // Create a vector of qItem objects.
             // By using a vector we invoke the constructor qItem() for each element.
             // This vector must be larger than QSIZE or it's possible to overwrite
             // events while being used (in extreme cases). Doing things this way
@@ -203,7 +257,7 @@ namespace ejfat {
         createDataSockets();
         startupRecvThreads();
         startupStatisticsThread();
-        startupGrpcThread();
+        if (!direct) startupGrpcThread();
     }
 
 

@@ -70,7 +70,11 @@ namespace ejfat {
 
 
         /** If true, print out debugging info to console. */
-        bool debug = false;
+        bool debug;
+
+        /** If true, receive data directly from a sender,
+         *  bypassing the LB and not talking to the CP. */
+        bool direct;
 
         /** Ids of data sources sending to this consumer. */
         std::vector<int> ids;
@@ -250,22 +254,6 @@ namespace ejfat {
             }
         };
 
-// For multiple recv queues:
-//        /**
-//         * <p>
-//         * Fast, lock-free, wait-free queue for single producer and single consumer.
-//         * One queue of qItem pointers for each data source. Map key = src id.
-//         * Each qItem essentially wraps an event and comes from a vector obtained
-//         * from the qItemVectors map using the same key.
-//         * </p>
-//         * <p>
-//         * The only way to get the spsc_queue into a map is by using a shared pointer of it.
-//         * Consuming must be from a single thread only (producer already single threaded).
-//         * </p>
-//         */
-//        std::unordered_map<int, std::shared_ptr<boost::lockfree::spsc_queue<qItem*, boost::lockfree::capacity<QSIZE>>>> queues;
-
-
 
         /** Max size of internal queue for holding events (qItem) received from all data sources. */
         static const size_t QSIZE = 1023;
@@ -309,13 +297,11 @@ namespace ejfat {
 
     public:
 
-
-//        // Single data source
-//        EjfatConsumer(const std::string &dataAddr, const std::string &cpAddr, int srcId=0,
-//                      const std::string& uri = "",
-//                      const std::string& fileName = "/tmp/ejfat_uri",
-//                      float Kp=0., float Ki=0., float Kd=0.,
-//                      float setPt=0., float weight=1.);
+        // Data direct from sender, bypass LB, don't talk to CP
+        explicit EjfatConsumer(uint16_t dataPort = 17750,
+                               const std::vector<int> &ids = {0},
+                               bool debug = false, bool jointStats = false,
+                               int startingCore = -1, int coreCount = 1);
 
         // Multiple data sources
         EjfatConsumer(const std::string &dataAddr, uint16_t dataPort = 17750,
