@@ -1003,7 +1003,7 @@ static void *rateThread(void *arg) {
     ////////////////////////
 
     // Create an exposer that serves metrics at http://localhost:8080/metrics
-    prometheus::Exposer exposer{"0.0.0.0:8080"};
+    prometheus::Exposer exposer{"0.0.0.0:8088"};
 
     // Create a metrics registry
     auto registry = std::make_shared<prometheus::Registry>();
