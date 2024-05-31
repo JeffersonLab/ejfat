@@ -1138,9 +1138,6 @@ int main(int argc, char **argv) {
   /// Prometheus  Stuff ///
   ////////////////////////
 
-  // Initialize Prometheus registry
-  std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
-
 
   std::thread crow_server_thread;
 

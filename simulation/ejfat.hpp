@@ -39,6 +39,9 @@
 
 namespace ejfat {
 
+  // Initialize Prometheus registry
+  extern std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
+
     extern prometheus::Family<prometheus::Gauge> &ejfat_be = prometheus::BuildGauge()
                        .Name("ejfat_be")
                        .Help("Ejfat Back-End statistics")
