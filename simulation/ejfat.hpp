@@ -31,22 +31,10 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-#include <prometheus/registry.h>
-#include <prometheus/gauge.h>
-
 
 #define btoa(x) ((x)?"true":"false")
 
 namespace ejfat {
-
-  // Initialize Prometheus registry
-  extern std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
-
-    extern prometheus::Family<prometheus::Gauge> &ejfat_be = prometheus::BuildGauge()
-                       .Name("ejfat_be")
-                       .Help("Ejfat Back-End statistics")
-                       .Register(*registry);
-
 
     /** Structure to hold info parsed from an ejfat URI (and a little extra). */
     typedef struct ejfatURI_t {
