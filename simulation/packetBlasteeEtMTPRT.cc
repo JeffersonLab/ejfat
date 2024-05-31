@@ -123,37 +123,6 @@ X pid(                      // Proportional, Integrative, Derivative Controller
 static bool haveRecvAddr = false;
 static bool haveEtName = false;
 
-/////////////////////////
-/// Prometheus  Stuff ///
-////////////////////////
-
-// Create an exposer that serves metrics at http://localhost:8080/metrics
-prometheus::Exposer exposer{"0.0.0.0:8088"};
-
-// Create a metrics registry
-auto registry = std::make_shared<prometheus::Registry>();
-
-// Add a gauge to the registry
-static auto& ejfat_be = prometheus::BuildGauge()
-                         .Name("ejfat_be")
-                         .Help("Ejfat Back-End statistics")
-                         .Register(*registry);
-
-// Expose the metrics via Prometheus-cpp's exposer
-exposer.RegisterCollectable(registry);
-
-printf("DDD: Started Prometheus exporter.");
-
-// Use Crow to handle HTTP requests
-crow::SimpleApp app;
-
-printf("DDD: Crow is ready to handle HTTP requests.");
-
-// Start the Crow server in a separate thread
-std::thread crow_server_thread(run_crow_server);
-
-printf("DDD: Starting Crow server.");
-
 
 
 /**
@@ -1168,6 +1137,37 @@ static void *rateThread(void *arg) {
 
 
 int main(int argc, char **argv) {
+  /////////////////////////
+  /// Prometheus  Stuff ///
+  ////////////////////////
+
+  // Create an exposer that serves metrics at http://localhost:8080/metrics
+  prometheus::Exposer exposer{"0.0.0.0:8088"};
+
+  // Create a metrics registry
+  auto registry = std::make_shared<prometheus::Registry>();
+
+  // Add a gauge to the registry
+  auto& ejfat_be = prometheus::BuildGauge()
+                           .Name("ejfat_be")
+                           .Help("Ejfat Back-End statistics")
+                           .Register(*registry);
+
+  // Expose the metrics via Prometheus-cpp's exposer
+  exposer.RegisterCollectable(registry);
+
+  printf("DDD: Started Prometheus exporter.");
+
+  // Use Crow to handle HTTP requests
+  crow::SimpleApp app;
+
+  printf("DDD: Crow is ready to handle HTTP requests.");
+
+  // Start the Crow server in a separate thread
+  std::thread crow_server_thread(run_crow_server);
+
+  printf("DDD: Starting Crow server.");
+
 
     int udpSocket;
     ssize_t nBytes;
