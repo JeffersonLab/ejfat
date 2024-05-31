@@ -65,6 +65,8 @@
 
 using namespace ejfat;
 
+std::thread crow_server_thread;
+
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -1132,6 +1134,17 @@ static void *rateThread(void *arg) {
     return (nullptr);
 }
 
+// Initialize Prometheus registry
+std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
+
+// Create and register a Gauge family
+auto& ejfat_be = prometheus::BuildGauge()
+                         .Name("ejfat_be")
+                         .Help("Ejfat Back-End statistics")
+                         .Register(*registry);
+
+std::thread crow_server_thread;
+
 
 int main(int argc, char **argv) {
 
@@ -1141,15 +1154,6 @@ int main(int argc, char **argv) {
 
   // Create an exposer that serves metrics at http://localhost:8080/metrics
   prometheus::Exposer exposer{"0.0.0.0:8088"};
-
-  // Create a metrics registry
-  auto registry = std::make_shared<prometheus::Registry>();
-
-  // Add a gauge to the registry
-  auto& ejfat_be = prometheus::BuildGauge()
-                           .Name("ejfat_be")
-                           .Help("Ejfat Back-End statistics")
-                           .Register(*registry);
 
   // Expose the metrics via Prometheus-cpp's exposer
   exposer.RegisterCollectable(registry);
