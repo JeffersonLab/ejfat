@@ -1170,6 +1170,55 @@ int main(int argc, char **argv) {
     char beName[256];
     memset(beName, 0, 256);
 
+    /////////////////////////
+    /// Prometheus  Stuff ///
+    ////////////////////////
+
+    // Create an exposer that serves metrics at http://localhost:8080/metrics
+    prometheus::Exposer exposer{"0.0.0.0:8088"};
+
+    // Create a metrics registry
+    auto registry = std::make_shared<prometheus::Registry>();
+
+    // Add a gauge to the registry
+    auto& ejfat_be = prometheus::BuildGauge()
+                             .Name("ejfat_be")
+                             .Help("Ejfat Back-End statistics")
+                             .Register(*registry);
+
+    // Initialize metrics
+    auto& dataRateP = ejfat_be.Add({{"dataRate", "value"}});
+    auto& totalRateP = ejfat_be.Add({{"totalRate", "value"}});
+    auto& dataAvgRateP = ejfat_be.Add({{"dataAvgRate", "value"}});
+    auto& totalAvgRateP = ejfat_be.Add({{"totalAvgRate", "value"}});
+    auto& evRateP = ejfat_be.Add({{"evRate", "value"}});
+    auto& avgEvRateP = ejfat_be.Add({{"avgEvRate", "value"}});
+    auto& totalEventsP = ejfat_be.Add({{"totalEvents", "value"}});
+    auto& dropEventCountP = ejfat_be.Add({{"dropEventCount", "value"}});
+    auto& currDropTotalEventsP = ejfat_be.Add({{"currDropTotalEvents", "value"}});
+    auto& dropPacketCountP = ejfat_be.Add({{"dropPacketCount", "value"}});
+    auto& currDropTotalPacketsP = ejfat_be.Add({{"currDropTotalPackets", "value"}});
+    auto& fillPercentP = ejfat_be.Add({{"fillPercent", "value"}});
+    auto& fillAvgP = ejfat_be.Add({{"fillAvg", "value"}});
+    auto& curFillP = ejfat_be.Add({{"curFill", "value"}});
+    auto& pidErrorP = ejfat_be.Add({{"pidError", "value"}});
+    auto& absTimeP = ejfat_be.Add({{"absTime", "value"}});
+
+    // Expose the metrics via Prometheus-cpp's exposer
+    exposer.RegisterCollectable(registry);
+
+    printf("DDD: Started Prometheus exporter.");
+
+    // Use Crow to handle HTTP requests
+    crow::SimpleApp app;
+
+    printf("DDD: Crow is ready to handle HTTP requests.");
+
+    // Start the Crow server in a separate thread
+    std::thread crow_server_thread(run_crow_server);
+
+    printf("DDD: Starting Crow server.");
+
 
     parseArgs(argc, argv,
               &bufSize, &recvBufSize, &tickPrescale,
@@ -1588,55 +1637,6 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
     char *dataBuf;
     std::shared_ptr<BufferItem> bufItem = nullptr;
     std::shared_ptr<ByteBuffer> bb = nullptr;
-
-    /////////////////////////
-    /// Prometheus  Stuff ///
-    ////////////////////////
-
-    // Create an exposer that serves metrics at http://localhost:8080/metrics
-    prometheus::Exposer exposer{"0.0.0.0:8088"};
-
-    // Create a metrics registry
-    auto registry = std::make_shared<prometheus::Registry>();
-
-    // Add a gauge to the registry
-    auto& ejfat_be = prometheus::BuildGauge()
-                             .Name("ejfat_be")
-                             .Help("Ejfat Back-End statistics")
-                             .Register(*registry);
-
-    // Initialize metrics
-    auto& dataRateP = ejfat_be.Add({{"dataRate", "value"}});
-    auto& totalRateP = ejfat_be.Add({{"totalRate", "value"}});
-    auto& dataAvgRateP = ejfat_be.Add({{"dataAvgRate", "value"}});
-    auto& totalAvgRateP = ejfat_be.Add({{"totalAvgRate", "value"}});
-    auto& evRateP = ejfat_be.Add({{"evRate", "value"}});
-    auto& avgEvRateP = ejfat_be.Add({{"avgEvRate", "value"}});
-    auto& totalEventsP = ejfat_be.Add({{"totalEvents", "value"}});
-    auto& dropEventCountP = ejfat_be.Add({{"dropEventCount", "value"}});
-    auto& currDropTotalEventsP = ejfat_be.Add({{"currDropTotalEvents", "value"}});
-    auto& dropPacketCountP = ejfat_be.Add({{"dropPacketCount", "value"}});
-    auto& currDropTotalPacketsP = ejfat_be.Add({{"currDropTotalPackets", "value"}});
-    auto& fillPercentP = ejfat_be.Add({{"fillPercent", "value"}});
-    auto& fillAvgP = ejfat_be.Add({{"fillAvg", "value"}});
-    auto& curFillP = ejfat_be.Add({{"curFill", "value"}});
-    auto& pidErrorP = ejfat_be.Add({{"pidError", "value"}});
-    auto& absTimeP = ejfat_be.Add({{"absTime", "value"}});
-
-    // Expose the metrics via Prometheus-cpp's exposer
-    exposer.RegisterCollectable(registry);
-
-    printf("DDD: Started Prometheus exporter.");
-
-    // Use Crow to handle HTTP requests
-    crow::SimpleApp app;
-
-    printf("DDD: Crow is ready to handle HTTP requests.");
-
-    // Start the Crow server in a separate thread
-    std::thread crow_server_thread(run_crow_server);
-
-    printf("DDD: Starting Crow server.");
 
     while (true) {
 
