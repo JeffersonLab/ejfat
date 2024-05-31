@@ -1135,7 +1135,7 @@ static void *rateThread(void *arg) {
 std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
 
 // Create and register a Gauge family
-prometheus::Family<prometheus::Gauge>& ejfat_be = prometheus::BuildGauge()
+ejfat_be = prometheus::BuildGauge()
                          .Name("ejfat_be")
                          .Help("Ejfat Back-End statistics")
                          .Register(*registry);
