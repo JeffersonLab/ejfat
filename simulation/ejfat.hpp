@@ -39,7 +39,11 @@
 
 namespace ejfat {
 
-    extern prometheus::Family<prometheus::Gauge> &ejfat_be;
+    extern prometheus::Family<prometheus::Gauge> &ejfat_be = prometheus::BuildGauge()
+                       .Name("ejfat_be")
+                       .Help("Ejfat Back-End statistics")
+                       .Register(*registry);
+
 
     /** Structure to hold info parsed from an ejfat URI (and a little extra). */
     typedef struct ejfatURI_t {

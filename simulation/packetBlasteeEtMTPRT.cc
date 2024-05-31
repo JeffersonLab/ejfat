@@ -1141,11 +1141,6 @@ int main(int argc, char **argv) {
   // Initialize Prometheus registry
   std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
 
-  // Create and register a Gauge family
-  ejfat::ejfat_be = prometheus::BuildGauge()
-                     .Name("ejfat_be")
-                     .Help("Ejfat Back-End statistics")
-                     .Register(*registry);
 
   std::thread crow_server_thread;
 
