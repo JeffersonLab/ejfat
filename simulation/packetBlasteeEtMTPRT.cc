@@ -1126,9 +1126,6 @@ static void *rateThread(void *arg) {
         t1 = t2;
     }
 
-    // Wait for the crow_server thread to complete
-     crow_server_thread.join();
-
     return (nullptr);
 }
 
@@ -1165,9 +1162,23 @@ int main(int argc, char **argv) {
   printf("DDD: Crow is ready to handle HTTP requests.");
 
   // Start the Crow server in a separate thread
-  std::thread crow_server_thread(run_crow_server);
+  // std::thread crow_server_thread(run_crow_server);
 
   printf("DDD: Starting Crow server.");
+
+
+  // Initialize crow server thread
+crow_server_thread = std::thread([](){
+    run_crow_server();
+});
+
+// Example: Set initial gauge values
+auto& initialGauge = ejfat_be.Add({{"label", "initial"}});
+initialGauge.Set(10.0);
+
+// Join thread if necessary
+crow_server_thread.join();
+
   /////////////////////////
 
     int udpSocket;
