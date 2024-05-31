@@ -65,8 +65,6 @@
 
 using namespace ejfat;
 
-std::thread crow_server_thread;
-
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -1133,6 +1131,7 @@ static void *rateThread(void *arg) {
 
     return (nullptr);
 }
+
 
 // Initialize Prometheus registry
 std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
