@@ -31,12 +31,15 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+#include <prometheus/registry.h>
+#include <prometheus/gauge.h>
 
 
 #define btoa(x) ((x)?"true":"false")
 
 namespace ejfat {
 
+    extern prometheus::Family<prometheus::Gauge> &ejfat_be;
 
     /** Structure to hold info parsed from an ejfat URI (and a little extra). */
     typedef struct ejfatURI_t {
