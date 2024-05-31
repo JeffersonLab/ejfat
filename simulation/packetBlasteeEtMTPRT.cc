@@ -697,7 +697,10 @@ typedef struct threadStruct_t {
 // Thread to monitor the ET system, run PID loop and report back to control plane
 static void *pidThread(void *arg) {
 
-  printf("DDDDDDD \n");
+  // Example: Set initial gauge values
+  auto& initialGauge = ejfat_be.Add({{"label", "initial"}});
+  initialGauge.Set(10.0);
+
   // Initialize Prometheus metrics
   auto& fillPercentP = ejfat_be.Add({{"fillPercent", "value"}});
   auto& fillAvgP = ejfat_be.Add({{"fillAvg", "value"}});
