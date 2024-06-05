@@ -73,12 +73,12 @@ to each reassembly thread, for a single sender it reads:
 
 With 2 sources (each with 2 cores), the best total receiving rate (after a few minutes) is:
 
-| Source | Data rate (GB/s) | rate | rate | rate |
----------|------------------|------|------|------|
-| src #1 |  2.1 | 1.9  |  2.07  |   2.2  |
-| src #2 |  1.6 | 1.9  |  2.17  |   2.2  |
-|  total |  3.7 | 3.8  |  4.24  |   4.4  |
-| packet loss | 0%  |  0.002 | 0.06 |  > 0.5  |
+| Source      | Data rate (GB/s) | rate  | rate | rate  |
+|-------------|------------------|-------|------|-------|
+| src #1      | 2.1              | 1.9   | 2.07 | 2.2   |
+| src #2      | 1.6              | 1.9   | 2.17 | 2.2   |
+| total       | 3.7              | 3.8   | 4.24 | 4.4   |
+| packet loss | 0%               | 0.002 | 0.06 | > 0.5 |
 
 
 **Dependencies:**
