@@ -332,8 +332,8 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
         if (ipv6Data) {
             // create a DGRAM (UDP) socket in the INET/INET6 protocol
             if ((dataSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
-                if (debug) perror("creating IPv6 sync socket");
-                throw EjfatException("error creating IPv6 sync socket");
+                if (debug) perror("creating IPv6 data socket");
+                throw EjfatException("error creating IPv6 data socket");
             }
 
 
@@ -347,15 +347,15 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                 int err = connect(dataSocket, (const sockaddr *) &sendAddrStruct6, sizeof(struct sockaddr_in6));
                 if (err < 0) {
                     close(dataSocket);
-                    if (debug) perror("Error connecting UDP sync socket:");
-                    throw EjfatException("error connecting UDP sync socket");
+                    if (debug) perror("Error connecting UDP data socket:");
+                    throw EjfatException("error connecting UDP data socket");
                 }
             }
         }
         else {
             if ((dataSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-                perror("creating IPv4 sync socket");
-                throw EjfatException("error creating IPv4 sync socket");
+                perror("creating IPv4 data socket");
+                throw EjfatException("error creating IPv4 data socket");
             }
 
 // If you want to bind to an interface
@@ -380,8 +380,8 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
                 int err = connect(dataSocket, (const sockaddr *) &sendAddrStruct, sizeof(struct sockaddr_in));
                 if (err < 0) {
                     close(dataSocket);
-                    if (debug) perror("Error connecting UDP sync socket:");
-                    throw EjfatException("error connecting UDP sync socket");
+                    if (debug) perror("Error connecting UDP data socket:");
+                    throw EjfatException("error connecting UDP data socket");
                 }
             }
         }
@@ -649,6 +649,7 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
      *                    must be monotonically increasing. For example, it can be a
      *                    simple sequential count or it can be the time in milliseconds
      *                    or nanoseconds past epoch.
+      * @throws EjfatException   if error in sending event.
      */
     void EjfatProducer::sendEvent(char *event, size_t bytes, uint64_t eventNumber) {
 
@@ -695,6 +696,10 @@ fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(
             }
         }
 
+        if (err < 0) {
+            perror("sendPacketizedBufferSendNew");
+            throwEjfatLine("error sending event");
+        }
 
         eventsSinceLastSync++;
         totalEvents++;
