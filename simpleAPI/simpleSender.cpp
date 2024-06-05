@@ -33,6 +33,7 @@
 #include <cinttypes>
 #include <chrono>
 #include <regex>
+#include <getopt.h>
 
 #include <sstream>
 #include <vector>
