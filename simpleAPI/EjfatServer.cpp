@@ -634,7 +634,7 @@ namespace ejfat {
             CPU_ZERO(&cpuset);
 
             for (int i=0; i < coreCount; i++) {
-                if (debug) std::cout << "Run assemble thd for source " << srcId << " on core " << (core + i) << "\n";
+                if (debug) std::cout << "Run send thd for source on core " << (core + i) << "\n";
                 CPU_SET(core+i, &cpuset);
             }
 
