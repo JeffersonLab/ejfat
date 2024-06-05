@@ -41,28 +41,11 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 
+#include "ejfat.hpp"
+
 
 #ifdef __APPLE__
 #include <cctype>
-#endif
-
-// Reassembly (RE) header size in bytes
-#define HEADER_BYTES 20
-#define HEADER_BYTES_OLD 18
-// Max MTU that ejfat nodes' NICs can handle
-#define MAX_EJFAT_MTU 9978
-
-#define btoa(x) ((x)?"true":"false")
-
-
-#ifdef __linux__
-    // for recvmmsg
-    #ifndef _GNU_SOURCE
-        #define _GNU_SOURCE
-    #endif
-
-    #define htonll(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
-    #define ntohll(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 #endif
 
 
@@ -681,7 +664,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                 if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                 return(RECV_MSG);
             }
-            else if (bytesRead < HEADER_BYTES) {
+            else if (bytesRead < RE_HEADER_BYTES) {
                 fprintf(stderr, "recvfrom(): not enough data to contain a header on read\n");
                 return(INTERNAL_ERROR);
             }
@@ -694,8 +677,8 @@ static inline int64_t ts_to_nano(struct timespec ts) {
             parseReHeader(pkt, version, dataId, offset, length, tick);
 
             // Copy datq
-            ssize_t dataBytes = bytesRead - HEADER_BYTES;
-            memcpy(dataBuf, pkt + HEADER_BYTES, dataBytes);
+            ssize_t dataBytes = bytesRead - RE_HEADER_BYTES;
+            memcpy(dataBuf, pkt + RE_HEADER_BYTES, dataBytes);
 
             return dataBytes;
         }
@@ -744,7 +727,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                 if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                 return(RECV_MSG);
             }
-            else if (bytesRead < HEADER_BYTES_OLD) {
+            else if (bytesRead < RE_HEADER_BYTES_OLD) {
                 fprintf(stderr, "recvfrom(): not enough data to contain a header on read\n");
                 return(INTERNAL_ERROR);
             }
@@ -757,8 +740,8 @@ static inline int64_t ts_to_nano(struct timespec ts) {
             parseReHeaderOld(pkt, version, first, last, dataId, sequence, tick);
 
             // Copy datq
-            ssize_t dataBytes = bytesRead - HEADER_BYTES_OLD;
-            memcpy(dataBuf, pkt + HEADER_BYTES_OLD, dataBytes);
+            ssize_t dataBytes = bytesRead - RE_HEADER_BYTES_OLD;
+            memcpy(dataBuf, pkt + RE_HEADER_BYTES_OLD, dataBytes);
 
             return dataBytes;
         }
@@ -867,7 +850,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                     if (debug) fprintf(stderr, "getCompletePacketizedBuffer: recvfrom failed: %s\n", strerror(errno));
                     return (RECV_MSG);
                 }
-                else if (bytesRead < HEADER_BYTES) {
+                else if (bytesRead < RE_HEADER_BYTES) {
                     if (debug) fprintf(stderr, "getCompletePacketizedBuffer: packet does not contain not enough data\n");
                     return (INTERNAL_ERROR);
                 }
@@ -878,7 +861,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                     stats->startTime = ts_to_nano(start);
                 }
 
-                dataBytes = bytesRead - HEADER_BYTES;
+                dataBytes = bytesRead - RE_HEADER_BYTES;
 
                 // Parse header
                 prevLength = length;
@@ -987,7 +970,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                 }
 
                 // Copy data into buf at correct location (provided by RE header)
-                memcpy(dataBuf + offset, pkt + HEADER_BYTES, dataBytes);
+                memcpy(dataBuf + offset, pkt + RE_HEADER_BYTES, dataBytes);
 
                 totalBytesRead += dataBytes;
                 veryFirstRead = false;
@@ -1147,7 +1130,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
          *         If dataBufAlloc or bufLenPtr are null, return BAD_ARG.
          *         If error in recvfrom, return RECV_MSG.
          *         If cannot allocate memory, return OUT_OF_MEM.
-         *         If on a read &lt; HEADER_BYTES data returned, return INTERNAL_ERROR.
+         *         If on a read &lt; RE_HEADER_BYTES data returned, return INTERNAL_ERROR.
          */
         static ssize_t getCompleteAllocatedBuffer(char** dataBufAlloc, size_t *pBufLen, int udpSocket,
                                                   bool debug, uint64_t *tick, uint16_t *dataId,
@@ -1232,14 +1215,14 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                     }
                     return (RECV_MSG);
                 }
-                else if (bytesRead < HEADER_BYTES) {
+                else if (bytesRead < RE_HEADER_BYTES) {
                     if (debug) fprintf(stderr, "getCompleteAllocatedBuffer: packet does not contain not enough data\n");
                     if (allocateBuf) {
                         free(dataBuf);
                     }
                     return (INTERNAL_ERROR);
                 }
-                dataBytes = bytesRead - HEADER_BYTES;
+                dataBytes = bytesRead - RE_HEADER_BYTES;
 
                 // Parse header
                 prevLength = length;
@@ -1357,7 +1340,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                 }
 
                 // Copy data into buf at correct location (provided by RE header)
-                memcpy(dataBuf + offset, pkt + HEADER_BYTES, dataBytes);
+                memcpy(dataBuf + offset, pkt + RE_HEADER_BYTES, dataBytes);
 
                 totalBytesRead += dataBytes;
                 veryFirstRead = false;
@@ -1482,11 +1465,11 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                     if (debug) fprintf(stderr, "recvmsg() failed: %s\n", strerror(errno));
                     return (RECV_MSG);
                 }
-                else if (bytesRead < HEADER_BYTES) {
+                else if (bytesRead < RE_HEADER_BYTES) {
                     fprintf(stderr, "recvfrom(): not enough data to contain a header on read\n");
                     return (INTERNAL_ERROR);
                 }
-                dataBytes = bytesRead - HEADER_BYTES;
+                dataBytes = bytesRead - RE_HEADER_BYTES;
 
                 // Parse header
                 parseReHeader(pkt, &version, &packetDataId, &packetOffset, &length, &packetTick);
@@ -1528,7 +1511,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
                 // and since there's room for another jumbo frame.
 
                 // Copy data into buf at correct location
-                memcpy(dataBuf + offsetLocal, pkt + HEADER_BYTES, dataBytes);
+                memcpy(dataBuf + offsetLocal, pkt + RE_HEADER_BYTES, dataBytes);
 
                 totalBytesRead += dataBytes;
                 veryFirstRead = false;
@@ -1612,7 +1595,7 @@ static inline int64_t ts_to_nano(struct timespec ts) {
          * @return 0 if success.
          *         If error in recvmsg, return RECV_MSG.
          *         If can't create socket, return NETWORK_ERROR.
-         *         If on a read &lt; HEADER_BYTES data returned, return INTERNAL_ERROR.
+         *         If on a read &lt; RE_HEADER_BYTES data returned, return INTERNAL_ERROR.
          *         If userBuf, *userBuf, or userBufLen is null, return BAD_ARG.
          *         If noCopy and buffer is too small to contain reassembled data, return BUF_TOO_SMALL.
          *         If receiving &gt; 99 pkts from wrong data id and not noCopy, return NO_REASSEMBLY.

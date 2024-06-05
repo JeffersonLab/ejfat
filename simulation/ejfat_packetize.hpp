@@ -41,50 +41,14 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 
+#include "ejfat.hpp"
+
+
 #ifdef __APPLE__
 #include <cctype>
 #endif
 
 
-#define ADD_LB_HEADER 1
-
-#define LB_HEADER_BYTES_OLD 16
-#define HEADER_BYTES_OLD    34
-#define RE_HEADER_BYTES_OLD 18
-
-#define LB_HEADER_BYTES  16
-#define HEADER_BYTES     36
-#define RE_HEADER_BYTES  20
-
-// Max MTU that ejfat nodes' NICs can handle is actually 9978
-//#define MAX_EJFAT_MTU 9978
-#define MAX_EJFAT_MTU 9000
-
-
-#ifdef __linux__
-    #define htonll(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
-    #define ntohll(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
-#endif
-
-
-#ifndef _BYTESWAP_H
-    #define _BYTESWAP_H
-
-    static inline uint16_t bswap_16(uint16_t x) {
-        return (x>>8) | (x<<8);
-    }
-
-    static inline uint32_t bswap_32(uint32_t x) {
-        return (bswap_16(x&0xffff)<<16) | (bswap_16(x>>16));
-    }
-
-    static inline uint64_t bswap_64(uint64_t x) {
-        return (((uint64_t)bswap_32(x&0xffffffffull))<<32) |
-                          (bswap_32(x>>32));
-    }
-#endif
-
-#define btoa(x) ((x)?"true":"false")
 #define INPUT_LENGTH_MAX 256
 
 
