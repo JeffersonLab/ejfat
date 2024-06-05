@@ -696,6 +696,45 @@ typedef struct threadStruct_t {
 // Thread to monitor the ET system, run PID loop and report back to control plane
 static void *pidThread(void *arg) {
 
+  /////////////////////////
+  /// Prometheus  Stuff ///
+  ////////////////////////
+
+  // Create an exposer that serves metrics at http://localhost:8080/metrics
+  prometheus::Exposer exposer{"0.0.0.0:8088"};
+
+  // Create a metrics registry
+  auto registry = std::make_shared<prometheus::Registry>();
+
+  // Add a gauge to the registry
+  auto& ejfat_be = prometheus::BuildGauge()
+                           .Name("ejfat_be")
+                           .Help("Ejfat Back-End statistics")
+                           .Register(*registry);
+
+  // Initialize metrics
+  auto& absTimeP = ejfat_be.Add({{"absTime", "value"}});
+  auto& fillPercentP = ejfat_be.Add({{"fillPercent", "value"}});
+  auto& fillAvgP = ejfat_be.Add({{"fillAvg", "value"}});
+  auto& curFillP = ejfat_be.Add({{"curFill", "value"}});
+  auto& pidErrorP = ejfat_be.Add({{"pidError", "value"}});
+
+  // Expose the metrics via Prometheus-cpp's exposer
+  exposer.RegisterCollectable(registry);
+
+  printf("DDD-4");
+
+  // Use Crow to handle HTTP requests
+  crow::SimpleApp app;
+
+  printf("DDD-5");
+
+  // Start the Crow server in a separate thread
+  std::thread crow_server_thread(run_crow_server);
+
+  printf("DDD-6");
+
+
     threadStruct *targ = static_cast<threadStruct *>(arg);
 
     et_sys_id etId = targ->etId;
@@ -912,7 +951,11 @@ static void *pidThread(void *arg) {
             instVec.push_back(curFill);
             pidErrVec.push_back(pidError);
         }
-
+        absTimeP.Set(absTime);
+        fillPercentP.Set(fillPercent);
+        fillAvgP.Set(fillAvg);
+        curFillP.Set(curFill);
+        pidErrorP.Set(pidError);
 
         // Every "loopMax" loops
         if (--loopCount <= 0) {

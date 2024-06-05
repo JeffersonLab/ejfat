@@ -82,7 +82,6 @@ static inline int64_t ts_to_nano(struct timespec ts) {
 
 namespace ejfat {
 
-
     /** Structure to hold info parsed from an ejfat URI (and a little extra). */
     typedef struct ejfatURI_t {
 
