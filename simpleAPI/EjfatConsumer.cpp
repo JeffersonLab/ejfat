@@ -310,7 +310,6 @@ namespace ejfat {
                 }
 
                 // Set & read back UDP receive buffer size
-                socklen_t size = sizeof(int);
                 setsockopt(dataSocket, SOL_SOCKET, SO_RCVBUF, &udpRecvBufSize, sizeof(udpRecvBufSize));
 
                 // Configure settings in address struct
@@ -342,7 +341,6 @@ namespace ejfat {
                 }
 
                 // Set & read back UDP receive buffer size
-                socklen_t size = sizeof(int);
                 setsockopt(dataSocket, SOL_SOCKET, SO_RCVBUF, &udpRecvBufSize, sizeof(udpRecvBufSize));
 
                 // Configure settings in address struct
