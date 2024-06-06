@@ -2,18 +2,18 @@
 set(NO_GRPC_SRC
         serverProducer.cpp
         serverConsumer.cpp
-        )
+   )
 
 set(NO_GRPC_EXECUTABLES
         simpleServerSender.cpp
         simpleServerConsumer.cpp
-        )
+   )
 
 set(SIMPLE_SRC
         EjfatConsumer.cpp
         EjfatProducer.cpp
         EjfatServer.cpp
-        )
+   )
 
 set(EXECUTABLE_FILES
 #        lbtest.cpp
@@ -25,6 +25,17 @@ set(EXECUTABLE_FILES
         simpleConsumer.cpp
         simpleServer.cpp
    )
+
+set(HEADER_FILES
+        EjfatConsumer.h
+        EjfatProducer.h
+        EjfatServer.h
+        serverConsumer.h
+        serverProducer.h
+        simpleEjfat.h
+        EjfatException.h
+   )
+
 
 add_library(ejfat_simple SHARED ${SIMPLE_SRC})
 
@@ -109,4 +120,10 @@ endforeach(fileName)
 
 if (INSTALL_DIR_DEFINED)
     install(TARGETS ejfat_simple LIBRARY DESTINATION lib)
+endif()
+
+# Only install if installation directory has been defined
+if (INSTALL_DIR_DEFINED)
+    install(FILES ${HEADER_FILES} DESTINATION include)
+    install(FILES ${HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
