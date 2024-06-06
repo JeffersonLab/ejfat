@@ -55,15 +55,20 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6]\n",
 
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
             "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
 
+            "        [-dport <incoming data port of this server (default 19500)>]",
+            "        [-cport <incoming consumer msg port of this server (default 18300)>]\n",
+
+            "        [-ids <comma-separated list of incoming source ids>]",
             "        [-nc  (no connect on socket)]",
-            "        [-cores <comma-separated list of cores to run on>]");
+            "        [-core    <starting core # for send thd>]",
+            "        [-coreCnt <# of cores for send thd>]");
 
     fprintf(stderr, "        EJFAT simple server that acts as a broker between an LB/CP and data senders\n");
     fprintf(stderr, "        as well as a broker between the LB/CP and data consumers.\n");
@@ -79,7 +84,11 @@ static void printHelp(char *programName) {
  *
  * @param argc            arg count from main().
  * @param argv            arg list from main().
- * @param cores           vector to be filled with core numbers to run on.
+ * @param core            starting core id on which to run sending thread.
+ * @param coreCnt         number of cores on which to run sending thread.
+ * @param ids             vector to be filled with sender IDs.
+ * @param dataPort        port to listen on for incoming events.
+ * @param consumerPort    port to listen on for msgs from consumers.
  * @param debug           true for debug output.
  * @param useIPv6         use ipV6 for ...
  * @param noConnect       true means connect() NOT called on sending sockets.
@@ -87,7 +96,9 @@ static void printHelp(char *programName) {
  * @param filename        name of file in which to read URI.
  */
 static void parseArgs(int argc, char **argv,
-                      std::vector<int> &cores,
+                      int* core, int* coreCnt,
+                      std::vector<int>& ids,
+                      uint16_t *dataPort , uint16_t *consumerPort,
                       bool *debug, bool *useIPv6, bool *noConnect,
                       char *uri, char *file) {
 
@@ -98,11 +109,16 @@ static void parseArgs(int argc, char **argv,
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
-            {{"ipv6",     0, nullptr, 5},
-             {"cores",    1, nullptr, 6},
+            {{"core",     1, nullptr, 1},
+             {"coreCnt",  1, nullptr, 2},
+             {"ids",      1, nullptr, 3},
+             {"ipv6",     0, nullptr, 5},
              {"nc",       0, nullptr, 7},
              {"uri",      1, nullptr, 8},
              {"file",     1, nullptr, 9},
+             {"dport",    1, nullptr, 10},
+             {"cport",    1, nullptr, 11},
+
              {nullptr,    0, 0,    0}
             };
 
@@ -114,36 +130,65 @@ static void parseArgs(int argc, char **argv,
 
         switch (c) {
 
-            case 5:
-                // use IP version 6
-                *useIPv6 = true;
+            case 1:
+                // Starting core # to run on for packet sending thd
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 0) {
+                    *core = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -core, need starting core #\n");
+                    exit(-1);
+                }
+
                 break;
 
-            case 6:
-                // Cores to run on
+
+            case 2:
+                // Number of cores to run on for packet sending thd
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1) {
+                    *coreCnt = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -coreCnt, need # of read cores (min 1)\n");
+                    exit(-1);
+                }
+
+                break;
+
+
+            case 3:
+                // Incoming source ids
                 if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -cores, need comma-separated list of core ids\n");
+                    fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ids\n");
                     exit(-1);
                 }
 
                 {
-                    // split into ints
-                    cores.clear();
+                    ids.clear();
                     std::string s = optarg;
-                    std::istringstream ss(s);
+                    std::stringstream ss(s);
                     std::string token;
 
                     while (std::getline(ss, token, ',')) {
                         try {
                             int value = std::stoi(token);
-                            cores.push_back(value);
+                            ids.push_back(value);
                         }
                         catch (const std::exception& e) {
-                            fprintf(stderr, "Invalid argument to -cores, need comma-separated list of ints\n");
+                            fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ints\n");
                             exit(-1);
                         }
                     }
                 }
+
+                break;
+
+
+            case 5:
+                // use IP version 6
+                *useIPv6 = true;
                 break;
 
             case 7:
@@ -169,6 +214,30 @@ static void parseArgs(int argc, char **argv,
                 strcpy(file, optarg);
                 break;
 
+            case 10:
+                // Incoming event/data Port
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp < 1024 || i_tmp > 65535) {
+                    fprintf(stderr, "Invalid argument to -dport\n");
+                    exit(-1);
+                }
+                else {
+                    *dataPort = i_tmp;
+                }
+                break;
+
+            case 11:
+                // Incoming consumer msg Port
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp < 1024 || i_tmp > 65535) {
+                    fprintf(stderr, "Invalid argument to -cport\n");
+                    exit(-1);
+                }
+                else {
+                    *consumerPort = i_tmp;
+                }
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -184,15 +253,16 @@ static void parseArgs(int argc, char **argv,
         }
     }
 
+    if (help) {
+        printHelp(argv[0]);
+        exit(2);
+    }
+
     if ((strlen(uri) < 1) && (strlen(file) < 1)) {
         fprintf(stderr, "Specify -uri and/or -file\n");
         exit(-1);
     }
 
-    if (help) {
-        printHelp(argv[0]);
-        exit(2);
-    }
 }
 
 
@@ -206,9 +276,15 @@ static void parseArgs(int argc, char **argv,
  */
 int main(int argc, char **argv) {
 
+    uint16_t dataPort = 19500;
+    uint16_t consumerPort = 18300;
+
     bool debug = false;
     bool useIPv6 = false;
     bool noConnect = false;
+
+    int core = -1;
+    int coreCount = 1;
 
     char uri[INPUT_LENGTH_MAX];
     memset(uri, 0, INPUT_LENGTH_MAX);
@@ -216,48 +292,24 @@ int main(int argc, char **argv) {
     char fileName[INPUT_LENGTH_MAX];
     memset(fileName, 0, INPUT_LENGTH_MAX);
 
+    std::vector<int> ids;
     std::vector<int> cores;
-    size_t coreCount = 0;
 
 
-    parseArgs(argc, argv, cores, &debug, &useIPv6, &noConnect, uri, fileName);
-
-#ifdef __linux__
-
-    coreCount = cores.size();
-
-    if (coreCount > 0) {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark given CPUs as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        for (int i=0; i < coreCount; i++) {
-            if (cores[i] >= 0) {
-                std::cerr << "Run main thread on core " << cores[i] << "\n";
-                CPU_SET(cores[i], &cpuset);
-            }
-        }
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-    }
-
-    std::cerr << "Initially running on cpu " << sched_getcpu() << "\n";
-
-#endif
+    parseArgs(argc, argv, &core, &coreCount, ids, &dataPort, &consumerPort,
+              &debug, &useIPv6, &noConnect, uri, fileName);
 
 
     fprintf(stderr, "No connect = %s\n", btoa(noConnect));
 
 
     //--------------------------------------------
-    EjfatServer();
+    EjfatServer server(uri, fileName, ids, dataPort, consumerPort, useIPv6, !noConnect, debug, core, coreCount);
+    fprintf(stderr, "Past server creation\n");
+
 
     while (true) {
-        // Delay 4 seconds between printouts
+        // Delay 4 seconds
         std::this_thread::sleep_for(std::chrono::seconds(4));
     }
 

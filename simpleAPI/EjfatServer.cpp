@@ -78,6 +78,9 @@ namespace ejfat {
             if (file.is_open()) {
                 std::string uriLine;
                 if (std::getline(file, uriLine)) {
+
+                    std::cout << "parse UDL = " << uriLine << std::endl;
+
                     bool parsed = parseURI(uriLine, uriInfo);
                     if (parsed) {
                         haveEverything = setFromURI(uriInfo);
@@ -244,6 +247,8 @@ namespace ejfat {
                 exit(1);
             }
         }
+        fprintf(stderr, "Listening on port %hu for events\n", dataPortIn);
+
     }
 
 
@@ -288,6 +293,7 @@ namespace ejfat {
 #endif
 
             if (connectSockets) {
+                if (debug) fprintf(stderr, "Connecting event socket to host %s, port %hu\n", dataAddrLB.c_str(), dataPortLB);
                 int err = connect(dataSocketLB, (const sockaddr *) &sendAddrStruct6, sizeof(struct sockaddr_in6));
                 if (err < 0) {
                     close(dataSocketLB);
@@ -320,7 +326,7 @@ namespace ejfat {
 #endif
 
             if (connectSockets) {
-                if (debug) fprintf(stderr, "Connection socket to host %s, port %hu\n", dataAddrLB.c_str(), dataPortLB);
+                if (debug) fprintf(stderr, "Connecting event socket to host %s, port %hu\n", dataAddrLB.c_str(), dataPortLB);
                 int err = connect(dataSocketLB, (const sockaddr *) &sendAddrStruct, sizeof(struct sockaddr_in));
                 if (err < 0) {
                     close(dataSocketLB);
@@ -357,6 +363,7 @@ namespace ejfat {
             inet_pton(AF_INET6, syncAddr.c_str(), &syncAddrStruct6.sin6_addr);
 
             if (connectSockets) {
+                fprintf(stderr, "Connecting sync socket to host %s, port %hu\n", syncAddr.c_str(), syncPort);
                 int err = connect(syncSocket, (const sockaddr *) &syncAddrStruct6, sizeof(struct sockaddr_in6));
                 if (err < 0) {
                     close(syncSocket);
@@ -461,6 +468,8 @@ namespace ejfat {
                 exit(1);
             }
         }
+        fprintf(stderr, "Listening on port %hu for consumer msgs\n", consumerPort);
+
     }
 
 
@@ -498,11 +507,14 @@ namespace ejfat {
                 continue;
             }
 
+
             bool success = getCommand(pkt, cmd);
             if (!success) {
                 // no recognizable command contained, ignore packet
                 continue;
             }
+
+            if (debug) std::cerr << "consumer thread, msg = " << cmd << std::endl;
 
             // Update CP with latest fill level and PID error from consumer
             if (cmd == UPDATE) {
@@ -653,6 +665,7 @@ namespace ejfat {
         char pkt[65536];
 
         while (!endThreads) {
+if (debug) std::cerr << "send thread, read from socket " << std::endl;
             // Read UDP packet
             ssize_t bytesRead = recvfrom(dataSocketIn, pkt, 65536, 0, nullptr, nullptr);
             if (bytesRead < 0) {
@@ -665,6 +678,8 @@ namespace ejfat {
                 // ignore packet
                 continue;
             }
+
+            if (debug) std::cerr << "send thread, GOT something from socket " << std::endl;
 
             // Pull out the version & protocol from each pkt's LB header to check compatibility
             uint8_t ver = *((uint8_t *) (pkt + 2));
@@ -765,7 +780,7 @@ namespace ejfat {
 
 
         while (!endThreads) {
-
+            
             // Delay 1 second between syncs
             std::this_thread::sleep_for(std::chrono::seconds(1));
 
