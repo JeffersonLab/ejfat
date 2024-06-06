@@ -23,14 +23,9 @@
 #include <thread>
 #include <utility>
 #include <vector>
-#include <fstream>
 #include <unordered_map>
-#include <array>
 #include <atomic>
 
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <net/if.h>
 
 
 #include "ejfat.hpp"
@@ -56,11 +51,17 @@ namespace ejfat {
      * </p>
      *
      * <p>
-     * Another thread is started to print out statistics. And finally, there is a
-     * thread which does the communication with the EJFAT control plane.
+     * Another thread is started to print out statistics.
      * </p>
      *
-     * @date 04/02/2024
+     * <p>
+     * The last thread communicates with a "simple server" which, in turn, talks
+     * to its associated control plane. Thus this consumer does not talk gRPC
+     * which is handled by the server. The CP is instructed to pass data to this
+     * consumer.
+     * </p>
+     *
+     * @date 06/04/2024
      * @author timmer
      */
     class serverConsumer {
@@ -71,9 +72,6 @@ namespace ejfat {
 
         /** If true, print out debugging info to console. */
         bool debug;
-
-        /** If true, talk to the simple server instead of the CP. */
-        bool server;
 
         /** Ids of data sources sending to this consumer. */
         std::vector<int> ids;
@@ -93,12 +91,12 @@ namespace ejfat {
         //------------------------------------------------------------------
 
         /** If true, receive data directly from a sender,
-        *  bypassing the LB and not talking to the CP/simple-server. */
+        *  bypassing the LB and not talking to the CP or simple-server. */
         bool direct;
-        /** If true, call connect() for socket to server. */
+        /** If true, call connect() on socket to server. */
         bool connectSocket = false;
 
-        /** Address of simple server to talk to instead of CP. */
+        /** Address of simple server to talk to. */
         std::string serverAddr;
 
         /** Port of simple server. */
@@ -113,6 +111,7 @@ namespace ejfat {
         /** UDP sockets for receiving data from various sources. */
         std::unordered_map<int, int> dataSockets;
 
+        /** Socket for talking to simple server. */
         int serverSocket;
 
         /** Structure for server connection, IPv4. */
@@ -271,11 +270,9 @@ namespace ejfat {
         static const size_t VECTOR_SIZE = QSIZE + 1;
 
         /**
-         * <p>
          * Fast, lock-free, queue for multiple producers and consumers.
          * One queue shared by all data sources.
          * Each qItem essentially wraps an event and comes from a vector of qItems.
-         * </p>
          */
         std::shared_ptr<boost::lockfree::queue<qItem*, boost::lockfree::capacity<QSIZE>>> queue;
 

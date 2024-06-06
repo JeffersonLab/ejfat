@@ -53,12 +53,16 @@ namespace ejfat {
 
     /**
      * Constructor which allows data to be sent directly from sender to this consumer,
-     * bypassing the LB/CP. No communication with CP is done, hence no grpc lib is necessary.
+     * bypassing the LB/CP. No communication with a simpler server or the CP is done,
+     * hence no grpc lib is necessary.
      *
      * @param dataPort     starting UDP port to receive data on. The first src in ids will
      *                     received on this port, the second will be received on dataPort + 1, etc.
      *                     (defaults to 17750).
      * @param ids          vector of data source ids (defaults to single source of id=0).
+     *                     The ids, in the sequence they are in the vector, map to
+     *                     sequential destination port #s starting at dataPort.
+     *                     (e.g. ids=1,3,0,2 map to ports 17750,17751,17752,17753 respectively).
      * @param debug        if true, printout debug statements (default false).
      * @param jointStats   if true, printout combined stats for all sources (default false).
      * @param startingCore first core to run the receiving threads on (default 0).
@@ -107,19 +111,20 @@ namespace ejfat {
 
 
     /**
-     * Constructor which specifies the IP address to send data to and
-     * the IP address to send the sync messages to. Everything else is
-     * set to their defaults, including port numbers.
+     * Constructor which specifies the IP address & port of the simple server to use.
+     * The dataAddr and dataPort are passed on the the server so this consumer can
+     * get events from the LB.
      *
      * @param serverAddr   IP address (either ipv6 or ipv4) of simple server.
      * @param dataAddr     IP address (either ipv6 or ipv4) to receive data on.
-     * @param serverPort   starting UDP port to receive data on. The first src in ids will
-     *                     received on this port, the second will be received on dataPort + 1, etc.
-     *                     (defaults to 18750).
+     * @param serverPort   UDP port of simple server (defaults to 18300).
      * @param dataPort     starting UDP port to receive data on. The first src in ids will
      *                     received on this port, the second will be received on dataPort + 1, etc.
      *                     (defaults to 17750).
      * @param ids          vector of data source ids (defaults to single source of id=0).
+     *                     The ids, in the sequence they are in the vector, map to
+     *                     sequential destination port #s starting at dataPort.
+     *                     (e.g. ids=1,3,0,2 map to ports 17750,17751,17752,17753 respectively).
      * @param debug        if true, printout debug statements (default false).
      * @param jointStats   if true, printout combined stats for all sources (default false).
      * @param connect      if true, call connect on socket to server (default false).
@@ -181,7 +186,7 @@ namespace ejfat {
     }
 
 
-    /** Method to set max UDP packet payload, create sockets, and startup threads. */
+    /** Method to create sockets and startup threads. */
     void serverConsumer::createSocketsAndStartThreads() {
         createDataSockets();
         startupRecvThreads();
@@ -225,7 +230,7 @@ namespace ejfat {
      * De-register this data consumer with the simple server which will, in turn,
      * de-register with the CP.
      *
-     * @return true if registration successful, else false;
+     * @return true if de-registration successful, else false;
      */
     bool serverConsumer::deregisterWithSimpleServer() {
         char buffer[1024];
@@ -249,8 +254,8 @@ namespace ejfat {
 
 
     /**
-     * Register this data consumer with the simple server which will, in turn,
-     * register with the CP.
+     * Update the simple server, and therefore the CP, with the latest info on fifo fill level,
+     * PID error signal, and whether it's ready for more events or not.
      *
      * @param fill    fill level of receiving queue (0-1).
      * @param pidErr  error term of PID loop.
@@ -332,7 +337,7 @@ namespace ejfat {
 
 
     /**
-     * Method to create a UDP socket for reading data from a each source.
+     * Method to create a UDP socket for reading data from each source.
      */
     void serverConsumer::createDataSockets() {
 
@@ -968,7 +973,7 @@ namespace ejfat {
 
 
     /**
-     * Method to start up the grpc thread.
+     * Method to start up the talk-to-server thread.
      * It won't start up more than one.
      */
     void serverConsumer::startupServerThread() {
@@ -1021,7 +1026,6 @@ namespace ejfat {
         bool restarted = false, firstLoop = true;
         uint16_t dataId;
 
-   //     auto queue        = queues[srcId];
         auto & qItemVec   = qItemVectors[srcId];
         int currentQItem  = currentQItems[srcId];
         int dataSocket    = dataSockets[srcId];
@@ -1168,7 +1172,7 @@ namespace ejfat {
      * Non-blocking retrieval of event sent from one of the expected data sources.
      * Once an item is taken off the internal queue by this method, room is
      * created for receiving threads to place another item onto it. If
-     * long term access to the return event is desired, the caller
+     * long term access to the returned event is desired, the caller
      * must copy it.
      * <p>
      * Note: it's possible, but unlikely, that the user calls this method

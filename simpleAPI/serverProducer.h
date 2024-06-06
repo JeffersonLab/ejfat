@@ -8,7 +8,7 @@
 // (757)-269-7100
 
 //
-// Created by timmer on 3/15/24.
+// Created by timmer on 6/05/24.
 //
 
 #ifndef EJFAT_SERVER_PRODUCER_H
@@ -23,17 +23,11 @@
 #include <thread>
 #include <utility>
 #include <vector>
-#include <fstream>
 #include <atomic>
-
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <net/if.h>
 
 
 #include "ejfat.hpp"
 #include "simpleEjfat.h"
-
 #include "ejfat_packetize.hpp"
 #include "EjfatException.h"
 
@@ -54,7 +48,20 @@ namespace ejfat {
     /**
      * This class defines an Ejfat data or event sender.
      *
-     * @date 03/15/2024
+     * <p>
+     * One 1 thread which sends events to either the simple server or directly to a consumer.
+     * </p>
+     *
+     * <p>
+     * Another thread is started to print out statistics.
+     * </p>
+     *
+     * <p>
+     * Last thread takes events off an internal queue
+     * and sends them to the server to implement non-blocking send.
+     * </p>
+     *
+     * @date 06/05/2024
      * @author timmer
      */
     class serverProducer {
@@ -139,7 +146,7 @@ namespace ejfat {
         /** If true, call connect() for both sync and data sockets. */
         bool connectSocket = false;
 
-        /** UDP socket for sending data to LB. */
+        /** UDP socket for sending data to simple server or direct to consumer. */
         int serverSocket;
 
 
@@ -173,7 +180,7 @@ namespace ejfat {
         // Queue stuff
         //------------------------------------------------------------------
         // Why would you want a bounded queue? If you put data buffers on it faster than it can be
-        // sent, you have a big problem, a memory leak. If there's any kind of delay specified, then
+        // sent, you have a memory leak. If there's any kind of delay specified, then
         // you'll need to throttle putting items onto the Q.
         //
         // Question: How do you know if what you put on the Q has been sent and its pointer made
@@ -182,7 +189,7 @@ namespace ejfat {
         // it's been sent.
 
 
-        // Structure to hold each send-queue item
+        /** Structure to hold each send-queue item. */
         typedef struct queueItem_t {
             uint32_t bytes;
             uint64_t tick;

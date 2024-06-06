@@ -8,17 +8,18 @@
 // (757)-269-7100
 
 //
-// Created by timmer on 3/26/24.
+// Created by timmer on 6/05/24.
 //
 
 
 
 /**
  * <p>
- * @file Repeatedly send an event (data buffer full of sequential ints)
- * to an ejfat load balancer which then passes it to a receiving program.
- * This program uses the new ejfat API, the libejfat_simple.so library
- * and the EjfatProducer class.
+ * @file
+ * This program talks to a simpleServer which is based on the EjfatServer class.
+ * The server interfaces with the CP and talks gRPC so this sender doesn't
+ * have to. All events sent by this program gets sent to the simple server
+ * which, in turn, directs them to the LB associated with the server.
  * </p>
  */
 
@@ -28,7 +29,6 @@
 #include <ctime>
 #include <cmath>
 #include <thread>
-#include <pthread.h>
 #include <iostream>
 #include <cinttypes>
 #include <chrono>
@@ -38,8 +38,6 @@
 #include <sstream>
 #include <vector>
 
-#include <arpa/inet.h>
-#include <net/if.h>
 
 #include "serverProducer.h"
 
@@ -392,6 +390,10 @@ int main(int argc, char **argv) {
             }
 
             directPort = std::stoi(match[2]);
+        }
+        else {
+            fprintf(stdout, "\n-direct option has badly formatted arg, should be ipAddr:port\n");
+            exit(-1);
         }
     }
 

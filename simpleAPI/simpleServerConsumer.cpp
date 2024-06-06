@@ -8,7 +8,7 @@
 // (757)-269-7100
 
 //
-// Created by timmer on 3/26/24.
+// Created by timmer on 6/05/24.
 //
 
 
@@ -16,8 +16,10 @@
 /**
  * <p>
  * @file Receive events from an ejfat load balancer.
- * This program uses the new ejfat API, the libejfat_simple.so library
- * and the EjfatConsumer class.
+ * This program talks to a simpleServer which is based on the EjfatServer class.
+ * The server interfaces with the CP and talks gRPC so this consumer doesn't
+ * have to. It directs events coming thru the LB associated with the server
+ * to go to this consumer.
  * </p>
  */
 
@@ -27,7 +29,6 @@
 #include <ctime>
 #include <cmath>
 #include <thread>
-#include <pthread.h>
 #include <iostream>
 #include <cinttypes>
 #include <chrono>
@@ -35,8 +36,6 @@
 #include <vector>
 #include <string>
 
-#include <arpa/inet.h>
-#include <net/if.h>
 
 #include "serverConsumer.h"
 
@@ -72,10 +71,10 @@ static void printHelp(char *programName) {
 
     fprintf(stderr, "        This is an EJFAT consumer, using the new simple API,\n");
     fprintf(stderr, "        able to receive from multiple data sources.\n\n");
-    fprintf(stderr, "        There is 1 way to receive data:\n");
-    fprintf(stderr, "           -- specify -addr for the server IP address and -port for its UDP port\n");
-    fprintf(stderr, "        To bypass the LB and receive data directly from sender:\n");
-    fprintf(stderr, "           -- specify -direct\n");
+    fprintf(stderr, "        There are 2 ways to receive data:\n");
+    fprintf(stderr, "           1) specify -addr for the server IP address and -port for its UDP port\n");
+    fprintf(stderr, "           2) bypass the LB and receive directly from sender by specifying -direct\n");
+    fprintf(stderr, "              in addition to -addr and port\n");
 }
 
 

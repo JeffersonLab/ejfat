@@ -8,7 +8,7 @@
 // (757)-269-7100
 
 //
-// Created by timmer on 3/15/24.
+// Created by timmer on 6/05/24.
 //
 
 #include "serverProducer.h"
@@ -25,22 +25,23 @@ namespace ejfat {
 
 
     /**
-     * Constructor which specifies the IP address to send data to and
-     * the IP address to send the sync messages to along with their ports.
-     * All other parameters else can either be set explicitly or left to their defaults.
+     * Constructor which specifies the IP address and port of simple server to send data to.
+     * If direct = true, then the addr and port are those of the consumer receiving directly
+     * from this sender.
      *
      * @param serverAddr     server's IP address (either ipv6 or ipv4) to send data to.
      * @param serverPort     server's UDP port to send data to.
-     * @param direct         if true, bypass LB and send data direct to consumer (dataAdddr, dataPort).
+     * @param direct         if true, bypass LB and send data direct to consumer.
      * @param id             id number of this sender: 0,1,2 ... (defaults to 0).
      * @param entropy        number (0,1,2, ...) to add to the base destination port for a given destination host.
      *                       Used on receiving end to read different sources on different UDP ports
      *                       for multithreading and ease of programming purposes. Defaults to 0.
+     *                       For the easiest implementation, set entropy = id.
      * @param delay          delay in microseconds between each event sent (defaults to 0).
      * @param delayPrescale  (1,2, ... N), a delay is taken after every Nth event (defaults to 1).
-     * @param connect        if true, call connect() on each UDP socket, both for data and syncs.
+     * @param connect        if true, call connect() on the UDP socket.
      *                       This speeds up communication, but requires the receiving socket
-     *                       to be up and runnin. Defaults to false.
+     *                       to be up and running. Defaults to false.
      * @param mtu            max # of bytes to send in a single UDP packet (9000 &lt;= mtu &gt;= 500).
      * @param cores          vector of cores to run the sending code on.
      * @param version        version number of ejfat software repo (defaults to 2).
