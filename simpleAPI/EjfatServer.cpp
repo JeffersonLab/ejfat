@@ -301,6 +301,9 @@ namespace ejfat {
                     throw EjfatException("error connecting UDP sync socket");
                 }
             }
+            else if (debug) {
+                fprintf(stderr, "Create ipv6 event socket to host %s, port %hu\n", dataAddrLB.c_str(), dataPortLB);
+            }
         }
         else {
             if ((dataSocketLB = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -333,6 +336,9 @@ namespace ejfat {
                     if (debug) perror("Error connecting UDP sync socket:");
                     throw EjfatException("error connecting UDP sync socket");
                 }
+            }
+            else if (debug) {
+                fprintf(stderr, "Create event socket to host %s, port %hu\n", dataAddrLB.c_str(), dataPortLB);
             }
         }
 
@@ -371,6 +377,9 @@ namespace ejfat {
                     throw EjfatException("error connecting UDP sync socket");
                 }
             }
+            else if (debug) {
+                fprintf(stderr, "Create ipv6 sync socket to host %s, port %hu\n", syncAddr.c_str(), syncPort);
+            }
         }
         else {
             if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -392,6 +401,9 @@ namespace ejfat {
                     if (debug) perror("Error connecting UDP sync socket:");
                     throw EjfatException("error connecting UDP sync socket");
                 }
+            }
+            else if (debug) {
+                fprintf(stderr, "Create sync socket to host %s, port %hu\n", syncAddr.c_str(), syncPort);
             }
         }
     }
@@ -514,7 +526,6 @@ namespace ejfat {
                 continue;
             }
 
-            if (debug) std::cerr << "consumer thread, msg = " << cmd << std::endl;
 
             // Update CP with latest fill level and PID error from consumer
             if (cmd == UPDATE) {
@@ -538,7 +549,6 @@ namespace ejfat {
                 }
 
                 client->update(fill, pidErr, isReady);
-                if (debug) std::cout << "send state to CP" << std::endl;
 
                 // Send to server
                 int err = client->SendState();
@@ -568,7 +578,10 @@ namespace ejfat {
                                                                      ipAddr, port, range,
                                                                      myName, instanceToken, lbId, weight);
                 LbClients[key] = client;
-                std::cout << "Created LbControlPlaneClient for " << ipAddr << ":" << port << std::endl;
+                std::cout << "Created LbControlPlaneClient for " << ipAddr << ":" << port <<
+                             " to CP on " << cpAddr << ":" << cpPort << " for range " << portRangeValue <<
+                             " with name " << myName << " for lbId = " << lbId << " & token = " <<
+                             instanceToken << std::endl;
 
                 // Register this client with the control plane's grpc server &
                 // wait for server to send session token in return.
@@ -665,7 +678,6 @@ namespace ejfat {
         char pkt[65536];
 
         while (!endThreads) {
-if (debug) std::cerr << "send thread, read from socket " << std::endl;
             // Read UDP packet
             ssize_t bytesRead = recvfrom(dataSocketIn, pkt, 65536, 0, nullptr, nullptr);
             if (bytesRead < 0) {
@@ -678,8 +690,6 @@ if (debug) std::cerr << "send thread, read from socket " << std::endl;
                 // ignore packet
                 continue;
             }
-
-            if (debug) std::cerr << "send thread, GOT something from socket " << std::endl;
 
             // Pull out the version & protocol from each pkt's LB header to check compatibility
             uint8_t ver = *((uint8_t *) (pkt + 2));
@@ -770,6 +780,7 @@ if (debug) std::cerr << "send thread, read from socket " << std::endl;
      */
     void EjfatServer::sendSyncFunc() {
 
+        int err=0;
         char syncBuf[28];
 
         // For the rate calculation get the starting time point
@@ -780,7 +791,7 @@ if (debug) std::cerr << "send thread, read from socket " << std::endl;
 
 
         while (!endThreads) {
-            
+
             // Delay 1 second between syncs
             std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -797,18 +808,37 @@ if (debug) std::cerr << "send thread, read from socket " << std::endl;
                 uint64_t tick = ticks[srcId];
                 uint64_t evtsSent = bufsSent[srcId];
 
-                // Calculate event rate in Hz
-                uint32_t evtRate = evtsSent / (timeDiff / 1000000000UL);
+                if (tick > 0) {
+                    // Calculate event rate in Hz
+                    uint32_t evtRate = evtsSent / (timeDiff / 1000000000UL);
 
-                if (debug) std::cerr << "for src " << srcId << ", sent tick " << tick <<
-                                        ", evtRate " << evtRate << std::endl << std::endl;
+                    if (debug && (tick > 0))
+                        std::cerr << "for src " << srcId << ", sent tick " << tick <<
+                                  ", evtRate " << evtRate << std::endl << std::endl;
 
-                // Send sync message to CP
-                setSyncData(syncBuf, version, srcId, tick, evtRate, currentTimeNanos);
-                int err = send(syncSocket, syncBuf, 28, 0);
-                if (err == -1) {
-                    perror("send");
-                    throwEjfatLine("error sending event");
+                    // Send sync message to CP
+                    setSyncData(syncBuf, version, srcId, tick, evtRate, currentTimeNanos);
+
+                    // Send pkt to receiver
+                    if (!connectSockets) {
+                        if (ipv6SyncAddr) {
+                            err = sendto(syncSocket, syncBuf, 28, 0, (sockaddr * ) & syncAddrStruct6,
+                                         sizeof(struct sockaddr_in6));
+                        } else {
+                            if (debug) std::cerr << "sync to CP" << std::endl;
+                            err = sendto(syncSocket, syncBuf, 28, 0, (sockaddr * ) & syncAddrStruct,
+                                         sizeof(struct sockaddr_in));
+                        }
+                    } else {
+                        if (debug) std::cerr << "sync to CP" << std::endl;
+                        err = send(syncSocket, syncBuf, 28, 0);
+                    }
+
+
+                    if (err == -1) {
+                        perror("send");
+                        throwEjfatLine("error sending event");
+                    }
                 }
 
                 bufsSent[srcId] = 0;
