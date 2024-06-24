@@ -5,6 +5,8 @@
 #ifndef EJFAT_SIMPLEEJFAT_H
 #define EJFAT_SIMPLEEJFAT_H
 
+#include <iostream>
+
 #ifdef __linux__
     #define htonll(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
     #define ntohll(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
@@ -296,7 +298,7 @@ namespace ejfat {
             *((uint32_t *)(buffer + 12 + ipLen + 1)) = 0;
         }
 
-        return (13 + ipLen);
+        return (16 + ipLen + 1);
     }
 
 
@@ -362,7 +364,7 @@ namespace ejfat {
         floatAsBinary = ntohl(floatAsBinary);
         std::memcpy(&pidErr, &floatAsBinary, sizeof(floatAsBinary));
 
-        int ready = ntohl(*reinterpret_cast<const int *>(buffer + 12 + len + 1));
+        int ready = ntohl(*reinterpret_cast<const uint32_t *>(buffer + 12 + len + 1));
         isReady = static_cast<bool>(ready);
 
         return true;
