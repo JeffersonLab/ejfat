@@ -339,9 +339,9 @@ int main(int argc, char **argv) {
         bool gotEvent = consumer->getEvent(&event, &bytes, &eventNum, &srcId);
 
         if (gotEvent) {
-            if (debug) {
-                printf("Got event #%" PRIu64 " with %d bytes from src %hu\n", eventNum, (int)bytes, srcId);
-            }
+//            if (debug) {
+//                printf("Got event #%" PRIu64 " with %d bytes from src %hu\n", eventNum, (int)bytes, srcId);
+//            }
         }
         else {
             // Nothing in queue, sleep?

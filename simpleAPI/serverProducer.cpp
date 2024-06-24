@@ -32,6 +32,7 @@ namespace ejfat {
      * @param serverAddr     server's IP address (either ipv6 or ipv4) to send data to.
      * @param serverPort     server's UDP port to send data to.
      * @param direct         if true, bypass LB and send data direct to consumer.
+     * @param debug          if true, printout debug statements (default false).
      * @param id             id number of this sender: 0,1,2 ... (defaults to 0).
      * @param entropy        number (0,1,2, ...) to add to the base destination port for a given destination host.
      *                       Used on receiving end to read different sources on different UDP ports
@@ -51,7 +52,7 @@ namespace ejfat {
      */
     serverProducer::serverProducer(const std::string& serverAddr,
                                  uint16_t serverPort,
-                                 bool direct,
+                                 bool direct, bool debug,
                                  uint16_t id, int entropy,
                                  int delay, int delayPrescale,
                                  bool connect, int mtu,
@@ -59,11 +60,10 @@ namespace ejfat {
                                  int version, int protocol):
 
             serverAddr(serverAddr), serverPort(serverPort),
-            direct(direct), id(id), entropy(entropy),
+            direct(direct), debug(debug), id(id), entropy(entropy),
             delay(delay), delayPrescale(delayPrescale),
             connectSocket(connect), mtu(mtu),
-            cores(cores),
-            version(version), protocol(protocol),
+            cores(cores), version(version), protocol(protocol),
             endThreads(false)
 
     {
@@ -145,12 +145,16 @@ namespace ejfat {
 #endif
 
             if (connectSocket) {
+                if (debug) fprintf(stderr, "Connection ipv6 socket to host %s, port %hu\n", serverAddr.c_str(), serverPort);
                 int err = connect(serverSocket, (const sockaddr *) &sendAddrStruct6, sizeof(struct sockaddr_in6));
                 if (err < 0) {
                     close(serverSocket);
                     if (debug) perror("Error connecting UDP server socket:");
                     throw EjfatException("error connecting UDP server socket");
                 }
+            }
+            else if (debug) {
+                fprintf(stderr, "Create ipv6 socket to simple server: host %s, port %hu\n", serverAddr.c_str(), serverPort);
             }
         }
         else {
@@ -184,6 +188,9 @@ namespace ejfat {
                     if (debug) perror("Error connecting UDP server socket:");
                     throw EjfatException("error connecting UDP server socket");
                 }
+            }
+            else if (debug) {
+                fprintf(stderr, "Create socket to simple server: host %s, port %hu\n", serverAddr.c_str(), serverPort);
             }
         }
 
@@ -393,7 +400,8 @@ namespace ejfat {
      * @param bytes number of bytes to send.
      */
     void serverProducer::sendEvent(char *event, size_t bytes) {
-        sendEvent(event, bytes, tick++);
+        sendEvent(event, bytes, tick);
+        tick++;
     }
 
 
@@ -423,11 +431,12 @@ namespace ejfat {
             return;
         }
 
-        this->tick = eventNumber;
+        tick = eventNumber;
 
         uint32_t offset = 0;
         int64_t packetsSent;
         int err;
+        bool debug2 = false;
 
         if (connectSocket) {
             err = sendPacketizedBufferSendNew(event, bytes, maxUdpPayload,
@@ -435,7 +444,7 @@ namespace ejfat {
                                               tick, protocol, entropy, version, id,
                                               (uint32_t)bytes, &offset,
                                               0, 1, nullptr,
-                                              true, true, debug, direct, &packetsSent);
+                                              true, true, debug2, direct, &packetsSent);
         }
         else {
             if (ipv6Data) {
@@ -444,7 +453,7 @@ namespace ejfat {
                                                   tick, protocol, entropy, version, id,
                                                   bytes, &offset,
                                                   0, 1, nullptr,
-                                                  true, true, debug,
+                                                  true, true, debug2,
                                                   direct, true,
                                                   &packetsSent, 0,
                                                   (sockaddr * ) & sendAddrStruct6, sizeof(struct sockaddr_in6));
@@ -455,7 +464,7 @@ namespace ejfat {
                                                   tick, protocol, entropy, version, id,
                                                   bytes, &offset,
                                                   0, 1, nullptr,
-                                                  true, true, debug,
+                                                  true, true, debug2,
                                                   direct, true,
                                                   &packetsSent, 0,
                                                   (sockaddr * ) & sendAddrStruct, sizeof(struct sockaddr_in));

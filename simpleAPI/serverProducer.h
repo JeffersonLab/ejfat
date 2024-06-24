@@ -224,7 +224,8 @@ namespace ejfat {
     public:
 
         serverProducer(const std::string& serverAddress,
-                      uint16_t serverPort = 19500, bool direct = false,
+                      uint16_t serverPort = 19500,
+                      bool direct = false, bool debug = false,
                       uint16_t id = 0, int entropy = 0,
                       int delay = 0, int delayPrescale = 1,
                       bool connect = false, int mtu = 9000,

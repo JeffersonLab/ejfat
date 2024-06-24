@@ -190,7 +190,8 @@ namespace ejfat {
         volatile uint64_t totalBytes=0, totalPackets=0, totalEvents=0;
 
         volatile struct timespec restartTime;
-        std::unordered_map<int, packetRecvStats> allStats;
+        //std::unordered_map<int, packetRecvStats> allStats;
+        std::unordered_map<int, std::shared_ptr<packetRecvStats>> allStats;
 
         bool jointStats = false;
 

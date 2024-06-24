@@ -308,6 +308,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
 int main(int argc, char **argv) {
 
     int delay = 0, delayPrescale = 1;
+    uint64_t tick = 0L;
     uint64_t bufSize = 0L;
 
     int mtu = 9000, version = 2, protocol = 1, entropy = 0;
@@ -410,12 +411,12 @@ int main(int argc, char **argv) {
 
     if (direct) {
         producer = std::make_shared<serverProducer>(std::string(directIP), directPort, direct,
-                                                    dataId, entropy, delay, delayPrescale,
+                                                    debug, dataId, entropy, delay, delayPrescale,
                                                     !noConnect, mtu, cores);
     }
     else {
         producer = std::make_shared<serverProducer>(std::string(addr), port, direct,
-                                                    dataId, entropy, delay, delayPrescale,
+                                                    debug, dataId, entropy, delay, delayPrescale,
                                                     !noConnect, mtu, cores);
     }
 
@@ -455,6 +456,7 @@ int main(int argc, char **argv) {
     while (true) {
         if (blocking) {
             // Blocking send (slightly faster than the internal queue method below).
+            //producer->sendEvent(buf, bufSize, tick++);
             producer->sendEvent(buf, bufSize);
         }
         else {

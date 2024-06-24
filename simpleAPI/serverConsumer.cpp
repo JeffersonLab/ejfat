@@ -101,7 +101,9 @@ namespace ejfat {
             // Element of items vector that will be placed onto Q, start with 0
             currentQItems[srcId] = 0;
             // Create a struct to hold stats & place into map
-            allStats.emplace(srcId, packetRecvStats());
+            auto pstat = std::make_shared<packetRecvStats>();
+            clearStats(pstat);
+            allStats[srcId] = pstat;
         }
 
         if (debug) std::cout << "Event consumer is ready to receive!" << std::endl;
@@ -178,7 +180,9 @@ namespace ejfat {
             // Element of items vector that will be placed onto Q, start with 0
             currentQItems[srcId] = 0;
             // Create a struct to hold stats & place into map
-            allStats.emplace(srcId, packetRecvStats());
+            auto pstat = std::make_shared<packetRecvStats>();
+            clearStats(pstat);
+            allStats[srcId] = pstat;
         }
 
         createSocketsAndStartThreads();
@@ -208,7 +212,7 @@ namespace ejfat {
     bool serverConsumer::registerWithSimpleServer() {
         char buffer[1024];
         // In this context will not return err (-1)
-        int len = setSimpleRegisterData(buffer, 1024, serverPort, serverAddr);
+        int len = setSimpleRegisterData(buffer, 1024, dataPort, dataAddr);
         // Send to server
         ssize_t err = 0;
         if (ipv6ServerAddr) {
@@ -235,7 +239,7 @@ namespace ejfat {
     bool serverConsumer::deregisterWithSimpleServer() {
         char buffer[1024];
         // In this context will not return err (-1)
-        int len = setSimpleDeregisterData(buffer, 1024, serverPort, serverAddr);
+        int len = setSimpleDeregisterData(buffer, 1024, dataPort, dataAddr);
         // Send to server
         ssize_t err = 0;
         if (ipv6ServerAddr) {
@@ -266,7 +270,7 @@ namespace ejfat {
     bool serverConsumer::updateSimpleServer(float fill, float pidErr, bool isReady) {
         char buffer[1024];
         // In this context will not return err (-1)
-        int len = setUpdateStatusData(buffer, 1024, serverPort, serverAddr, fill, pidErr, isReady);
+        int len = setUpdateStatusData(buffer, 1024, dataPort, dataAddr, fill, pidErr, isReady);
         // Send to server
         ssize_t err = 0;
         if (ipv6ServerAddr) {
@@ -449,7 +453,7 @@ namespace ejfat {
         int64_t discardByteCount, discardPktCount, discardBufCount;
 
         int sourceCount = ids.size();
-        packetRecvStats* pstats;
+        std::shared_ptr<packetRecvStats> pstats;
 
 
         int64_t prevTotalPkts[sourceCount];
@@ -513,7 +517,7 @@ namespace ejfat {
                     // Data is now coming in. To get an accurate rate, start w/ all stats = 0
                     int src = ids[i];
                     if (debug) std::cerr << "\nData now coming in for src " << src << std::endl;
-                    pstats = &allStats[src];
+                    pstats = allStats[src];
                     currTotalBytes[i]   = pstats->acceptedBytes    = 0;
                     currTotalPkts[i]    = pstats->acceptedPackets  = 0;
                     currBuiltBufs[i]    = pstats->builtBuffers     = 0;
@@ -562,7 +566,7 @@ namespace ejfat {
                 totalMicroSecs[i] = (1000000L * (tEnd.tv_sec - tStart[i].tv_sec)) + ((tEnd.tv_nsec - tStart[i].tv_nsec)/1000L);
 
                 int src = ids[i];
-                pstats = &allStats[src];
+                pstats = allStats[src];
 
                 // If the total # of built bufs goes down, it's only because the reassembly thread
                 // believes the source was restarted and zeroed out the stats. So, in that case,
@@ -621,7 +625,7 @@ namespace ejfat {
             if (rollOver) {
                 for (int i=0; i < sourceCount; i++) {
                     int src = ids[i];
-                    pstats = &allStats[src];
+                    pstats = allStats[src];
 
                     currTotalBytes[i]   = pstats->acceptedBytes    = 0;
                     currTotalPkts[i]    = pstats->acceptedPackets  = 0;
@@ -744,7 +748,7 @@ namespace ejfat {
                     }
 
                     int src = ids[i];
-                    pstats = &allStats[src];
+                    pstats = allStats[src];
 
                     // Use for instantaneous rates/values
 //                    readTime  = currTotalBuildTime[i] - prevTotalBuildTime[i];
@@ -953,7 +957,7 @@ namespace ejfat {
             // Every "loopMax" loops
             if (--loopCount <= 0) {
 
-                if (debug) std::cout << "update fill% and pidError" << std::endl;
+                //if (debug) std::cout << "update fill% and pidError" << std::endl;
 
                 // Update the simple server and therefore the CP
                 updateSimpleServer(fillPercent, pidError, isReady);
@@ -1029,8 +1033,10 @@ namespace ejfat {
         auto & qItemVec   = qItemVectors[srcId];
         int currentQItem  = currentQItems[srcId];
         int dataSocket    = dataSockets[srcId];
-        auto stats        = &allStats[srcId];
-        bool takeStats    = stats != nullptr;
+        auto pstats       = allStats[srcId];
+        bool takeStats    = pstats != nullptr;
+
+        if (debug) std::cerr << "taking stats for src " << srcId << std::endl;
 
 
         while (true) {
@@ -1057,7 +1063,7 @@ namespace ejfat {
             //        setsockopt(socket_fd, SOL_SOCKET, SO_NONBLOCK, &enable, sizeof(enable));
             // Perhaps a timeout behavior can be implemented
             ssize_t nBytes = getCompleteAllocatedBuffer(&dataBuf, &bufSize, dataSocket,
-                                                        debug, &tick, &dataId, stats, 1);
+                                                        debug, &tick, &dataId, pstats.get(), 1);
 
             if (nBytes < 0) {
                 std::cerr << "Error in receiving data, " << nBytes << std::endl;
@@ -1077,6 +1083,7 @@ namespace ejfat {
             item->bufBytes  = bufSize;
             item->dataBytes = nBytes;
             item->srcId     = dataId;
+            item->tick      = tick;
 
             // Place onto queue
             if (queue->push(item)) {
@@ -1098,7 +1105,7 @@ namespace ejfat {
             }
 
             if (takeStats) {
-                stats->builtBuffers++;
+                pstats->builtBuffers++;
             }
 
             // See if data source was restarted with new, lower starting event number.
@@ -1119,7 +1126,7 @@ namespace ejfat {
                 restartTime.tv_nsec = now.tv_nsec;
 
                 if (takeStats) {
-                    clearStats(stats);
+                    clearStats(pstats);
                 }
             }
         }
@@ -1203,7 +1210,7 @@ namespace ejfat {
         if (bytes    != nullptr) *bytes    = item->bufBytes;
         if (srcId    != nullptr) *srcId    = item->srcId;
         if (eventNum != nullptr) *eventNum = item->tick;
-        if (event != nullptr && *event != nullptr) *event = item->event;
+        if (event    != nullptr) *event    = item->event;
 
         return true;
     }
