@@ -9,6 +9,14 @@ set(NO_GRPC_EXECUTABLES
         simpleServerConsumer.cpp
    )
 
+set(NO_GRPC_HEADER_FILES
+        serverConsumer.h
+        serverProducer.h
+        simpleEjfat.h
+        EjfatException.h
+    )
+
+
 set(SIMPLE_SRC
         EjfatConsumer.cpp
         EjfatProducer.cpp
@@ -26,15 +34,13 @@ set(EXECUTABLE_FILES
         simpleServer.cpp
    )
 
+
 set(HEADER_FILES
         EjfatConsumer.h
         EjfatProducer.h
         EjfatServer.h
-        serverConsumer.h
-        serverProducer.h
-        simpleEjfat.h
-        EjfatException.h
-   )
+        ${NO_GRPC_HEADER_FILES}
+    )
 
 
 add_library(ejfat_simple SHARED ${SIMPLE_SRC})

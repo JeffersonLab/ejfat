@@ -81,9 +81,11 @@ The following programs will be created:
 ## -------------------------------------------------------------
 ## Latest "simple" API code
 
-### General
+### Code talking to Load Balancer (LB) and Control Plane (CP)
 
-The **simpleAPI** directory contains classes EjfatConsumer and EjfatProducer
+##### Direct LB/CP use
+
+The **simpleAPI** directory contains classes **EjfatConsumer** and **EjfatProducer**
 which are held in a library along with a couple of executables based on them.
 They support the latest CP/LB which requires an LB reservation. This reservation
 produces a URI which allows both a producers and consumers to use the CP/LB.
@@ -100,6 +102,21 @@ The following grpc-related libs are also necessary:
 In addition, there is a library of ejfat commands for talking grpc to the CP:
 
 - libejfat_grpc.so
+
+
+##### Simple server
+
+In addition to simple consumers and producers that talk to the LB and CP, there
+is a simple server which acts as a broker between users of EJFAT and the LB/CP.
+This is designed so that users need to know nothing about the hardware, gRPC,
+protobufs and anything else complicated. Once the server has been compiled and
+is running, users can communicate with the server - not needing to know the
+underlying system.
+
+There are 2 classes, **serverConsumer** and **serverProducer** which contain
+all needed functionality. These 2 classes are used in example EJFAT consumers
+and producers, **simpleServerConsumer** and **simpleServerSender**,
+which use the simple server.
 
 
 ### Find existing external libs if any
@@ -171,12 +188,38 @@ EJFAT_ERSAP_INSTALL_DIR and then in GRPC_INSTALL_DIR
 
 The following will be created:
 
-- **libejfat_simple.so** (consumer and producer C++ classes)
-- **simpleConsumer**     (receives and reassembles data)
-- **simpleProduer**      (packetizes and sends data)
-- **lbreserve**          (reserves a load balancer)
-- **lbfree**             (frees a load balancer)
-- **lbmonitor**          (prints stats of a load balancer)
+- **libejfat_simple.so**    (consumer and producer C++ classes)
+- **simpleConsumer**        (receives and reassembles data)
+- **simpleProduer**         (packetizes and sends data)
+- **lbreserve**             (reserves a load balancer)
+- **lbfree**                (frees a load balancer)
+- **lbmonitor**             (prints stats of a load balancer)
+- **simpleServerConsumer**  (consumer talking to simple server)
+- **simpleServerProducer**  (producer talking to simple server)
+
+
+
+### Build apps that talk to the simple server
+
+The applications that talk to the simple server,
+simpleServerSender and simpleServerConsumer, are automatically built along with the
+rest of the code in the simpleAPI directory.
+However, listed below are the commands to build them by hand.
+This may be useful in incorporating them, or your own versions of them,
+into your own build system.
+
+
+##### Compiling by hand
+
+    cd simpleAPI
+    
+    c++  -I ./ -I ../simulation -O3 -o serverConsumer.o -c /daqfs/ersap/ejfat/simpleAPI/serverConsumer.cpp
+    c++  -I ./ -I ../simulation -O3 -o serverProducer.o -c /daqfs/ersap/ejfat/simpleAPI/serverProducer.cpp
+    c++  -I ./ -I ../simulation -O3 -o simpleServerSender.o -c /daqfs/ersap/ejfat/simpleAPI/simpleServerSender.c
+    c++  -I ./ -I ../simulation -O3 -o simpleServerConsumer.o -c /daqfs/ersap/ejfat/simpleAPI/simpleServerConsumer.cpp
+    
+    c++  -O3 -DNDEBUG  simpleServerSender.o serverProducer.o -o simpleServerSender -lpthread -L libboost_atomic.so.1.71.0
+    c++  -O3 -DNDEBUG  simpleServerConsumer.o serverConsumer.o -o simpleServerConsumer -lpthread -L libboost_atomic.so.1.71.0
 
 
 #### More details
