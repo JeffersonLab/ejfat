@@ -214,15 +214,24 @@ into your own build system.
 
 ##### Compiling by hand
 
+The code uses classes in the **boost/lockfree/queue.hpp** header file. These boost classes
+are part of a header-only library. Thus, no boost libs need to be linked against.
+
+On linux, boost headers are located in /usr/include and thus -I does not need to be
+explicitly set.
+
+On my Mac laptop the boost include directory is /usr/local/Cellar/boost/1.72.0_3/include.
+This needs to be explicitly set with -I .
+
     cd simpleAPI
     
-    c++ -std=c++14 -I ./ -I ../simulation -O3 -o serverConsumer.o -c serverConsumer.cpp
-    c++ -std=c++14 -I ./ -I ../simulation -O3 -o serverProducer.o -c serverProducer.cpp
-    c++ -std=c++14 -I ./ -I ../simulation -O3 -o simpleServerSender.o -c simpleServerSender.cpp
-    c++ -std=c++14 -I ./ -I ../simulation -O3 -o simpleServerConsumer.o -c simpleServerConsumer.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -I <boost_include_dir> -O3 -o serverConsumer.o -c serverConsumer.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -I <boost_include_dir> -O3 -o serverProducer.o -c serverProducer.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -I <boost_include_dir> -O3 -o simpleServerSender.o -c simpleServerSender.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -I <boost_include_dir> -O3 -o simpleServerConsumer.o -c simpleServerConsumer.cpp
     
-    c++ -std=c++14 -O3 -DNDEBUG  simpleServerSender.o serverProducer.o -o simpleServerSender -lpthread -L libboost_atomic.so.1.71.0
-    c++ -std=c++14 -O3 -DNDEBUG  simpleServerConsumer.o serverConsumer.o -o simpleServerConsumer -lpthread -L libboost_atomic.so.1.71.0
+    c++ -std=c++14 -O3 -DNDEBUG  simpleServerSender.o serverProducer.o -o simpleServerSender -lpthread
+    c++ -std=c++14 -O3 -DNDEBUG  simpleServerConsumer.o serverConsumer.o -o simpleServerConsumer -lpthread
 
 
 ### How to run the server/broker and the simpleServerConsumer/Producer
