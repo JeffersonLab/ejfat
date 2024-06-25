@@ -241,30 +241,29 @@ The example below is how to run a single server with 1 consumer and
 
 #### 1) Run the server
 
-    simpleServer -file /tmp/myFileWithUri -ids 0,1
+    simpleServer -file /tmp/myFileWithUri
 
 where **-file** is file containing the uri to talk to the LB/CP (previously obtained
-by calling lbreserve). The **-ids** arg tells backend which sources are expected.
+by calling lbreserve).
 
 
 #### 2) Run the consumer
 
-    simpleServerConsumer -addr 129.57.177.2 -a 129.57.177.4 -ids 0,1 -p 17750
+    simpleServerConsumer -server 129.57.177.2 -a 129.57.177.4 -ids 0,1
 
-where **-addr** is simple server's host, **-a** is IP addr listening
-for data from LB, **-ids** are all expected source ids, and **-p** is starting
-port for incoming sources (1 for each src).
+where **-server** is simple server's host, **-a** is IP addr listening
+for data from LB, **-ids** are all expected source ids.
 
 #### 3) Run the first producer
 
-    simpleServerSender -addr 129.57.177.2 -id 0 -e 0 -d 10
+    simpleServerSender -server 129.57.177.2 -id 0 -d 10
     
-where **-addr** is simple server's host, **-id** is src ID, **-e** for simplicity
-is = id, **-d** is delay in microsec between events
+where **-server** is simple server's host, **-id** is src ID,
+**-d** is delay in microsec between events
 
 #### 4) Run the second producer
 
-    simpleServerSender -addr 129.57.177.2 -id 1 -e 1 -d 20
+    simpleServerSender -server 129.57.177.2 -id 1 -d 20
     
 
 #### More details
