@@ -22,7 +22,7 @@
 #include <string>
 #include <thread>
 #include <utility>
-#include <vector>
+#include <set>
 #include <fstream>
 #include <unordered_map>
 #include <array>
@@ -77,13 +77,13 @@ namespace ejfat {
         bool debug;
 
         /** Ids of data sources sending to this consumer. */
-        std::vector<int> ids;
+        std::set<int> ids;
 
-        /** Last tick sent from each of the listed data sources. */
-        std::vector<uint64_t> ticks;
+        /** Last tick sent from each of the listed data sources. Key = src. */
+        std::map<int, uint64_t> ticks;
 
-        /** Number of events sent since last sync msg sent. */
-        std::vector<uint64_t> bufsSent;
+        /** Number of events sent since last sync msg sent. Key = src. */
+        std::map<int, uint64_t> bufsSent;
 
         /**
          * Starting core # to run sending thread on.
@@ -234,7 +234,7 @@ namespace ejfat {
         // Multiple data sources
         EjfatServer(const std::string& uri = "",
                     const std::string& fileName = "/tmp/ejfat_uri",
-                    const std::vector<int> &ids = {0},
+                    const std::set<int> &ids = {0},
                     uint16_t dataPort = 19500, uint16_t consumerPort = 18300,
                     bool useIpv6 = false, bool connect = true, bool debug = false,
                     int startingCore = -1, int coreCount = 1,

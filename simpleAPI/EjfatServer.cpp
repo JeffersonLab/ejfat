@@ -30,7 +30,7 @@ namespace ejfat {
      *
      * @param uri          URI containing details of LB/CP connections(default "").
      * @param fileName     name of environmental variable containing URI (default /tmp/ejfat_uri).
-     * @param ids          vector of data source ids (defaults to single source of id=0).
+     * @param ids          set of data source ids (defaults to single source of id=0).
      * @param dataPort     UDP port to receive data on (defaults to 19500).
      * @param consumerPort UDP port to receive messages from consumers on (defaults to 18300).
      * @param useIpv6      if true, listen on local ipv6 sockets.
@@ -45,7 +45,7 @@ namespace ejfat {
      */
     EjfatServer::EjfatServer(const std::string& uri,
                              const std::string& fileName,
-                             const std::vector<int> &ids,
+                             const std::set<int> &ids,
                              uint16_t dataPort, uint16_t consumerPort,
                              bool useIpv6, bool connect, bool debug,
                              int startingCore, int coreCount,
@@ -102,10 +102,6 @@ namespace ejfat {
             ipv6DataAddrIn = true;
             ipv6ConsumerAddr = true;
         }
-
-        // Fill with 0s
-        ticks.assign(ids.size(), 0);
-        bufsSent.assign(ids.size(), 0);
 
         createSocketsAndStartThreads();
     }
@@ -558,13 +554,13 @@ namespace ejfat {
                     exit(1);
                 }
             }
-                // Register consumer with CP
+            // Register consumer with CP
             else if (cmd == REGISTER) {
                 // This call is always successful in this context
-                parseSimpleRegisterData(pkt, 65536, port, ipAddr);
+                uint32_t sourceCount;
+                parseSimpleRegisterData(pkt, 65536, sourceCount, port, ipAddr);
 
                 // For more on portRange, look into loadbalancer.proto file in ersap-grpc git repo
-                int sourceCount = ids.size();
                 int portRangeValue = getPortRange(sourceCount);
                 auto range = PortRange(portRangeValue);
                 if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
@@ -701,6 +697,21 @@ namespace ejfat {
                 continue;
             }
 
+
+//            // Grab all header info
+//            char ll,bb;
+//            int version2;
+//            uint16_t id;
+//            uint32_t offset, length, version1, protocol, entropy;
+//            uint64_t tick1, tick2;
+//
+//            parseLbHeader(pkt, &ll, &bb, &version1, &protocol, &entropy, &tick1);
+//            parseReHeader(pkt+LB_HEADER_BYTES, &version2, &id, &offset, &length, &tick2);
+//
+//                std::cerr << "v1 = " << version1 << ", v2 " << version2 << ", pro " << protocol <<
+//                ", en " << entropy << ", id " << id << std::endl;
+
+
             // Send pkt to receiver
             if (!connectSockets) {
                 if (ipv6DataAddrLB) {
@@ -728,6 +739,9 @@ namespace ejfat {
             uint16_t srcId = *((uint16_t *) (pkt + LB_HEADER_BYTES + 2));
             tick  = ntohll(tick);
             srcId = ntohs(srcId);
+
+            // Enter into set if not already there
+            ids.insert(srcId);
 
             uint64_t prevTick = ticks[srcId];
             ticks[srcId] = tick;

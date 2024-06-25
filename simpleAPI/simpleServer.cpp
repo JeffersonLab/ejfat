@@ -97,7 +97,7 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* core, int* coreCnt,
-                      std::vector<int>& ids,
+                      std::set<int>& ids,
                       uint16_t *dataPort , uint16_t *consumerPort,
                       bool *debug, bool *useIPv6, bool *noConnect,
                       char *uri, char *file) {
@@ -161,7 +161,7 @@ static void parseArgs(int argc, char **argv,
             case 3:
                 // Incoming source ids
                 if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ids\n");
+                    fprintf(stderr, "Invalid argument to -ids, need comma-separated set of ids\n");
                     exit(-1);
                 }
 
@@ -174,10 +174,10 @@ static void parseArgs(int argc, char **argv,
                     while (std::getline(ss, token, ',')) {
                         try {
                             int value = std::stoi(token);
-                            ids.push_back(value);
+                            ids.insert(value);
                         }
                         catch (const std::exception& e) {
-                            fprintf(stderr, "Invalid argument to -ids, need comma-separated list of ints\n");
+                            fprintf(stderr, "Invalid argument to -ids, need comma-separated set of ints\n");
                             exit(-1);
                         }
                     }
@@ -292,8 +292,7 @@ int main(int argc, char **argv) {
     char fileName[INPUT_LENGTH_MAX];
     memset(fileName, 0, INPUT_LENGTH_MAX);
 
-    std::vector<int> ids;
-    std::vector<int> cores;
+    std::set<int> ids;
 
 
     parseArgs(argc, argv, &core, &coreCount, ids, &dataPort, &consumerPort,
