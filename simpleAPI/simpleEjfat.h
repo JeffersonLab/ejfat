@@ -28,8 +28,9 @@ namespace ejfat {
       * This msg eventually gets modified and passed on to the CP.
       *
       * <ol>
-      * <li>data receiving port of consumer</li>
+      * <li>type of command to execute in server</li>
       * <li>length in bytes of following IP address</li>
+      * <li>data receiving port of consumer</li>
       * <li>IP address in chars</li>
       * </ol>
       * <pre>
@@ -38,7 +39,6 @@ namespace ejfat {
       *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       *  |     Cmd       |   IP Length   |            Data Port          |
-      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       *  |              IP Address ... (ending w/ '\0')                  |
       *  |                                                               |
@@ -87,8 +87,10 @@ namespace ejfat {
       * This msg eventually gets modified and passed on to the CP.
       *
       * <ol>
-      * <li>data receiving port of consumer</li>
+      * <li>type of command to execute in server</li>
       * <li>length in bytes of following IP address</li>
+      * <li>data receiving port of consumer</li>
+      * <li>number of incoming data sources</li>
       * <li>IP address in chars</li>
       * </ol>
       * <pre>
@@ -98,6 +100,7 @@ namespace ejfat {
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       *  |     Cmd       |   IP Length   |            Data Port          |
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      *  |                       Incoming source count                   |
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       *  |              IP Address ... (ending w/ '\0')                  |
       *  |                                                               |
@@ -106,19 +109,20 @@ namespace ejfat {
       *
       * @param buffer   buffer in which to write msg.
       * @param bufLen   # of available bytes in buffer.
+      * @param srcCount # of incoming data sources.
       * @param port     data receiving port of caller.
       * @param ipAddr   data receiving IP address of caller.
       *
       * @return # of bytes written including terminating null char of ipAddr,
       *         else -1 if buffer nullptr or not enough space in buffer to write.
       */
-    static int setSimpleRegisterData(char *buffer, uint32_t bufLen,
+    static int setSimpleRegisterData(char *buffer, uint32_t bufLen, uint32_t srcCount,
                                       uint16_t port, std::string & ipAddr) {
 
         // Check to see if room in buffer
         // (1 byte cmd, 1 byte len, 2 bytes port, ip addr, 1 byte '\0')
         uint8_t ipLen = static_cast<uint8_t>(ipAddr.length());
-        if (buffer == nullptr || (bufLen < 4 + ipLen + 1)) {
+        if (buffer == nullptr || (bufLen < 8 + ipLen + 1)) {
             return -1;
         }
 
@@ -132,11 +136,14 @@ namespace ejfat {
         // Put the data-receiving port in network byte order (big endian)
         *((uint16_t *)(buffer + 2)) = htons(port);
 
-        // write IP addr
-        ipAddr.copy(buffer + 4, ipLen);
-        buffer[4 + ipLen] = '\0'; // Null-terminate the string in the buffer
+        // source count in network order
+        *((uint32_t *)(buffer + 4)) = htonl(srcCount);
 
-        return (5 + ipLen);
+        // write IP addr
+        ipAddr.copy(buffer + 8, ipLen);
+        buffer[8 + ipLen] = '\0'; // Null-terminate the string in the buffer
+
+        return (9 + ipLen);
     }
 
 
@@ -151,6 +158,7 @@ namespace ejfat {
      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      *  |     Cmd       |   IP Length   |            Data Port          |
      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |                       Incoming source count                   |
      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      *  |              IP Address ... (ending w/ '\0')                  |
      *  |                                                               |
@@ -159,24 +167,26 @@ namespace ejfat {
      *
      * @param buffer   buffer to parse.
      * @param bufLen   # of available bytes in buffer.
+     * @param srcCount # of incoming data sources.
      * @param port     ref filled with data receiving port of caller.
      * @param ipAddr   ref filled with data receiving IP address of caller.
      * @return true if success, false if not enough room in buffer from which to extract data.
      */
-    static bool parseSimpleRegisterData(const char* buffer, uint32_t bufLen,
+    static bool parseSimpleRegisterData(const char* buffer, uint32_t bufLen, uint32_t &srcCount,
                                         uint16_t & port, std::string & ipAddr) {
         if (buffer == nullptr) return false;
 
-        uint8_t len = *reinterpret_cast<const uint8_t *>(buffer+1);
-        port = ntohs(*reinterpret_cast<const uint16_t *>(buffer+2));
+        uint8_t len =       *reinterpret_cast<const uint8_t *>(buffer+1);
+        port        = ntohs(*reinterpret_cast<const uint16_t *>(buffer+2));
+        srcCount    = ntohl(*reinterpret_cast<const uint32_t *>(buffer+4));
 
         // Check to see if room in buffer to completely read its contents
-        if (bufLen < 4 + len + 1) {
+        if (bufLen < 8 + len + 1) {
             return false;
         }
 
         // Copy IP address from buffer to ipAddr string, assumes ending '\0'
-        ipAddr.assign(buffer + 4);
+        ipAddr.assign(buffer + 8);
 
         return true;
     }

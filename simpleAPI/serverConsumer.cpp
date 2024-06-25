@@ -212,7 +212,7 @@ namespace ejfat {
     bool serverConsumer::registerWithSimpleServer() {
         char buffer[1024];
         // In this context will not return err (-1)
-        int len = setSimpleRegisterData(buffer, 1024, dataPort, dataAddr);
+        int len = setSimpleRegisterData(buffer, 1024, (uint32_t)(ids.size()), dataPort, dataAddr);
         // Send to server
         ssize_t err = 0;
         if (ipv6ServerAddr) {
