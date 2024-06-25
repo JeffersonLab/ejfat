@@ -55,7 +55,7 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6]\n",
 
@@ -65,7 +65,6 @@ static void printHelp(char *programName) {
             "        [-dport <incoming data port of this server (default 19500)>]",
             "        [-cport <incoming consumer msg port of this server (default 18300)>]\n",
 
-            "        [-ids <comma-separated list of incoming source ids>]",
             "        [-nc  (no connect on socket)]",
             "        [-core    <starting core # for send thd>]",
             "        [-coreCnt <# of cores for send thd>]");
@@ -86,7 +85,6 @@ static void printHelp(char *programName) {
  * @param argv            arg list from main().
  * @param core            starting core id on which to run sending thread.
  * @param coreCnt         number of cores on which to run sending thread.
- * @param ids             vector to be filled with sender IDs.
  * @param dataPort        port to listen on for incoming events.
  * @param consumerPort    port to listen on for msgs from consumers.
  * @param debug           true for debug output.
@@ -97,7 +95,6 @@ static void printHelp(char *programName) {
  */
 static void parseArgs(int argc, char **argv,
                       int* core, int* coreCnt,
-                      std::set<int>& ids,
                       uint16_t *dataPort , uint16_t *consumerPort,
                       bool *debug, bool *useIPv6, bool *noConnect,
                       char *uri, char *file) {
@@ -111,7 +108,6 @@ static void parseArgs(int argc, char **argv,
     static struct option long_options[] =
             {{"core",     1, nullptr, 1},
              {"coreCnt",  1, nullptr, 2},
-             {"ids",      1, nullptr, 3},
              {"ipv6",     0, nullptr, 5},
              {"nc",       0, nullptr, 7},
              {"uri",      1, nullptr, 8},
@@ -156,35 +152,6 @@ static void parseArgs(int argc, char **argv,
                 }
 
                 break;
-
-
-            case 3:
-                // Incoming source ids
-                if (strlen(optarg) < 1) {
-                    fprintf(stderr, "Invalid argument to -ids, need comma-separated set of ids\n");
-                    exit(-1);
-                }
-
-                {
-                    ids.clear();
-                    std::string s = optarg;
-                    std::stringstream ss(s);
-                    std::string token;
-
-                    while (std::getline(ss, token, ',')) {
-                        try {
-                            int value = std::stoi(token);
-                            ids.insert(value);
-                        }
-                        catch (const std::exception& e) {
-                            fprintf(stderr, "Invalid argument to -ids, need comma-separated set of ints\n");
-                            exit(-1);
-                        }
-                    }
-                }
-
-                break;
-
 
             case 5:
                 // use IP version 6
@@ -292,10 +259,8 @@ int main(int argc, char **argv) {
     char fileName[INPUT_LENGTH_MAX];
     memset(fileName, 0, INPUT_LENGTH_MAX);
 
-    std::set<int> ids;
 
-
-    parseArgs(argc, argv, &core, &coreCount, ids, &dataPort, &consumerPort,
+    parseArgs(argc, argv, &core, &coreCount, &dataPort, &consumerPort,
               &debug, &useIPv6, &noConnect, uri, fileName);
 
 
@@ -303,7 +268,7 @@ int main(int argc, char **argv) {
 
 
     //--------------------------------------------
-    EjfatServer server(uri, fileName, ids, dataPort, consumerPort, useIPv6, !noConnect, debug, core, coreCount);
+    EjfatServer server(uri, fileName, dataPort, consumerPort, useIPv6, !noConnect, debug, core, coreCount);
     fprintf(stderr, "Past server creation\n");
 
 

@@ -234,7 +234,6 @@ namespace ejfat {
         // Multiple data sources
         EjfatServer(const std::string& uri = "",
                     const std::string& fileName = "/tmp/ejfat_uri",
-                    const std::set<int> &ids = {0},
                     uint16_t dataPort = 19500, uint16_t consumerPort = 18300,
                     bool useIpv6 = false, bool connect = true, bool debug = false,
                     int startingCore = -1, int coreCount = 1,
