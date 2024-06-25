@@ -216,13 +216,13 @@ into your own build system.
 
     cd simpleAPI
     
-    c++  -I ./ -I ../simulation -O3 -o serverConsumer.o -c serverConsumer.cpp
-    c++  -I ./ -I ../simulation -O3 -o serverProducer.o -c serverProducer.cpp
-    c++  -I ./ -I ../simulation -O3 -o simpleServerSender.o -c simpleServerSender.cpp
-    c++  -I ./ -I ../simulation -O3 -o simpleServerConsumer.o -c simpleServerConsumer.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -O3 -o serverConsumer.o -c serverConsumer.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -O3 -o serverProducer.o -c serverProducer.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -O3 -o simpleServerSender.o -c simpleServerSender.cpp
+    c++ -std=c++14 -I ./ -I ../simulation -O3 -o simpleServerConsumer.o -c simpleServerConsumer.cpp
     
-    c++  -O3 -DNDEBUG  simpleServerSender.o serverProducer.o -o simpleServerSender -lpthread -L libboost_atomic.so.1.71.0
-    c++  -O3 -DNDEBUG  simpleServerConsumer.o serverConsumer.o -o simpleServerConsumer -lpthread -L libboost_atomic.so.1.71.0
+    c++ -std=c++14 -O3 -DNDEBUG  simpleServerSender.o serverProducer.o -o simpleServerSender -lpthread -L libboost_atomic.so.1.71.0
+    c++ -std=c++14 -O3 -DNDEBUG  simpleServerConsumer.o serverConsumer.o -o simpleServerConsumer -lpthread -L libboost_atomic.so.1.71.0
 
 
 ### How to run the server/broker and the simpleServerConsumer/Producer
