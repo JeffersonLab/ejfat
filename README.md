@@ -194,15 +194,18 @@ The following will be created:
 - **lbreserve**             (reserves a load balancer)
 - **lbfree**                (frees a load balancer)
 - **lbmonitor**             (prints stats of a load balancer)
+
+
+- **simpleServer**          (server brokering clients to LB/CP)
 - **simpleServerConsumer**  (consumer talking to simple server)
 - **simpleServerProducer**  (producer talking to simple server)
-
 
 
 ### Build apps that talk to the simple server
 
 The applications that talk to the simple server,
-simpleServerSender and simpleServerConsumer, are automatically built along with the
+**simpleServerSender** and **simpleServerConsumer**,
+are automatically built along with the
 rest of the code in the simpleAPI directory.
 However, listed below are the commands to build them by hand.
 This may be useful in incorporating them, or your own versions of them,
@@ -213,14 +216,47 @@ into your own build system.
 
     cd simpleAPI
     
-    c++  -I ./ -I ../simulation -O3 -o serverConsumer.o -c /daqfs/ersap/ejfat/simpleAPI/serverConsumer.cpp
-    c++  -I ./ -I ../simulation -O3 -o serverProducer.o -c /daqfs/ersap/ejfat/simpleAPI/serverProducer.cpp
-    c++  -I ./ -I ../simulation -O3 -o simpleServerSender.o -c /daqfs/ersap/ejfat/simpleAPI/simpleServerSender.c
-    c++  -I ./ -I ../simulation -O3 -o simpleServerConsumer.o -c /daqfs/ersap/ejfat/simpleAPI/simpleServerConsumer.cpp
+    c++  -I ./ -I ../simulation -O3 -o serverConsumer.o -c serverConsumer.cpp
+    c++  -I ./ -I ../simulation -O3 -o serverProducer.o -c serverProducer.cpp
+    c++  -I ./ -I ../simulation -O3 -o simpleServerSender.o -c simpleServerSender.cpp
+    c++  -I ./ -I ../simulation -O3 -o simpleServerConsumer.o -c simpleServerConsumer.cpp
     
     c++  -O3 -DNDEBUG  simpleServerSender.o serverProducer.o -o simpleServerSender -lpthread -L libboost_atomic.so.1.71.0
     c++  -O3 -DNDEBUG  simpleServerConsumer.o serverConsumer.o -o simpleServerConsumer -lpthread -L libboost_atomic.so.1.71.0
 
+
+### How to run the server/broker and the simpleServerConsumer/Producer
+
+The example below is how to run a single server with 1 consumer and
+2 producers (ids = 0 and 1).
+
+#### 1) Run the server
+
+    simpleServer -file /tmp/myFileWithUri -ids 0,1
+
+where **-file** is file containing the uri to talk to the LB/CP (previously obtained
+by calling lbreserve). The **-ids** arg tells backend which sources are expected.
+
+
+#### 2) Run the consumer
+
+    simpleServerConsumer -addr 129.57.177.2 -a 129.57.177.4 -ids 0,1 -p 17750
+
+where **-addr** is simple server's host, **-a** is IP addr listening
+for data from LB, **-ids** are all expected source ids, and **-p** is starting
+port for incoming sources (1 for each src).
+
+#### 3) Run the first producer
+
+    simpleServerSender -addr 129.57.177.2 -id 0 -e 0 -d 10
+    
+where **-addr** is simple server's host, **-id** is src ID, **-e** for simplicity
+is = id, **-d** is delay in microsec between events
+
+#### 4) Run the second producer
+
+    simpleServerSender -addr 129.57.177.2 -id 1 -e 1 -d 20
+    
 
 #### More details
 
