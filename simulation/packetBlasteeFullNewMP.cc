@@ -2068,72 +2068,72 @@ static void *threadReadBuffers(void *arg) {
 }
 
 
-
-/**
- * Thread to read all buffers from a ALL data sources.
- * There is one buffer supply for each data source.
- * Not all buffers have valid data, so ignore those with no data.
- * @param arg
- */
-static void *threadReadAllBuffers(void *arg) {
-
-    threadArg *tArg = (threadArg *) arg;
-    int id = tArg->sourceId;
-    auto & supply = tArg->supplyMap;
-
-
-#ifdef __linux__
-
-    int core = tArg->core;
-    if (core > -1) {
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-
-        std::cerr << "Run read buffer thd for source " << id << " on core " << core << "\n";
-        CPU_SET(core, &cpuset);
-
-        pthread_t current_thread = pthread_self();
-        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
-    }
-
-#endif
-
-
-    std::cout << "   Started cleanup thread for source " << id << std::endl;
-
-    std::shared_ptr<BufferItem> bufItem;
-
-    // If bufs are not already dumped by the reassembly thread,
-    // we need to put them back into the supply now.
-    while (true) {
-        // Grab a fully reassembled buffer from Supplier
-        bufItem = supply->consumerGet();
-
-//            if (bufItem->validData()) {
-//                // Do something with buffer here.
-//                // Data can be accessed thru the (shared pointer to) ByteBuffer object:
-//                std::shared_ptr<ByteBuffer> buffer = bufItem->getBuffer();
 //
-//                // or more directly thru its byte array:
-//                uint8_t *buf = bufItem->getBuffer()->array();
-//                size_t dataBytes = bufItem->getBuffer()->limit();
+///**
+// * Thread to read all buffers from a ALL data sources.
+// * There is one buffer supply for each data source.
+// * Not all buffers have valid data, so ignore those with no data.
+// * @param arg
+// */
+//static void *threadReadAllBuffers(void *arg) {
 //
-//                // Get access to meta data from its packet RE header
-//                // if data source id or tick value is needed.
-//                reHeader hdr = bufItem->getHeader();
-//            }
-
-        // Release item for reuse
-        supply->release(bufItem);
-    }
-
-    // Thread not needed and can exit.
-    return nullptr;
-}
-
+//    threadArg *tArg = (threadArg *) arg;
+//    int id = tArg->sourceId;
+//    auto & supply = tArg->supplyMap;
+//
+//
+//#ifdef __linux__
+//
+//    int core = tArg->core;
+//    if (core > -1) {
+//        cpu_set_t cpuset;
+//        CPU_ZERO(&cpuset);
+//
+//        std::cerr << "Run read buffer thd for source " << id << " on core " << core << "\n";
+//        CPU_SET(core, &cpuset);
+//
+//        pthread_t current_thread = pthread_self();
+//        int rc = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+//        if (rc != 0) {
+//            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+//        }
+//    }
+//
+//#endif
+//
+//
+//    std::cout << "   Started cleanup thread for source " << id << std::endl;
+//
+//    std::shared_ptr<BufferItem> bufItem;
+//
+//    // If bufs are not already dumped by the reassembly thread,
+//    // we need to put them back into the supply now.
+//    while (true) {
+//        // Grab a fully reassembled buffer from Supplier
+//        bufItem = supply->consumerGet();
+//
+////            if (bufItem->validData()) {
+////                // Do something with buffer here.
+////                // Data can be accessed thru the (shared pointer to) ByteBuffer object:
+////                std::shared_ptr<ByteBuffer> buffer = bufItem->getBuffer();
+////
+////                // or more directly thru its byte array:
+////                uint8_t *buf = bufItem->getBuffer()->array();
+////                size_t dataBytes = bufItem->getBuffer()->limit();
+////
+////                // Get access to meta data from its packet RE header
+////                // if data source id or tick value is needed.
+////                reHeader hdr = bufItem->getHeader();
+////            }
+//
+//        // Release item for reuse
+//        supply->release(bufItem);
+//    }
+//
+//    // Thread not needed and can exit.
+//    return nullptr;
+//}
+//
 
 
 
@@ -2323,7 +2323,6 @@ int main(int argc, char **argv) {
 
     // Arrays for holding threads & their args
     pthread_t thds[sourceCount];
-    threadArg *tArg[sourceCount];
 
     //---------------------------------------------------
     // Each reassembly thd will have a buffer supply in which to hold reconstructed buffers.
@@ -2347,7 +2346,7 @@ int main(int argc, char **argv) {
     // For each data source ...
     for (int i=0; i < sourceCount; i++) {
         // Start thread to reassemble buffers of packets from 1 source
-        auto arg = tArg[i] = (threadArg *) calloc(1, sizeof(threadArg));
+        auto arg = (threadArg *) calloc(1, sizeof(threadArg));
         if (arg == nullptr) {
             fprintf(stderr, "\n ******* ran out of memory\n\n");
             exit(1);
@@ -2387,7 +2386,7 @@ int main(int argc, char **argv) {
     //---------------------------------------------------
     if (!dumpBufs) {
         for (int i=0; i < sourceCount; i++) {
-            threadArg *targ = (threadArg *) calloc(1, sizeof(threadArg));
+            threadReadBufArg *targ = (threadReadBufArg *) calloc(1, sizeof(threadReadBufArg));
             if (targ == nullptr) {
                 fprintf(stderr, "out of mem\n");
                 return -1;
@@ -2396,7 +2395,6 @@ int main(int argc, char **argv) {
             // Supply of buffers for holding reassembled data from a single source.
             // One from each reassembly thread.
             targ->supplyMap = supplyMaps[i];
-            targ->noRestart = noRestart;
             targ->debug = debug;
             targ->sourceId = ids[i];
             if (pinBufCores) {
