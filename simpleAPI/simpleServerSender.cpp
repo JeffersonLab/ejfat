@@ -50,20 +50,18 @@ using namespace ejfat;
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6]\n",
 
-            "        -addr <IP address of simple server>",
+            "        -server <IP address of simple server>",
             "        [-port <port of simple server (default 19500)>]\n",
 
             "        [-direct <ip_addr:port>]\n",
 
             "        [-nc  (no connect on socket)]",
-            "        [-mtu <desired MTU size, 9000 default/max, 0 system default, 1200 min>]\n",
-
-            "        [-id <data id (default 0)>]",
-            "        [-e  <entropy (default 0)>]\n",
+            "        [-mtu <desired MTU size, 9000 default/max, 0 system default, 1200 min>]",
+            "        [-id <data id (default 0)>]\n",
 
             "        [-b     <buffer size, (default ~100kB)>]",
             "        [-cores <comma-separated list of cores to run on>]",
@@ -119,14 +117,14 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
              {"ipv6",     0, nullptr, 5},
              {"cores",    1, nullptr, 6},
              {"nc",       0, nullptr, 7},
-             {"addr",     1, nullptr, 8},
+             {"server",   1, nullptr, 8},
              {"port",     1, nullptr, 9},
              {"direct",   1, nullptr, 10},
              {nullptr,    0, 0,    0}
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhd:b:e:", long_options, 0)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhd:b:", long_options, 0)) != EOF) {
 
         if (c == -1)
             break;
@@ -144,15 +142,15 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
                 }
                 break;
 
-            case 'e':
-                // ENTROPY
-                i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp < 0) {
-                    fprintf(stderr, "Invalid argument to -e. Entropy must be >= 0\n");
-                    exit(-1);
-                }
-                *entropy = i_tmp;
-                break;
+//            case 'e':
+//                // ENTROPY
+//                i_tmp = (int) strtol(optarg, nullptr, 0);
+//                if (i_tmp < 0) {
+//                    fprintf(stderr, "Invalid argument to -e. Entropy must be >= 0\n");
+//                    exit(-1);
+//                }
+//                *entropy = i_tmp;
+//                break;
 
             case 'd':
                 // DELAY
@@ -189,6 +187,7 @@ static void parseArgs(int argc, char **argv, int* mtu, int *entropy,
                     exit(-1);
                 }
                 *id = i_tmp;
+                *entropy = i_tmp;
                 break;
 
             case 4:

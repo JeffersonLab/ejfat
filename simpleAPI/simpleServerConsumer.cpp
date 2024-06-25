@@ -57,7 +57,7 @@ static void printHelp(char *programName) {
             programName,
             "        [-h] [-v] [-jointstats]\n",
 
-            "         -addr <IP address of simple server>",
+            "         -server <IP address of simple server>",
             "        [-port <port of simple server (default 19500)>]\n",
 
             "        [-direct]\n",
@@ -113,7 +113,7 @@ static void parseArgs(int argc, char **argv,
                           {"ids",         1, nullptr, 3},
                           {"jointstats",  0, nullptr, 4},
                                 // Control Plane
-                          {"addr",        1, nullptr, 5},
+                          {"server",      1, nullptr, 5},
                           {"port",        1, nullptr, 6},
                           {"direct",      0, nullptr, 7},
                           {0,       0, 0,    0}
