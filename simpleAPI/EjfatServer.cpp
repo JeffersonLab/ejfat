@@ -30,7 +30,6 @@ namespace ejfat {
      *
      * @param uri          URI containing details of LB/CP connections(default "").
      * @param fileName     name of environmental variable containing URI (default /tmp/ejfat_uri).
-     * @param ids          set of data source ids (defaults to single source of id=0).
      * @param dataPort     UDP port to receive data on (defaults to 19500).
      * @param consumerPort UDP port to receive messages from consumers on (defaults to 18300).
      * @param useIpv6      if true, listen on local ipv6 sockets.
@@ -45,7 +44,6 @@ namespace ejfat {
      */
     EjfatServer::EjfatServer(const std::string& uri,
                              const std::string& fileName,
-                             const std::set<int> &ids,
                              uint16_t dataPort, uint16_t consumerPort,
                              bool useIpv6, bool connect, bool debug,
                              int startingCore, int coreCount,
@@ -53,7 +51,7 @@ namespace ejfat {
 
             dataPortIn(dataPort), consumerPort(consumerPort),
             useIPv6(useIpv6), connectSockets(connect), debug(debug),
-            ids(ids), startingCore(startingCore),
+            startingCore(startingCore),
             coreCount(coreCount), endThreads(false),
             version(version), protocol(protocol)
 
