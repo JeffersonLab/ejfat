@@ -190,7 +190,7 @@ The following will be created:
 
 - **libejfat_simple.so**    (consumer and producer C++ classes)
 - **simpleConsumer**        (receives and reassembles data)
-- **simpleProduer**         (packetizes and sends data)
+- **simpleSender**          (packetizes and sends data)
 - **lbreserve**             (reserves a load balancer)
 - **lbfree**                (frees a load balancer)
 - **lbmonitor**             (prints stats of a load balancer)
@@ -198,7 +198,7 @@ The following will be created:
 
 - **simpleServer**          (server brokering clients to LB/CP)
 - **simpleServerConsumer**  (consumer talking to simple server)
-- **simpleServerProducer**  (producer talking to simple server)
+- **simpleServerSender**    (producer talking to simple server)
 
 
 ### Build apps that talk to the simple server
