@@ -145,7 +145,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
 
@@ -157,7 +157,8 @@ static void printHelp(char *programName) {
             "        [-r <UDP receive buffer byte size, system default>]\n",
 
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
-            "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
+            "        [-file <file with URI (default /tmp/ejfat_uri)>]",
+            "        [-token <CP admin token (default udplbd_default_change_me)>]\n",
 
             "        [-dump (no thd to get & merge buffers)]",
             "        [-lump (1 thd to get & merge buffers from all sources)]",
@@ -203,8 +204,9 @@ static void printHelp(char *programName) {
  * @param dataAddr      IP address to send to CP as data destination addr for this program.
  * @param uri           URI containing LB/CP connection info.
  * @param file          name of file in which to read URI.
+ * @param token         CP admin token.
  * @param ids           vector to be filled with data source id numbers.
-*/
+ */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
                       int *core, int *coreCnt, int *coreBuf,
@@ -213,7 +215,7 @@ static void parseArgs(int argc, char **argv,
                       bool *dump, bool *lump,
                       bool *noRestart, bool *jointStats,
                       char *listenAddr, char *dataAddr,
-                      char *uri, char *file,
+                      char *uri, char *file, char *token,
                       std::vector<int>& ids) {
 
     int c, i_tmp;
@@ -238,6 +240,7 @@ static void parseArgs(int argc, char **argv,
                           {"addr",        1, nullptr, 12},
                           {"uri",         1, nullptr, 13},
                           {"file",        1, nullptr, 14},
+                          {"token",       1, nullptr, 15},
                           {0,       0, 0,    0}
             };
 
@@ -389,7 +392,7 @@ static void parseArgs(int argc, char **argv,
 
             case 13:
                 // URI
-                if (strlen(optarg) >= 256) {
+                if (strlen(optarg) >= 255) {
                     fprintf(stderr, "Invalid argument to -uri, uri name is too long\n");
                     exit(-1);
                 }
@@ -398,11 +401,20 @@ static void parseArgs(int argc, char **argv,
 
             case 14:
                 // FILE NAME
-                if (strlen(optarg) >= 256) {
+                if (strlen(optarg) >= 255) {
                     fprintf(stderr, "Invalid argument to -file, file name is too long\n");
                     exit(-1);
                 }
                 strcpy(file, optarg);
+                break;
+
+            case 15:
+                // ADMIN TOKEN
+                if (strlen(optarg) >= 511) {
+                    fprintf(stderr, "Invalid argument to -token, too long\n");
+                    exit(-1);
+                }
+                strcpy(token, optarg);
                 break;
 
             case 7:
@@ -2175,6 +2187,10 @@ int main(int argc, char **argv) {
     char beName[256];
     memset(beName, 0, 256);
 
+    char adminToken[512];
+    memset(adminToken, 0, 512);
+    std::string token;
+
     //----------------------
 
     char listeningAddr[16];
@@ -2188,10 +2204,17 @@ int main(int argc, char **argv) {
               &dumpBufs, &lumpBufs,
               &noRestart, &jointStats,
               listeningAddr, dataAddr,
-              uri, fileName, ids);
+              uri, fileName, adminToken, ids);
 
     pinCores    = startingCore >= 0;
     pinBufCores = startingBufCore >= 0;
+
+    if (strlen(adminToken) < 1) {
+        token = "udplbd_default_change_me";
+    }
+    else {
+        token = adminToken;
+    }
 
 #ifdef __linux__
 
@@ -2245,11 +2268,10 @@ int main(int argc, char **argv) {
         if (parsed) {
             // URI is in correct format
             if (!uriInfo.haveInstanceToken) {
-                std::cerr << "no LB/CP info in URI" << std::endl;
+                std::cerr << "no instance token in URI, substitute admin token" << std::endl;
+                uriInfo.instanceToken = token;
             }
-            else {
-                haveEverything = true;
-            }
+            haveEverything = true;
         }
     }
 
@@ -2263,13 +2285,10 @@ int main(int argc, char **argv) {
                 bool parsed = parseURI(uriLine, uriInfo);
                 if (parsed) {
                     if (!uriInfo.haveInstanceToken) {
-                        std::cerr << "no LB/CP info in file" << std::endl;
-                        file.close();
-                        return 1;
+                        std::cerr << "no instance token in file, substitute admin token" << std::endl;
+                        uriInfo.instanceToken = token;
                     }
-                    else {
-                        haveEverything = true;
-                    }
+                    haveEverything = true;
                 }
             }
 

@@ -130,7 +130,7 @@ static bool haveEtName = false;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]\n",
@@ -144,7 +144,8 @@ static void printHelp(char *programName) {
             "        [-stime <stat sample millisec (t >= 1 msec, default = 1)]\n",
 
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
-            "        [-file <file with URI (default /tmp/ejfat_uri)>]\n",
+            "        [-file <file with URI (default /tmp/ejfat_uri)>]",
+            "        [-token <CP admin token (default udplbd_default_change_me)>]\n",
 
             "        [-kp <PID proportional constant, default 0.52>]",
             "        [-ki <PID integral constant, default 0.005>]",
@@ -188,6 +189,7 @@ static void printHelp(char *programName) {
  * @param listenAddr    filled with IP address to listen on (bind to) for incoming data.
  * @param uri           URI containing LB/CP connection info.
  * @param file          name of file in which to read URI.
+ * @param token         CP admin token.
  * @param etFilename    filled with name of ET file in which to write data.
  * @param statBaseName  filled with base name of files used to store 100 sec of ET fill level data.
  * @param kp            filled with PID proportional constant.
@@ -201,7 +203,7 @@ static void parseArgs(int argc, char **argv,
                       uint16_t* port,
                       uint32_t *fillCount, uint32_t *reportTime, uint32_t *stime,
                       bool *debug, bool *useIPv6, char *dataAddr,
-                      char *listenAddr, char *uri, char* file,
+                      char *listenAddr, char *uri, char* file, char *token,
                       char *etFilename, std::string &statFileName,
                       float *kp, float *ki, float *kd,
                       std::vector<int>& cores) {
@@ -218,6 +220,7 @@ static void parseArgs(int argc, char **argv,
 
                           {"uri",       1, nullptr, 4},
                           {"file",      1, nullptr, 5},
+                          {"token",     1, nullptr, 6},
 
                           {"sfile",     1, nullptr, 9},
                           {"stime",     1, nullptr, 10},
@@ -399,7 +402,7 @@ static void parseArgs(int argc, char **argv,
 
             case 4:
                 // URI
-                if (strlen(optarg) >= 256) {
+                if (strlen(optarg) >= 255) {
                     fprintf(stderr, "Invalid argument to -uri, uri name is too long\n");
                     exit(-1);
                 }
@@ -408,11 +411,20 @@ static void parseArgs(int argc, char **argv,
 
             case 5:
                 // FILE NAME
-                if (strlen(optarg) >= 256) {
+                if (strlen(optarg) >= 255) {
                     fprintf(stderr, "Invalid argument to -file, file name is too long\n");
                     exit(-1);
                 }
                 strcpy(file, optarg);
+                break;
+
+            case 6:
+                // ADMIN TOKEN
+                if (strlen(optarg) >= 511) {
+                    fprintf(stderr, "Invalid argument to -token, too long\n");
+                    exit(-1);
+                }
+                strcpy(token, optarg);
                 break;
 
             case 9:
@@ -658,6 +670,13 @@ static void *writeToEtThread(void *arg) {
     return nullptr;
 }
 
+// Function that runs the Crow server
+static void run_crow_server() {
+    crow::SimpleApp app;
+
+    // Configure and run the server on port 8081
+    app.port(8081).multithreaded().run();
+}
 
 // structure for passing args to thread
 typedef struct threadStruct_t {
@@ -1006,13 +1025,6 @@ static void *pidThread(void *arg) {
     return (nullptr);
 }
 
-// Function that runs the Crow server
-void run_crow_server() {
-    crow::SimpleApp app;
-
-    // Configure and run the server on port 8081
-    app.port(8081).multithreaded().run();
-}
 
 // Statistics
 static volatile int64_t totalBytes=0, totalPackets=0, totalEvents=0;
@@ -1250,6 +1262,10 @@ int main(int argc, char **argv) {
     char beName[256];
     memset(beName, 0, 256);
 
+    char adminToken[512];
+    memset(adminToken, 0, 512);
+    std::string token;
+
 
     parseArgs(argc, argv,
               &bufSize, &recvBufSize, &tickPrescale,
@@ -1257,13 +1273,20 @@ int main(int argc, char **argv) {
               &port,
               &fcount, &reportTime, &stime,
               &debug, &useIPv6, dataAddr,
-              listeningAddr, uri, fileName,
+              listeningAddr, uri, fileName, adminToken,
               et_filename, stat_file_name,
               &Kp, &Ki, &Kd,
               cores);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
     std::cerr << "Using Kp = " << Kp << ", Ki = " << Ki << ", Kd = " << Kd << "\n";
+
+    if (strlen(adminToken) < 1) {
+        token = "udplbd_default_change_me";
+    }
+    else {
+        token = adminToken;
+    }
 
     //----------------------------------------------
     // Parse the URI (directly given or in file().
@@ -1284,11 +1307,10 @@ int main(int argc, char **argv) {
         if (parsed) {
             // URI is in correct format
             if (!uriInfo.haveInstanceToken) {
-                std::cerr << "no LB/CP info in URI" << std::endl;
+                std::cerr << "no instance token in URI, substitute admin token" << std::endl;
+                uriInfo.instanceToken = token;
             }
-            else {
-                haveEverything = true;
-            }
+            haveEverything = true;
         }
     }
 
@@ -1302,13 +1324,10 @@ int main(int argc, char **argv) {
                 bool parsed = parseURI(uriLine, uriInfo);
                 if (parsed) {
                     if (!uriInfo.haveInstanceToken) {
-                        std::cerr << "no LB/CP info in file" << std::endl;
-                        file.close();
-                        return 1;
+                        std::cerr << "no instance token in file, substitute admin token" << std::endl;
+                        uriInfo.instanceToken = token;
                     }
-                    else {
-                        haveEverything = true;
-                    }
+                    haveEverything = true;
                 }
             }
 
