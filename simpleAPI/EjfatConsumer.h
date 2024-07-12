@@ -139,19 +139,19 @@ namespace ejfat {
          * used to produce an error signal to the CP which allows the CP to distribute
          * events in a balanced manner.
          */
-        float Kp = 0.;
+        float Kp = 0.F;
 
         /**
          * PID integral constant set through trial and error used to produce an error
          * signal to the CP.
          */
-        float Ki = 0.;
+        float Ki = 0.F;
 
         /**
          * PID derivative constant set through trial and error used to produce an error
          * signal to the CP.
          */
-        float Kd = 0.; // 1000x normal
+        float Kd = 0.F; // 1000x normal
 
         /**
          * Initial weight of this consumer, compared to other consumers,
@@ -159,10 +159,16 @@ namespace ejfat {
          * The absolute value of the weight is not meaningful, only its value
          * in relation to other consumers.
          */
-        float weight = 1.;
+        float weight = 1.F;
 
         /** Set point of PID loop, goal of fifo level-setting. */
-        float setPoint = 0.;
+        float setPoint = 0.F;
+
+        /** Factor for setting min # of CP slot assignments. */
+        float minFactor = 0.F;
+
+        /** Factor for setting max # of CP slot assignments. */
+        float maxFactor = 0.F;
 
         /** Number of fill values to average when reporting to grpc. */
         int fcount = 1000;
@@ -310,6 +316,7 @@ namespace ejfat {
                       const std::string& fileName = "/tmp/ejfat_uri",
                       bool debug = false, bool jointStats = false,
                       int startingCore = -1, int coreCount = 1,
+                      float minFactor = 0., float maxFactor = 0.,
                       float Kp=0., float Ki=0., float Kd=0.,
                       float setPt=0., float weight=1.);
 

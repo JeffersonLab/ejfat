@@ -29,6 +29,7 @@
 #include <iostream>
 #include <cinttypes>
 #include <chrono>
+#include <set>
 #include <getopt.h>
 
 // GRPC stuff
@@ -44,17 +45,19 @@
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ipv6]",
             "         -host <CP IP address>",
             "        [-port <CP port, 18347 default)>]",
+
             "        [-name  <name to give LB instance, \"Default_LB\" default>]",
             "        [-file  <file to store URI, /tmp/ejfat_uri default>]",
             "        [-until <end time of LB reservation, 10 min from now default>]",
             "                 RFC 3339 format, e.g. 2024-03-28T23:59:22Z (+4 hours EDT, +5 EST)\n",
 
-            "        [<admin_token> udplbd_default_change_me = default]");
+            "        [-senders <comma-separated list of allowed sender IP addrs>]",
+            "        [-token <admin token, udplbd_default_change_me = default>");
 
     fprintf(stderr, "        For the specified host/port, reserve an LB assigned the given name until the given time.\n");
     fprintf(stderr, "        A URI, containing LB connection info is printed to stdout and written into a file.\n");
@@ -68,7 +71,8 @@ static void parseArgs(int argc, char **argv,
                       uint16_t* port,
                       bool* debug, bool* useIPv6,
                       char* host, char* name, char *file,
-                      char* until, char* adminToken) {
+                      char* until, char* adminToken,
+                      std::set<std::string>& senders) {
 
     int c, i_tmp;
     bool help = false;
@@ -81,6 +85,8 @@ static void parseArgs(int argc, char **argv,
              {"file",     1, nullptr, 4},
              {"until",    1, nullptr, 5},
              {"ipv6",     0, nullptr, 6},
+             {"token",    1, nullptr, 7},
+             {"senders",  1, nullptr, 8},
              {nullptr,    0, 0,       0}
             };
 
@@ -150,6 +156,43 @@ static void parseArgs(int argc, char **argv,
                 *useIPv6 = true;
                 break;
 
+            case 7:
+                // ADMIN TOKEN
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -token, too long\n");
+                    exit(-1);
+                }
+                strcpy(adminToken, optarg);
+                break;
+
+
+            case 8:
+                // allowed senders
+                if (strlen(optarg) < 1) {
+                    fprintf(stderr, "Invalid argument to -senders, need comma-separated list of ip addrs\n");
+                    exit(-1);
+                }
+
+                {
+                    senders.clear();
+                    std::string s = optarg;
+                    std::stringstream ss(s);
+                    std::string token;
+
+                    while (std::getline(ss, token, ',')) {
+                        try {
+                            boost::asio::ip::make_address(token);
+                        }
+                        catch (const boost::system::system_error& e) {
+                            std::cout << "skip bad ip addr, " << token << std::endl;
+                            continue;
+                        }
+                        senders.insert(token);
+                    }
+                }
+
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -176,16 +219,6 @@ static void parseArgs(int argc, char **argv,
         exit(-1);
     }
 
-    // Process remaining arguments (non-options)
-    if (optind < argc) {
-        strcpy(adminToken, argv[optind]);
-        std::cout << "First non-option argument: " << argv[optind] << std::endl;
-    }
-//    else {
-//        fprintf(stderr, "Admin token must be specified\n\n");
-//        printHelp(argv[0]);
-//        exit(-1);
-//    }
 }
 
 
@@ -219,10 +252,10 @@ int main(int argc, char **argv) {
     char adminToken[INPUT_LENGTH_MAX];
     memset(adminToken, 0, INPUT_LENGTH_MAX);
 
-
+    std::set<std::string> senders;
 
     parseArgs(argc, argv, &cp_port, &debug, &useIPv6,
-              cp_host, name, fileName, until, adminToken);
+              cp_host, name, fileName, until, adminToken, senders);
 
     if (strlen(name) == 0) {
         strcpy(name, "127.0.0.1:5000");
@@ -268,7 +301,8 @@ int main(int argc, char **argv) {
         std::strcpy(adminToken, "udplbd_default_change_me");
     }
 
-    std::string uri = LbReservation::ReserveLoadBalancer(cp_host, cp_port, name, adminToken, untilSeconds, useIPv6);
+
+    std::string uri = LbAdmin::ReserveLoadBalancer(cp_host, cp_port, name, adminToken, senders, untilSeconds, useIPv6);
 
     // If the returned string starts with "error" ...
     if (uri.compare(0, 5, "error") == 0) {

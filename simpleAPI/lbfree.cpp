@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
         std::strcpy(adminToken, "udplbd_default_change_me");
     }
 
-    int err = LbReservation::FreeLoadBalancer(cp_host, cp_port, lbId, adminToken);
+    int err = LbAdmin::FreeLoadBalancer(cp_host, cp_port, lbId, adminToken);
     fprintf(stdout, "free err = %d\n", err);
 
     return 0;

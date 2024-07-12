@@ -43,14 +43,12 @@
 
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v]",
             "         -host <CP IP address>",
             "        [-port <CP port, 18347 default)>]",
-            "        [-lbid <LB id, 1 default>]",
             "        [-sec <seconds between printed updates, 5 default>]",
-
             "        [<admin_token> udplbd_default_change_me = default]");
 
     fprintf(stderr, "        Periodically print status of a reserved LB.\n");
@@ -60,7 +58,7 @@ static void printHelp(char *programName) {
 
 static void parseArgs(int argc, char **argv,
                       uint16_t* port, int *sec, bool* debug,
-                      char* host, char* lbid, char* adminToken) {
+                      char* host, char* adminToken) {
 
     int c, i_tmp;
     bool help = false;
@@ -69,7 +67,6 @@ static void parseArgs(int argc, char **argv,
     static struct option long_options[] =
             {{"port",     1, nullptr, 1},
              {"host",     1, nullptr, 2},
-             {"lbid",     1, nullptr, 3},
              {"sec",      1, nullptr, 4},
              {nullptr,    0, 0,       0}
             };
@@ -104,15 +101,6 @@ static void parseArgs(int argc, char **argv,
                 strcpy(host, optarg);
                 break;
 
-
-            case 3:
-                // LB ID
-                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
-                    fprintf(stderr, "Invalid argument to -lbid, id is too long\n");
-                    exit(-1);
-                }
-                strcpy(lbid, optarg);
-                break;
 
             case 4:
                 // PERIOD in seconds
@@ -181,51 +169,31 @@ int main(int argc, char **argv) {
     char cp_host[61];
     memset(cp_host, 0, 61);
 
-    char lbId[INPUT_LENGTH_MAX];
-    memset(lbId, 0, INPUT_LENGTH_MAX);
 
     char adminToken[INPUT_LENGTH_MAX];
     memset(adminToken, 0, INPUT_LENGTH_MAX);
 
 
     parseArgs(argc, argv, &cp_port, &seconds, &debug,
-              cp_host, lbId, adminToken);
+              cp_host, adminToken);
 
-    if (strlen(lbId) == 0) {
-        strcpy(lbId, "1");
-    }
 
     if (strlen(adminToken) == 0) {
         std::strcpy(adminToken, "udplbd_default_change_me");
     }
 
-    std::string indent("   ");
-    std::unordered_map<std::string, LbClientStatus> clientStats;
+    std::string indent("  ");
+
+    CpOverview overview(cp_host, cp_port, adminToken);
+
 
     while (true) {
 
-        clientStats.clear();
-        int err = LbReservation::LoadBalancerStatus(cp_host, cp_port, lbId, adminToken, clientStats);
-
-        if (err != 0) {
-            std::cout << "error in load balancer status request" << std::endl << std::endl;
-        }
-        else {
-            if (clientStats.size() == 0) {
-                std::cout << std::endl << "No clients registered" << std::endl;
-            }
-            else {
-                // Iterating through the map
-                for (auto &pair : clientStats) {
-                    std::cout << std::endl << "Backend  " << pair.first << ":" << std::endl;
-                    pair.second.printClientStats(std::cout, indent);
-                }
-            }
-        }
+        overview.getUpdate();
+        overview.printCpStats(std::cout, indent);
 
         // Delay between printouts
         std::this_thread::sleep_for(std::chrono::seconds(seconds));
-
     }
 
     return 0;

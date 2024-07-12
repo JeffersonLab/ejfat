@@ -752,47 +752,52 @@ int main(int argc, char **argv) {
     int maxUdpPayload = mtu - 20 - 8 - HEADER_BYTES;
 
 
+    // This host for IPv4 and 6
+    struct sockaddr_in  serverAddr_sync;
+    struct sockaddr_in6 serverAddr6_sync;
+
+
     // Socket for sending sync message to CP
     if (!direct) {
         if (useIPv6Sync) {
-            struct sockaddr_in6 serverAddr6;
-
             if ((syncSocket = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
                 perror("creating IPv6 sync socket");
                 return -1;
             }
 
-            memset(&serverAddr6, 0, sizeof(serverAddr6));
-            serverAddr6.sin6_family = AF_INET6;
-            serverAddr6.sin6_port = htons(syncPort);
-            inet_pton(AF_INET6, syncAddr.c_str(), &serverAddr6.sin6_addr);
+            memset(&serverAddr6_sync, 0, sizeof(serverAddr6_sync));
+            serverAddr6_sync.sin6_family = AF_INET6;
+            serverAddr6_sync.sin6_port = htons(syncPort);
+            inet_pton(AF_INET6, syncAddr.c_str(), &serverAddr6_sync.sin6_addr);
 
-            int err = connect(syncSocket, (const sockaddr *) &serverAddr6, sizeof(struct sockaddr_in6));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP sync socket:");
-                close(syncSocket);
-                exit(1);
+            if (!noConnect) {
+                int err = connect(syncSocket, (const sockaddr *) &serverAddr6_sync, sizeof(struct sockaddr_in6));
+                if (err < 0) {
+                    perror("Error connecting UDP sync socket:");
+                    close(syncSocket);
+                    exit(1);
+                }
             }
         }
         else {
-            struct sockaddr_in serverAddr;
-
             if ((syncSocket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
                 perror("creating IPv4 sync socket");
                 return -1;
             }
 
-            memset(&serverAddr, 0, sizeof(serverAddr));
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(syncPort);
-            serverAddr.sin_addr.s_addr = inet_addr(syncAddr.c_str());
-            memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+            memset(&serverAddr_sync, 0, sizeof(serverAddr_sync));
+            serverAddr_sync.sin_family = AF_INET;
+            serverAddr_sync.sin_port = htons(syncPort);
+            serverAddr_sync.sin_addr.s_addr = inet_addr(syncAddr.c_str());
+            memset(serverAddr_sync.sin_zero, '\0', sizeof serverAddr_sync.sin_zero);
 
-            int err = connect(syncSocket, (const sockaddr *) &serverAddr, sizeof(struct sockaddr_in));
-            if (err < 0) {
-                if (debug) perror("Error connecting UDP sync socket:");
-                close(syncSocket);
-                return err;
+            if (!noConnect) {
+                int err = connect(syncSocket, (const sockaddr *) &serverAddr_sync, sizeof(struct sockaddr_in));
+                if (err < 0) {
+                    perror("Error connecting UDP sync socket:");
+                    close(syncSocket);
+                    return err;
+                }
             }
         }
     }
@@ -1138,7 +1143,23 @@ int main(int argc, char **argv) {
                 // Send sync message to same destination
                 if (debug) fprintf(stderr, "send tick %" PRIu64 ", evtRate %u\n\n", tick, evtRate);
                 setSyncData(syncBuf, version, dataId, tick, evtRate, currentTimeNanos);
-                err = send(syncSocket, syncBuf, 28, 0);
+
+                if (!noConnect) {
+                    //fprintf(stderr, "send sync, connected\n");
+                    err = send(syncSocket, syncBuf, 28, 0);
+                }
+                else {
+                    if (useIPv6Sync) {
+                        //fprintf(stderr, "send sync, no connect ipv6\n");
+                        err = sendto(syncSocket, syncBuf, 28, 0, (sockaddr * ) & serverAddr6_sync,
+                                     sizeof(struct sockaddr_in6));
+                    }
+                    else {
+                        //fprintf(stderr, "send sync, no connect ipv4\n");
+                        err = sendto(syncSocket, syncBuf, 28, 0, (sockaddr * ) & serverAddr_sync,
+                                     sizeof(struct sockaddr_in));
+                    }
+                }
                 if (err == -1) {
                     fprintf(stderr, "\npacketBlasterNew: error sending sync, errno = %d, %s\n\n", errno,
                             strerror(errno));

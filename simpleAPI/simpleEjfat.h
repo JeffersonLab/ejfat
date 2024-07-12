@@ -85,6 +85,7 @@ namespace ejfat {
     /**
       * Write the registration msg from consumer to simple server into the buffer.
       * This msg eventually gets modified and passed on to the CP.
+      * Int and float data in network byte order.
       *
       * <ol>
       * <li>type of command to execute in server</li>
@@ -102,27 +103,37 @@ namespace ejfat {
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       *  |                       Incoming source count                   |
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      *  |                       Initial consumer weight                 |
+      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      *  |                       CP min factor                           |
+      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+      *  |                       CP max factor                           |
+      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       *  |              IP Address ... (ending w/ '\0')                  |
       *  |                                                               |
       *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
       * </pre>
       *
-      * @param buffer   buffer in which to write msg.
-      * @param bufLen   # of available bytes in buffer.
-      * @param srcCount # of incoming data sources.
-      * @param port     data receiving port of caller.
-      * @param ipAddr   data receiving IP address of caller.
+      * @param buffer     buffer in which to write msg.
+      * @param bufLen     # of available bytes in buffer.
+      * @param srcCount   # of incoming data sources.
+      * @param weight     initial weight of this backend for CP to use in comparison to other backends.
+      * @param minFactor  factor for setting min # of CP slot assignments.
+      * @param maxFactor  factor for setting max # of Cp slot assignments.
+      * @param port       data receiving port of caller.
+      * @param ipAddr     data receiving IP address of caller.
       *
       * @return # of bytes written including terminating null char of ipAddr,
       *         else -1 if buffer nullptr or not enough space in buffer to write.
       */
     static int setSimpleRegisterData(char *buffer, uint32_t bufLen, uint32_t srcCount,
+                                      float weight, float minFactor, float maxFactor,
                                       uint16_t port, std::string & ipAddr) {
 
         // Check to see if room in buffer
         // (1 byte cmd, 1 byte len, 2 bytes port, ip addr, 1 byte '\0')
         uint8_t ipLen = static_cast<uint8_t>(ipAddr.length());
-        if (buffer == nullptr || (bufLen < 8 + ipLen + 1)) {
+        if (buffer == nullptr || (bufLen < 20 + ipLen + 1)) {
             return -1;
         }
 
@@ -139,11 +150,25 @@ namespace ejfat {
         // source count in network order
         *((uint32_t *)(buffer + 4)) = htonl(srcCount);
 
-        // write IP addr
-        ipAddr.copy(buffer + 8, ipLen);
-        buffer[8 + ipLen] = '\0'; // Null-terminate the string in the buffer
+        uint32_t netValue;
 
-        return (9 + ipLen);
+        // weight in network order
+        std::memcpy(&netValue, &weight, sizeof(netValue));
+        *((uint32_t *)(buffer + 8)) = htonl(netValue);
+
+        // minFactor in network order
+        std::memcpy(&netValue, &minFactor, sizeof(netValue));
+        *((uint32_t *)(buffer + 12)) = htonl(netValue);
+
+        // maxFactor in network order
+        std::memcpy(&netValue, &maxFactor, sizeof(netValue));
+        *((uint32_t *)(buffer + 16)) = htonl(netValue);
+
+        // write IP addr
+        ipAddr.copy(buffer + 20, ipLen);
+        buffer[20 + ipLen] = '\0'; // Null-terminate the string in the buffer
+
+        return (21 + ipLen);
     }
 
 
@@ -160,19 +185,29 @@ namespace ejfat {
      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      *  |                       Incoming source count                   |
      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |                       Initial consumer weight                 |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |                       CP min factor                           |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *  |                       CP max factor                           |
+     *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      *  |              IP Address ... (ending w/ '\0')                  |
      *  |                                                               |
      *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      * </pre>
      *
-     * @param buffer   buffer to parse.
-     * @param bufLen   # of available bytes in buffer.
-     * @param srcCount # of incoming data sources.
-     * @param port     ref filled with data receiving port of caller.
-     * @param ipAddr   ref filled with data receiving IP address of caller.
+     * @param buffer     buffer to parse.
+     * @param bufLen     # of available bytes in buffer.
+     * @param srcCount   ref filled with # of incoming data sources.
+     * @param weight     ref filled with initial weight of this backend for CP to use in comparison to other backends.
+     * @param minFactor  ref filled with factor for setting min # of CP slot assignments.
+     * @param maxFactor  ref filled with factor for setting max # of Cp slot assignments.
+     * @param port       ref filled with data receiving port of caller.
+     * @param ipAddr     ref filled with data receiving IP address of caller.
      * @return true if success, false if not enough room in buffer from which to extract data.
      */
     static bool parseSimpleRegisterData(const char* buffer, uint32_t bufLen, uint32_t &srcCount,
+                                        float &weight, float &minFactor, float &maxFactor,
                                         uint16_t & port, std::string & ipAddr) {
         if (buffer == nullptr) return false;
 
@@ -180,13 +215,25 @@ namespace ejfat {
         port        = ntohs(*reinterpret_cast<const uint16_t *>(buffer+2));
         srcCount    = ntohl(*reinterpret_cast<const uint32_t *>(buffer+4));
 
+        uint32_t netValue;
+
+        netValue = ntohl(*reinterpret_cast<const uint32_t *>(buffer+8));
+        std::memcpy(&weight, &netValue, sizeof(weight));
+
+        netValue = ntohl(*reinterpret_cast<const uint32_t *>(buffer+12));
+        std::memcpy(&minFactor, &netValue, sizeof(minFactor));
+
+        netValue = ntohl(*reinterpret_cast<const uint32_t *>(buffer+16));
+        std::memcpy(&maxFactor, &netValue, sizeof(maxFactor));
+
+
         // Check to see if room in buffer to completely read its contents
-        if (bufLen < 8 + len + 1) {
+        if (bufLen < 20 + len + 1) {
             return false;
         }
 
         // Copy IP address from buffer to ipAddr string, assumes ending '\0'
-        ipAddr.assign(buffer + 8);
+        ipAddr.assign(buffer + 20);
 
         return true;
     }

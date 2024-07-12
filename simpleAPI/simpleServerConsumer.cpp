@@ -53,7 +53,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-jointstats]\n",
 
@@ -64,6 +64,9 @@ static void printHelp(char *programName) {
 
             "         -a <data receiving address to register w/ CP>",
             "        [-p <starting UDP port (default 17750)>]\n",
+
+            "        [-minf <min factor for CP slot assignment (default 0>]",
+            "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
 
             "        [-ids <comma-separated list of incoming source ids>]",
             "        [-core  <starting core # for read thds>]",
@@ -95,16 +98,20 @@ static void printHelp(char *programName) {
  * @param file          name of file in which to read URI.
  * @param dataAddr      data destination IP address to send to CP.
  * @param ids           vector to be filled with data source id numbers.
+ * @param minFactor     factor for setting min # of slot assignments.
+ * @param maxFactor     factor for setting max # of slot assignments.
  */
 static void parseArgs(int argc, char **argv,
                       int* core, int* coreCnt,
                       uint16_t* port, uint16_t* serverPort,
                       bool* direct, bool* debug, bool* useIPv6, bool* jointStats,
                       char* serverAddr, char* dataAddr,
+                      float *minFactor, float *maxFactor,
                       std::vector<int>& ids) {
 
     int c, i_tmp;
     bool help = false;
+    float sp = 0.;
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
@@ -116,6 +123,9 @@ static void parseArgs(int argc, char **argv,
                           {"server",      1, nullptr, 5},
                           {"port",        1, nullptr, 6},
                           {"direct",      0, nullptr, 7},
+
+                          {"minf",        1, nullptr, 8},
+                          {"maxf",        1, nullptr, 9},
                           {0,       0, 0,    0}
             };
 
@@ -224,6 +234,31 @@ static void parseArgs(int argc, char **argv,
                 }
                 break;
 
+            case 8:
+                // Set the min-factor parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -minf\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *minFactor = sp;
+                break;
+
+            case 9:
+                // Set the max-factor parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -maxf\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *maxFactor = sp;
+                break;
 
             case 4:
                 // print stats of all sources joined together
@@ -290,6 +325,8 @@ int main(int argc, char **argv) {
     bool useIPv6 = false;
     bool jointStats = false;
 
+    float minFactor = 0.F, maxFactor = 0.F;
+
     char serverAddr[INPUT_LENGTH_MAX];
     memset(serverAddr, 0, INPUT_LENGTH_MAX);
 
@@ -305,7 +342,7 @@ int main(int argc, char **argv) {
     // Parse command line args
     parseArgs(argc, argv, &core, &coreCnt,
               &dataPort, &serverPort, &direct, &debug, &useIPv6, &jointStats,
-              serverAddr, dataAddr, ids);
+              serverAddr, dataAddr, &minFactor, &maxFactor, ids);
 
     // If not sources given on cmd line, assume 1 src, id=0
     if (ids.size() == 0) {
@@ -326,7 +363,7 @@ int main(int argc, char **argv) {
         consumer = std::make_shared<serverConsumer>(std::string(serverAddr), std::string(dataAddr),
                                                     serverPort, dataPort,
                                                     ids, debug, jointStats, connect,
-                                                    core, coreCnt);
+                                                    core, coreCnt, minFactor, maxFactor);
     }
 
     char*    event;

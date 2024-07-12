@@ -130,7 +130,7 @@ static bool haveEtName = false;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]\n",
@@ -146,6 +146,9 @@ static void printHelp(char *programName) {
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
             "        [-file <file with URI (default /tmp/ejfat_uri)>]",
             "        [-token <CP admin token (default udplbd_default_change_me)>]\n",
+
+            "        [-minf <min factor for CP slot assignment (default 0>]",
+            "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
 
             "        [-kp <PID proportional constant, default 0.52>]",
             "        [-ki <PID integral constant, default 0.005>]",
@@ -190,12 +193,14 @@ static void printHelp(char *programName) {
  * @param uri           URI containing LB/CP connection info.
  * @param file          name of file in which to read URI.
  * @param token         CP admin token.
- * @param etFilename    filled with name of ET file in which to write data.
- * @param statBaseName  filled with base name of files used to store 100 sec of ET fill level data.
- * @param kp            filled with PID proportional constant.
- * @param ki            filled with PID integral constant.
- * @param kd            filled with PID differential constant.
- * @param cores         vector to be filled with core numbers.
+ * @param etFilename    name of ET system file.
+ * @param statFileName  name of file to save stats into.
+ * @param kp            PID loop kp constant.
+ * @param ki            PID loop ki constant.
+ * @param kd            PID loop kd constant.
+ * @param minFactor     factor for setting min # of slot assignments.
+ * @param maxFactor     factor for setting max # of slot assignments.
+ * @param cores         vector or cores to run on.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
@@ -206,6 +211,7 @@ static void parseArgs(int argc, char **argv,
                       char *listenAddr, char *uri, char* file, char *token,
                       char *etFilename, std::string &statFileName,
                       float *kp, float *ki, float *kd,
+                      float *minFactor, float *maxFactor,
                       std::vector<int>& cores) {
 
     int c, i_tmp;
@@ -221,6 +227,8 @@ static void parseArgs(int argc, char **argv,
                           {"uri",       1, nullptr, 4},
                           {"file",      1, nullptr, 5},
                           {"token",     1, nullptr, 6},
+                          {"minf",      1, nullptr, 7},
+                          {"maxf",      1, nullptr, 8},
 
                           {"sfile",     1, nullptr, 9},
                           {"stime",     1, nullptr, 10},
@@ -230,6 +238,7 @@ static void parseArgs(int argc, char **argv,
                           {"count",     1, nullptr, 14},
                           {"rtime",     1, nullptr, 15},
                           {"baddr",     1, nullptr, 16},
+
                           {0,       0, 0,    0}
             };
 
@@ -425,6 +434,32 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
                 strcpy(token, optarg);
+                break;
+
+            case 7:
+                // Set the min-factor parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -minf\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *minFactor = sp;
+                break;
+
+            case 8:
+                // Set the max-factor parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -maxf\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *maxFactor = sp;
                 break;
 
             case 9:
@@ -705,6 +740,9 @@ typedef struct threadStruct_t {
     float Ki;
     float Kd;
 
+    float minFactor;
+    float maxFactor;
+
     uint32_t fcount;
     uint32_t reportTime;
     uint32_t sampleTime;
@@ -811,7 +849,7 @@ static void *pidThread(void *arg) {
     LbControlPlaneClient client(targ->cpServerIpAddr, targ->cpServerPort,
                                 targ->dataIpAddr, targ->dataPort, range,
                                 targ->myName, targ->token,
-                                targ->lbId, targ->weight);
+                                targ->lbId, targ->weight, targ->minFactor, targ->maxFactor);
 
     // Register this client with the grpc server &
     // wait for server to send session token in return.
@@ -1234,6 +1272,11 @@ int main(int argc, char **argv) {
     float Ki = 0.005;
     float Kd = 0.000;
 
+    // CP slot stuff
+    float minFactor = 0.F;
+    float maxFactor = 0.F;
+
+
     // # of fill values to average when reporting to grpc
     uint32_t fcount = 1000;
     // time period in millisec for reporting to CP
@@ -1275,7 +1318,7 @@ int main(int argc, char **argv) {
               &debug, &useIPv6, dataAddr,
               listeningAddr, uri, fileName, adminToken,
               et_filename, stat_file_name,
-              &Kp, &Ki, &Kd,
+              &Kp, &Ki, &Kd, &minFactor, &maxFactor,
               cores);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
@@ -1635,48 +1678,51 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         }
 
 
-            // Start thread to do PID "control"
-            threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
-            if (targ == nullptr) {
-                fprintf(stderr, "out of mem\n");
-                return -1;
-            }
+        // Start thread to do PID "control"
+        threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
+        if (targ == nullptr) {
+            fprintf(stderr, "out of mem\n");
+            return -1;
+        }
 
-            targ->etId = id;
-            targ->fid = fid;
+        targ->etId = id;
+        targ->fid = fid;
 
-            targ->cpServerPort   = cpPort;
-            targ->cpServerIpAddr = cpAddr;
+        targ->cpServerPort   = cpPort;
+        targ->cpServerIpAddr = cpAddr;
 
-            targ->dataPort = port;
-            targ->dataIpAddr = dataAddr;
-            targ->dataPortRange = 0;
+        targ->dataPort = port;
+        targ->dataIpAddr = dataAddr;
+        targ->dataPortRange = 0;
 
-            targ->myName   = beName;
-            targ->token    = instanceToken;
-            targ->lbId     = lbId;
-            targ->setPoint = cpSetPoint;
-            targ->weight   = weight;
+        targ->myName   = beName;
+        targ->token    = instanceToken;
+        targ->lbId     = lbId;
+        targ->setPoint = cpSetPoint;
+        targ->weight   = weight;
 
-            targ->Kp = Kp;
-            targ->Ki = Ki;
-            targ->Kd = Kd;
+        targ->Kp = Kp;
+        targ->Ki = Ki;
+        targ->Kd = Kd;
 
-            targ->fcount = fcount;
-            targ->reportTime = reportTime;
-            targ->sampleTime = stime;
+        targ->minFactor = minFactor;
+        targ->maxFactor = maxFactor;
 
-            targ->keepFillStats = keepLevelStats;
-            if (keepLevelStats) {
-                targ->statFile = stat_file_name;
-            }
+        targ->fcount = fcount;
+        targ->reportTime = reportTime;
+        targ->sampleTime = stime;
 
-            pthread_t thd2;
-            status = pthread_create(&thd2, NULL, pidThread, (void *) targ);
-            if (status != 0) {
-                fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
-                return -1;
-            }
+        targ->keepFillStats = keepLevelStats;
+        if (keepLevelStats) {
+            targ->statFile = stat_file_name;
+        }
+
+        pthread_t thd2;
+        status = pthread_create(&thd2, NULL, pidThread, (void *) targ);
+        if (status != 0) {
+            fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
+            return -1;
+        }
 
     }
 

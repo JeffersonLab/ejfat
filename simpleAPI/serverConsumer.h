@@ -85,6 +85,19 @@ namespace ejfat {
         /** Number of cores per receiving thread. */
         int coreCount = 1;
 
+        /**
+         * Initial weight of this consumer, compared to other consumers,
+         * which gives the CP a hint as to the initial distribution of events.
+         * The absolute value of the weight is not meaningful, only its value
+         * in relation to other consumers.
+         */
+        float weight = 1.F;
+
+        /** Factor for setting min # of Cp slot assignments. */
+        float minFactor = 0.F;
+
+        /** Factor for setting max # of Cp slot assignments. */
+        float maxFactor = 0.F;
 
         //------------------------------------------------------------------
         // Network stuff
@@ -158,14 +171,6 @@ namespace ejfat {
          * signal to the CP.
          */
         float Kd = 0.; // 1000x normal
-
-        /**
-         * Initial weight of this consumer, compared to other consumers,
-         * which gives the CP a hint as to the initial distribution of events.
-         * The absolute value of the weight is not meaningful, only its value
-         * in relation to other consumers.
-         */
-        float weight = 1.;
 
         /** Set point of PID loop, goal of fifo level-setting. */
         float setPoint = 0.;
@@ -311,6 +316,7 @@ namespace ejfat {
                       const std::vector<int> &ids = {0},
                       bool debug = false, bool jointStats = false, bool connect = false,
                       int startingCore = -1, int coreCount = 1,
+                      float minFactor=0.F, float maxFactor=0.F,
                       float Kp=0., float Ki=0., float Kd=0.,
                       float setPt=0., float weight=1.);
 

@@ -132,6 +132,8 @@ namespace ejfat {
      * @param connect      if true, call connect on socket to server (default false).
      * @param startingCore first core to run the receiving threads on (default 0).
      * @param coreCount    number of cores each receiving thread will run on (default 2).
+     * @param minFactor    factor for setting min # of CP slot assignments (default 0.).
+     * @param maxFactor    factor for setting max # of Cp slot assignments (default 0.).
      * @param Kp           PID proportional constant used for error signal to CP (default 0.).
      * @param Ki           PID integral constant used for error signal to CP (default 0.).
      * @param Kd           PID differential constant used for error signal to CP (default 0.).
@@ -146,6 +148,7 @@ namespace ejfat {
                                    const std::vector<int> &ids,
                                    bool debug, bool jointStats, bool connect,
                                    int startingCore, int coreCount,
+                                   float minFactor, float maxFactor,
                                    float Kp, float Ki, float Kd,
                                    float setPt, float weight) :
 
@@ -153,7 +156,8 @@ namespace ejfat {
             dataAddr(dataAddr), dataPort(dataPort),
             debug(debug), jointStats(jointStats), connectSocket(connect),
             ids(ids), startingCore(startingCore), coreCount(coreCount),
-            Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt),
+            minFactor(minFactor), maxFactor(maxFactor),
+            Kp(Kp), Ki(Ki), Kd(Kd), setPoint(setPt),
             weight(weight), direct(false), endThreads(false)
 
     {
@@ -212,7 +216,9 @@ namespace ejfat {
     bool serverConsumer::registerWithSimpleServer() {
         char buffer[1024];
         // In this context will not return err (-1)
-        int len = setSimpleRegisterData(buffer, 1024, (uint32_t)(ids.size()), dataPort, dataAddr);
+        int len = setSimpleRegisterData(buffer, 1024, (uint32_t)(ids.size()),
+                                        weight, minFactor, maxFactor, dataPort, dataAddr);
+
         // Send to server
         ssize_t err = 0;
         if (ipv6ServerAddr) {

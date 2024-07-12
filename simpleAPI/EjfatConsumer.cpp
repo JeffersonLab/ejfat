@@ -127,6 +127,8 @@ namespace ejfat {
      * @param jointStats   if true, printout combined stats for all sources (default false).
      * @param startingCore first core to run the receiving threads on (default 0).
      * @param coreCount    number of cores each receiving thread will run on (default 2).
+     * @param minFactor    factor for setting min # of CP slot assignments.
+     * @param maxFactor    factor for setting max # of CP slot assignments.
      * @param Kp           PID proportional constant used for error signal to CP (default 0.).
      * @param Ki           PID integral constant used for error signal to CP (default 0.).
      * @param Kd           PID differential constant used for error signal to CP (default 0.).
@@ -142,12 +144,14 @@ namespace ejfat {
                                  const std::string& fileName,
                                  bool debug, bool jointStats,
                                  int startingCore, int coreCount,
+                                 float minFactor, float maxFactor,
                                  float Kp, float Ki, float Kd,
                                  float setPt, float weight) :
 
             dataAddr(dataAddr), dataPort(dataPort),
             debug(debug), jointStats(jointStats),
             ids(ids), startingCore(startingCore), coreCount(coreCount),
+            minFactor(minFactor), maxFactor(maxFactor),
             Kp(Kp), Ki(Ki), Kd(Kp), setPoint(setPt),
             weight(weight), direct(false), endThreads(false)
 
@@ -233,7 +237,8 @@ namespace ejfat {
 
         LbClient = std::make_shared<LbControlPlaneClient> (cpAddr, cpPort,
                                                            dataAddr, dataPort, range,
-                                                           myName, instanceToken, lbId, weight);
+                                                           myName, instanceToken, lbId, weight,
+                                                           minFactor, maxFactor);
 
         std::cout << "Created LbControlPlaneClient" << std::endl;
         // Register this client with the control plane's grpc server &

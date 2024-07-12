@@ -136,7 +136,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
 
@@ -150,6 +150,9 @@ static void printHelp(char *programName) {
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
             "        [-file <file with URI (default /tmp/ejfat_uri)>]",
             "        [-token <CP admin token (default udplbd_default_change_me)>]\n",
+
+            "        [-minf <min factor for CP slot assignment (default 0>]",
+            "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
 
             "        [-dump (no thd to get & merge buffers)]",
             "        [-lump (1 thd to get & merge buffers from all sources)]",
@@ -198,6 +201,8 @@ static void printHelp(char *programName) {
  * @param file          name of file in which to read URI.
  * @param token         CP admin token.
  * @param ids           vector to be filled with data source id numbers.
+ * @param minFactor     factor for setting min # of slot assignments.
+ * @param maxFactor     factor for setting max # of slot assignments.
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
@@ -207,10 +212,12 @@ static void parseArgs(int argc, char **argv,
                       bool *dump, bool *lump, bool *noRestart, bool *jointStats,
                       char *listenAddr, char *dataAddr,
                       char *uri, char *file, char *token,
-                      std::vector<int>& ids) {
+                      std::vector<int>& ids,
+                      float *minFactor, float *maxFactor) {
 
     int c, i_tmp;
     bool help = false;
+    float sp = 0.;
 
     /* 4 multiple character command-line options */
     static struct option long_options[] =
@@ -232,6 +239,9 @@ static void parseArgs(int argc, char **argv,
                           {"uri",         1, nullptr, 13},
                           {"file",        1, nullptr, 14},
                           {"token",       1, nullptr, 15},
+
+                          {"minf",        1, nullptr, 16},
+                          {"maxf",        1, nullptr, 17},
                           {0,       0, 0,    0}
             };
 
@@ -406,6 +416,32 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
                 strcpy(token, optarg);
+                break;
+
+            case 16:
+                // Set the min-factor parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -minf\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *minFactor = sp;
+                break;
+
+            case 17:
+                // Set the max-factor parameter
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -maxf\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *maxFactor = sp;
                 break;
 
             case 7:
@@ -1401,6 +1437,9 @@ int main(int argc, char **argv) {
     bool noRestart = false;
     bool jointStats = false;
 
+    float minFactor = 0.F;
+    float maxFactor = 0.F;
+
 
 
     // CP stuff
@@ -1435,7 +1474,8 @@ int main(int argc, char **argv) {
               &dumpBufs, &lumpBufs,
               &noRestart, &jointStats,
               listeningAddr, dataAddr,
-              uri, fileName, adminToken, ids);
+              uri, fileName, adminToken, ids,
+              &minFactor, &maxFactor);
 
     pinCores = startingCore >= 0;
     pinBufCores = startingBufCore >= 0;
@@ -1711,7 +1751,8 @@ int main(int argc, char **argv) {
 
     LbControlPlaneClient client(cpAddr, cpPort,
                                 dataAddr, startingPort, range,
-                                beName, instanceToken, lbId, weight);
+                                beName, instanceToken, lbId, weight,
+                                minFactor, maxFactor);
 
     // Register this client with the grpc server
     int32_t err = client.Register();

@@ -493,7 +493,9 @@ namespace ejfat {
         float fill;
         float pidErr;
         bool isReady;
-        float weight = 1.F;
+        float weight;
+        float minFactor;
+        float maxFactor;
 
         // Storage for packet
         char pkt[65536];
@@ -556,7 +558,7 @@ namespace ejfat {
             else if (cmd == REGISTER) {
                 // This call is always successful in this context
                 uint32_t sourceCount;
-                parseSimpleRegisterData(pkt, 65536, sourceCount, port, ipAddr);
+                parseSimpleRegisterData(pkt, 65536, sourceCount, weight, minFactor, maxFactor, port, ipAddr);
 
                 // For more on portRange, look into loadbalancer.proto file in ersap-grpc git repo
                 int portRangeValue = getPortRange(sourceCount);
@@ -570,7 +572,8 @@ namespace ejfat {
 
                 auto client = std::make_shared<LbControlPlaneClient>(cpAddr, cpPort,
                                                                      ipAddr, port, range,
-                                                                     myName, instanceToken, lbId, weight);
+                                                                     myName, instanceToken, lbId,
+                                                                     weight, minFactor, maxFactor);
                 LbClients[key] = client;
                 std::cout << "Created LbControlPlaneClient for " << ipAddr << ":" << port <<
                              " to CP on " << cpAddr << ":" << cpPort << " for range " << portRangeValue <<

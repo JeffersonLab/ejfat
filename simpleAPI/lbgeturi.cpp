@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
         std::strcpy(adminToken, "udplbd_default_change_me");
     }
 
-    std::string uri = LbReservation::GetLbUri(cp_host, cp_port, lbid, adminToken, useIPv6);
+    std::string uri = LbAdmin::GetLbUri(cp_host, cp_port, lbid, adminToken, useIPv6);
 
     // If the returned string starts with "error" ...
     if (uri.compare(0, 5, "error") == 0) {
