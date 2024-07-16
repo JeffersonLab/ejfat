@@ -51,8 +51,7 @@ static void printHelp(char *programName) {
             "         -host <CP IP address>",
             "        [-port <CP port, 18347 default)>]",
             "        [-file  <file to store URI, /tmp/ejfat_uri default>]",
-
-            "        [<admin_token> udplbd_default_change_me = default]");
+            "        [-token <admin token, udplbd_default_change_me = default>");
 
     fprintf(stderr, "        For the specified control plane's host/port, get the URI or connection information\n");
     fprintf(stderr, "        for the specified LB.\n");
@@ -79,6 +78,7 @@ static void parseArgs(int argc, char **argv,
              {"lbid",     1, nullptr, 3},
              {"file",     1, nullptr, 4},
              {"ipv6",     0, nullptr, 6},
+             {"token",    1, nullptr, 7},
              {nullptr,    0, 0,       0}
             };
 
@@ -138,6 +138,15 @@ static void parseArgs(int argc, char **argv,
                 *useIPv6 = true;
                 break;
 
+            case 7:
+                // ADMIN TOKEN
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -token, too long\n");
+                    exit(-1);
+                }
+                strcpy(adminToken, optarg);
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -164,16 +173,6 @@ static void parseArgs(int argc, char **argv,
         exit(-1);
     }
 
-    // Process remaining arguments (non-options)
-    if (optind < argc) {
-        strcpy(adminToken, argv[optind]);
-        std::cout << "First non-option argument: " << argv[optind] << std::endl;
-    }
-//    else {
-//        fprintf(stderr, "Admin token must be specified\n\n");
-//        printHelp(argv[0]);
-//        exit(-1);
-//    }
 }
 
 

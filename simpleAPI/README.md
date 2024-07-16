@@ -1,7 +1,7 @@
-## Using the "simple" API for using EJFAT
+# Using EJFAT's "simple" APIs
 
 ### **************************************************************
-### Building
+## Building
 
   Compile the code according to the instructions in the top level
   [README.md](../README.md)
@@ -9,14 +9,27 @@
 
 
 ### **************************************************************
-### General Info
+## General Info
 
-  #### Senders and Receivers
+There are 2 types of "simple" APIs in the **simpleAPI** directory
+allowing programmatic interaction with EJFAT:
 
-There are 2 C++ classes to use, one for sending data and the other for receiving:
+ 1) an API which talks directly to network hardware and must link against
+    grpc and the ejfat-grpc libraries.
+ 2) an API which talks to a broker that, in turn, talks to the network hardware.
+    Senders and receivers do not link against grpc and ejfat-grpc libs.
+    
+There are also commands/executables which allow handling of the Control Plane (**CP**).
+ 
+### **************************************************************
+ 
+### Type 1, simple API
 
- - EjfatProducer.cpp/.h
- - EjfatConsumer.cpp/.h
+There are 2 C++ classes to use, contained in the **libejfat_simple.so** library,
+one for sending data and the other for receiving:
+
+ - **EjfatProducer**
+ - **EjfatConsumer**
  
  
  There are examples of how to use each in the files:
@@ -24,6 +37,7 @@ There are 2 C++ classes to use, one for sending data and the other for receiving
   - simpleSender.cpp
   - simpleConsumer.cpp
   
+  which are compiled into the executables, **simpleSender** and **simpleConsumer**.
   All the complexities of interacting with the Load Balancer and the Control Plane
   are hidden from the user. These classes also provide output in terms of
   relevant statistics.
@@ -33,22 +47,39 @@ There are 2 C++ classes to use, one for sending data and the other for receiving
   
   All files, classes, methods, and members are documented using doxygen.
   
-  #### Interacting with the Load Balancer (LB) & Control Plane (CP)
+  
+  
+### Type 2, even simpler API
+    
+  In addition to simple consumers and producers that talk directly to the LB and CP,
+  there is a server (**EjfatServer** class in **libejfat_simple.so**) which acts as
+  a broker between users of EJFAT and the LB/CP. It's compiled into the **simpleServer**
+  executable.
+  
+  This is designed so that users need to know nothing about the hardware, gRPC,
+  protobufs and anything else complicated. Once the server has been compiled and
+  is running, users can communicate with the server - not needing to know the
+  underlying system.
+  
+  There are 2 classes, **serverConsumer** and **serverProducer** which contain
+  all needed functionality. These 2 classes are used in example EJFAT consumers
+  and producers, **simpleServerConsumer** and **simpleServerSender**,
+  which use the simple server.
+  
+### **************************************************************
 
-There are 4 programs used to talk to the CP:
+  ### Interacting with the Control Plane
 
- - lbreserve
- - lbfree
- - lbmonitor
- - lbgeturi
- 
+There are 4 programs, created from this directory, used to talk to the CP:
+
+
  **lbreserve** reserves an instance of a LB  
  **lbfree** releases a reserved LB  
  **lbmonitor** periodically prints the status of registered users of a CP  
  **lbgeturi** given a CP and a valid lbid, it returns the URI (minus token).
  
 ### **************************************************************
-### Steps to running
+### Steps to running example Type 1 sender & consumer
  
   #### 1) Reserve a load balancer
   
@@ -223,3 +254,52 @@ where id is taken from the URI obtained when reserving.
 
 
 ### **************************************************************
+
+
+The following will be created:
+
+- **libejfat_simple.so**    (consumer and producer C++ classes)
+- **simpleConsumer**        (receives and reassembles data)
+- **simpleSender**          (packetizes and sends data)
+- **lbreserve**             (reserves a load balancer)
+- **lbfree**                (frees a load balancer)
+- **lbmonitor**             (prints stats of a load balancer)
+
+
+- **simpleServer**          (server brokering clients to LB/CP)
+- **simpleServerConsumer**  (consumer talking to simple server)
+- **simpleServerSender**    (producer talking to simple server)
+
+
+
+### How to run the server/broker and the simpleServerConsumer/Producer
+
+The example below is how to run a single server with 1 consumer and
+2 producers (ids = 0 and 1).
+
+#### 1) Run the server
+
+    simpleServer -file /tmp/myFileWithUri
+
+where **-file** is file containing the uri to talk to the LB/CP (previously obtained
+by calling lbreserve).
+
+
+#### 2) Run the consumer
+
+    simpleServerConsumer -server 129.57.177.2 -a 129.57.177.4 -ids 0,1
+
+where **-server** is simple server's host, **-a** is IP addr listening
+for data from LB, **-ids** are all expected source ids.
+
+#### 3) Run the first producer
+
+    simpleServerSender -server 129.57.177.2 -id 0 -d 10
+    
+where **-server** is simple server's host, **-id** is src ID,
+**-d** is delay in microsec between events
+
+#### 4) Run the second producer
+
+    simpleServerSender -server 129.57.177.2 -id 1 -d 20
+    

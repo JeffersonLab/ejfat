@@ -49,9 +49,9 @@ static void printHelp(char *programName) {
             "         -host <CP IP address>",
             "        [-port <CP port, 18347 default)>]",
             "        [-sec <seconds between printed updates, 5 default>]",
-            "        [<admin_token> udplbd_default_change_me = default]");
+            "        [-token <admin token, udplbd_default_change_me = default>");
 
-    fprintf(stderr, "        Periodically print status of a reserved LB.\n");
+    fprintf(stderr, "        Periodically print status of specified CP.\n");
 }
 
 
@@ -68,6 +68,7 @@ static void parseArgs(int argc, char **argv,
             {{"port",     1, nullptr, 1},
              {"host",     1, nullptr, 2},
              {"sec",      1, nullptr, 4},
+             {"token",    1, nullptr, 7},
              {nullptr,    0, 0,       0}
             };
 
@@ -115,6 +116,15 @@ static void parseArgs(int argc, char **argv,
 
                 break;
 
+            case 7:
+                // ADMIN TOKEN
+                if (strlen(optarg) >= INPUT_LENGTH_MAX) {
+                    fprintf(stderr, "Invalid argument to -token, too long\n");
+                    exit(-1);
+                }
+                strcpy(adminToken, optarg);
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -141,11 +151,6 @@ static void parseArgs(int argc, char **argv,
         exit(-1);
     }
 
-    // Process remaining arguments (non-options)
-    if (optind < argc) {
-        strcpy(adminToken, argv[optind]);
-        std::cout << "First non-option argument: " << argv[optind] << std::endl;
-    }
 
 }
 

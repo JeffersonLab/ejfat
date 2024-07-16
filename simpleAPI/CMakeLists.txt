@@ -29,6 +29,8 @@ set(EXECUTABLE_FILES
         lbfree.cpp
         lbreserve.cpp
         lbgeturi.cpp
+        lbaddsenders.cpp
+        lbremovesenders.cpp
         simpleSender.cpp
         simpleConsumer.cpp
         simpleServer.cpp
