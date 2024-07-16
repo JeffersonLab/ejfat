@@ -56,29 +56,6 @@
 #define btoa(x) ((x)?"true":"false")
 
 
-#ifndef EJFAT_BYTESWAP_H
-#define EJFAT_BYTESWAP_H
-
-static inline uint16_t bswap_16(uint16_t x) {
-    return (x>>8) | (x<<8);
-}
-
-static inline uint32_t bswap_32(uint32_t x) {
-    return (bswap_16(x&0xffff)<<16) | (bswap_16(x>>16));
-}
-
-static inline uint64_t bswap_64(uint64_t x) {
-    return (((uint64_t)bswap_32(x&0xffffffffull))<<32) |
-           (bswap_32(x>>32));
-}
-
-static inline int64_t ts_to_nano(struct timespec ts) {
-    return ((int64_t)ts.tv_sec * 1000000000LL) + ts.tv_nsec;
-}
-
-#endif
-
-
 
 namespace ejfat {
 
