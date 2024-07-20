@@ -9,7 +9,7 @@
 #include <iostream>  // for some commented std::cout
 
 // Make sure this pool exists. Query with `dmg sys query list-pools`.
-#define EJFAT_DAOS_POOL_LABEL "ejfat"
+#define EJFAT_DAOS_POOL_LABEL "sc"
 
 // Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`. 
 #define EJFAT_DAOS_CONT_LABEL "cont1"

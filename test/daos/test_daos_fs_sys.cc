@@ -22,7 +22,7 @@
  */
 
 // Make sure this pool exists. Query with `dmg sys query list-pools`.
-#define EJFAT_DAOS_POOL_LABEL "ejfat"
+#define EJFAT_DAOS_POOL_LABEL "sc"
 
 // Create this container with parameter "--type=POSIX". Otherwise the test will fail.
 // Example: "daos create cont <pool_label> <cont_label> --type=POSIX"
