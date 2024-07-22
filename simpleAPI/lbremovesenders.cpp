@@ -252,6 +252,7 @@ int main(int argc, char **argv) {
     parseArgs(argc, argv, &cp_port, &debug,
               cp_host, lbid, fileName, adminToken, senders);
 
+    std::string lbId = lbid;
 
     if (strlen(lbid) == 0) {
         // In this case. fileName is defined (enforced above).
@@ -277,7 +278,7 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        std::string lbId = uriInfo.lbId;
+        lbId = uriInfo.lbId;
 
     }
 
@@ -286,9 +287,10 @@ int main(int argc, char **argv) {
     }
 
 
-    int err = LbAdmin::RemoveSenders(cp_host, cp_port, lbid, adminToken, senders);
-
-
+    int err = LbAdmin::RemoveSenders(cp_host, cp_port, lbId, adminToken, senders);
+    if (err == 1) {
+        std::cout << "Error in grpc communication" << std::endl;
+    }
 
     return 0;
 }
