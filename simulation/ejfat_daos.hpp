@@ -214,7 +214,7 @@ namespace ejfat {
 
     inline void DFSSysClient::create(const char *fileName)
     {
-        std::cout << "Creating file:   " << DFSSysClient::setFullFilePath(fileName) << std::endl;
+        // std::cout << "Creating file:   " << DFSSysClient::setFullFilePath(fileName) << std::endl;
         int rt = dfs_sys_mknod(_mnt_fs_sys,
             DFSSysClient::setFullFilePath(fileName).c_str(),
             /* User and owner can RW */ EJFAT_DFS_FILE_PERMISSION, 0, 0);
@@ -307,8 +307,8 @@ namespace ejfat {
             KVClient::processError("daos_kv_create_obj", rt);
         }
 
-        std::cout << "\nCreate DAOS object: \n  ";
-        KVClient::printObjectID(_oid);
+        // std::cout << "\nCreate DAOS object: \n  ";
+        // KVClient::printObjectID(_oid);
     }
 
     void KVClient::push(const char *key, daos_size_t size, const void *buf)
@@ -344,7 +344,7 @@ namespace ejfat {
         ss << std::setw(width) << std::setfill('0') << num;
         str = ss.str();
 
-        std::cout << "\nGet event id string: " << str << std::endl;
+        // std::cout << "\nGet event id string: " << str << std::endl;
         return str.c_str();
     }
 

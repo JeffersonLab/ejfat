@@ -104,9 +104,9 @@ set(EMU_EXEC_FILES
 
 set(GRPC_EXEC_FILES
         simulation/packetBlasteeEtFifoClient.cc
-        simulation/packetBlasteeEtMT.cc
-        simulation/packetBlasteeFastMP.cc
-        simulation/packetBlasteeFullNewMP.cc
+        # simulation/packetBlasteeEtMT.cc
+        # simulation/packetBlasteeFastMP.cc
+        # simulation/packetBlasteeFullNewMP.cc
         )
 
 set(GRPC_SRC_FILES
@@ -120,14 +120,14 @@ set(ET_EXEC_FILES
 set(UTIL_FILES
         util/ByteOrder.cpp
         util/ByteBuffer.cpp
-        util/BufferSupplyItem.cpp
-        util/BufferSupply.cpp
-        util/BufferItem.cpp
+        # util/BufferSupplyItem.cpp
+        # util/BufferSupply.cpp
+        # util/BufferItem.cpp
         util/PacketsItem.cpp
         util/PacketsItemN.cpp
         util/SupplyItem.cpp
         util/PacketStoreItem.cpp
-        util/PacketRefItem.cpp
+        # util/PacketRefItem.cpp
         )
 
 set(SIM_EXEC_FILES

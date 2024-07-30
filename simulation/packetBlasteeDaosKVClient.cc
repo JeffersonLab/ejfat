@@ -35,10 +35,10 @@
 #include "ejfat_daos.hpp"
 
 // Make sure this pool exists. Query with `dmg sys query list-pools`.
-#define EJFAT_DAOS_POOL_LABEL "ejfat"
+#define EJFAT_DAOS_POOL_LABEL "sc"
 
 // Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
-#define EJFAT_DAOS_CONT_LABEL "cont2"
+#define EJFAT_DAOS_CONT_LABEL "cont1"
 
 #define EJFAT_DAOS_POOL_FAKE_EVT_NUM 1000  // pool capacity in event#
 #define EJFAT_DAOS_POOL_FAKE_EVT_SIZE 1000000  // in bytes

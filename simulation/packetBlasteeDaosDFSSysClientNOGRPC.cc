@@ -41,10 +41,10 @@
 using namespace ejfat;
 
 // Make sure this pool exists. Query with `dmg sys query list-pools`.
-#define EJFAT_DAOS_POOL_LABEL "ejfat"
+#define EJFAT_DAOS_POOL_LABEL "sc"
 
 // Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
-#define EJFAT_DAOS_CONT_LABEL "fs"
+#define EJFAT_DAOS_CONT_LABEL "demo-dfssys"
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -358,7 +358,7 @@ static void *thread(void *arg) {
                 skipFirst = false;
             }
             firstT = t1 = t2;
-            totalT = totalBytes = totalPackets = totalEvents = 0;
+            totalT = totalBytes = totalPackets = 0;
             continue;
         }
 

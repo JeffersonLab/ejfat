@@ -41,10 +41,10 @@
 using namespace ejfat;
 
 // Make sure this pool exists. Query with `dmg sys query list-pools`.
-#define EJFAT_DAOS_POOL_LABEL "ejfat"
+#define EJFAT_DAOS_POOL_LABEL "sc"
 
 // Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
-#define EJFAT_DAOS_CONT_LABEL "cont1"
+#define EJFAT_DAOS_CONT_LABEL "demo-kv"
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -70,6 +70,7 @@ static void printHelp(char *programName) {
             "        [-r <UDP receive buffer byte size>]",
             "        [-f <file for stats>]",
             "        [-cores <comma-separated list of cores to run on>]",
+            "        [-cont <DAOS container>",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
