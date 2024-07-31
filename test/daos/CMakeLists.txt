@@ -59,6 +59,7 @@ endif()
 # Locate GTest
 enable_testing()
 
+## No1 test
 set(DAOS_TEST_NAME "daos_test")
 
 add_executable(
@@ -84,11 +85,12 @@ target_include_directories(
 include(GoogleTest)
 gtest_discover_tests(${DAOS_TEST_NAME})
 
+## No 2 test
 set(DFS_TEST_NAME "dfs_sys_test")
 
 add_executable(
   ${DFS_TEST_NAME}
-  test_daos_fs_sys.cc
+  test_dfssys.cc
 )
 
 target_link_libraries(
@@ -105,3 +107,25 @@ target_include_directories(
 
 include(GoogleTest)
 gtest_discover_tests(${DFS_TEST_NAME})
+
+## No3 test
+set(ASYNC_TEST_NAME "async_test")
+add_executable(
+  ${ASYNC_TEST_NAME}
+  test_dfssys_async.cc
+)
+
+target_link_libraries(
+  ${ASYNC_TEST_NAME}
+  GTest::gtest_main
+  ${DAOS_LIBRARIES}
+  ${DFS_LIBRARIES}
+)
+
+target_include_directories(
+  ${ASYNC_TEST_NAME}
+  PUBLIC ${DAOS_INCLUDE_DIRS}
+)
+
+include(GoogleTest)
+gtest_discover_tests(${ASYNC_TEST_NAME})
