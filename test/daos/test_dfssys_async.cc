@@ -38,7 +38,7 @@
 /// NOTE: permission and mode for creating a file.
 #define EJFAT_DFS_FILE_PERMISSION S_IFREG | EJFAT_DFS_DIR_PERMISSION
 
-#define NUM_WRITE_FILE 5
+#define NUM_WRITE_FILE 10
 
 /**
  * Open a dir indicated by @param _dir_path. @return return code (0 for Success).
@@ -127,6 +127,7 @@ TEST(AsycTest, DfsSys_WriteFile_Async) {
     ASSERT_EQ(num_ev, NUM_WRITE_FILE);  // asssert all 5 events are finished.
     for (int i=0; i < NUM_WRITE_FILE; i++) {
         ASSERT_EQ(evp[i]->ev_error, 0);
+        std::cout << "\t evp[i]=" << evp[i] << ", ev[i]=" << &events[i] << std::endl;
     }
 
     // Release all events
@@ -147,7 +148,7 @@ TEST(AsycTest, DfsSys_WriteFile_Async) {
     // std::cout << "read_buf: " << read_buf << std::endl;
     EXPECT_STREQ("Hello", read_buf);
 
-    // Read the whole buffer.
+    // Read the whole buffer
     got_size = wrt_size_all;
     memset(read_buf, 0, wrt_size_all);
     std::cout << "Read_buf [reset]: " << read_buf << std::endl;

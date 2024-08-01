@@ -1,7 +1,7 @@
 /**
- * A simple DAOS client class to send data to daos server via `libdaos` key-value and 
- * `libdfs` dfs_sys interfaces.
- * 
+ * A simple DAOS client class to send data to daos server via `libdaos` key-value and
+ *  `libdfs` dfs_sys interfaces.
+ *
  * First checked in by xmei@jlab.org on May/21/2024.
 */
 
@@ -37,7 +37,7 @@ namespace ejfat {
         const char* pool_label;
         const char* cont_label;
 
-        void initDAOSConnection(); 
+        void initDAOSConnection();
         void closeDAOSConnection();
 
     public:
@@ -48,8 +48,8 @@ namespace ejfat {
         /**
          * I can only find the CLI measurement via `dmg pool ls` as below
          * // $ dmg pool ls
-         * //     Pool  Size   State Used Imbalance Disabled 
-         * //     ----  ----   ----- ---- --------- -------- 
+         * //     Pool  Size   State Used Imbalance Disabled
+         * //     ----  ----   ----- ---- --------- --------
          * //     ejfat 1.7 TB Ready 2%   0%        0/96
         */
         /**
@@ -72,7 +72,7 @@ namespace ejfat {
         void processError(const char* function_name, const int err_num);
     };
 
- 
+
     class KVClient : public DAOSConnector
     {
     /**
@@ -169,7 +169,7 @@ namespace ejfat {
          * \param[in] size      Number of bytes to write.
          * \param[in] buf       Pointer to the context buffer.
         */
-        void push(const char *file_name, daos_size_t size, const void *buf); 
+        void push(const char *file_name, daos_size_t size, const void *buf);
     };
 
 
@@ -182,7 +182,7 @@ namespace ejfat {
         dfs_obj_t* _obj, const char* op_name, const int err_num)
     {
         std::cerr << "Error in DAOS DFSSys object operation " << op_name << ": " << err_num << std::endl;
-        
+
         int rt = DFSSysClient::close(_obj);
         if (rt != 0) {
             DFSSysClient::processError("dfs_obj_close", rt);
@@ -201,7 +201,7 @@ namespace ejfat {
 
     DFSSysClient::DFSSysClient(const char *pool_label, const char *cont_label)
         : DAOSConnector(pool_label, cont_label)
-    {   
+    {
         // Mount the container to a POSIX userspace better preset with `dfuse`.
         // This will initialize @param _mnt_fs_sys.
         int rt = dfs_sys_mount(
@@ -225,7 +225,7 @@ namespace ejfat {
     }
 
     inline void DFSSysClient::push(const char *fileName, daos_size_t size, const void *buf)
-    {   
+    {
         // Open the file object, which will initialize \var _dfs_obj.
         dfs_obj_t *_dfs_obj = nullptr;
         int rt = dfs_sys_open(
@@ -297,7 +297,7 @@ namespace ejfat {
     {
         // oid.hi + oid.low is 128-bit. The higher 32-bit of oid.low is reserved for DAOS.
         KVClient::setObjectID(oid_low);
-        int rt = daos_obj_generate_oid2(KVClient::_coh, &_oid, 
+        int rt = daos_obj_generate_oid2(KVClient::_coh, &_oid,
             /* Object type */ DAOS_OT_KV_LEXICAL,
             /* Object class identifier, check <daos_obj_class.h>. */ OC_UNKNOWN,
             /* Hints. */ 0,
@@ -419,9 +419,9 @@ namespace ejfat {
     {
         /// TODO: elegant error handling instead of violate exit.
         std::cerr << "Error in DAOS function " << function_name << ": " << err_num << std::endl;
-        
+
         DAOSConnector::closeDAOSConnection();
-        exit(EJFAT_DAOS_MAGIC_ERROR_NUM_CONNECTOR_EXIT); 
+        exit(EJFAT_DAOS_MAGIC_ERROR_NUM_CONNECTOR_EXIT);
     }
 
     float DAOSConnector::getPoolUsage()

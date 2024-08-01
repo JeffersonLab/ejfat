@@ -145,12 +145,13 @@ set(CLAS_EXEC_FILES
         )
 
 set(DAOS_EXEC_FILES
-        simulation/packetBlasteeDaosKVClientNOGRPC.cc
-        simulation/packetBlasteeDaosDFSSysClientNOGRPC.cc
+        simulation/BlasteeDFS_Async.cpp
+        simulation/BlasteeKV.cpp
+        simulation/BlasteeDFS.cpp
         )
 
 set(DAOS_GRPC_EXEC_FILES
-        simulation/packetBlasteeDaosKVClient.cc
+        # simulation/packetBlasteeDaosKVClient.cc
         )
 
 set(TEST_FILES

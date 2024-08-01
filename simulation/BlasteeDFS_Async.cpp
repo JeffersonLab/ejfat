@@ -26,7 +26,7 @@
 #include <cinttypes>
 
 #include "ejfat_assemble_ersap.hpp"
-#include "ejfat_daos.hpp"
+#include "ejfat_daos_async.hpp"
 
 #ifdef __linux__
     #ifndef _GNU_SOURCE
@@ -42,9 +42,7 @@ using namespace ejfat;
 
 // Make sure this pool exists. Query with `dmg sys query list-pools`.
 #define EJFAT_DAOS_POOL_LABEL "sc"
-
-// Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
-#define EJFAT_DAOS_CONT_LABEL "demo-dfssys"
+#define EJFAT_DAOS_CONT_LABEL "fs_async"
 
 //-----------------------------------------------------------------------
 // Be sure to print to stderr as this program pipes data to stdout!!!
@@ -53,14 +51,13 @@ using namespace ejfat;
 
 #define INPUT_LENGTH_MAX 256
 
-
 /**
  * Print out help.
  * @param programName name to use for this program.
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6]",
             "        [-nobuild]",
@@ -69,6 +66,7 @@ static void printHelp(char *programName) {
             "        [-b <internal buffer byte sizez>]",
             "        [-r <UDP receive buffer byte size>]",
             "        [-f <file for stats>]",
+            "        [-d <DAOS container name>]",
             "        [-cores <comma-separated list of cores to run on>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]");
 
@@ -92,12 +90,14 @@ static void printHelp(char *programName) {
  * @param noBuild       filled with true if no reassembly of packets into events.
  * @param listenAddr    filled with IP address to listen on.
  * @param filename      filled with name of file in which to write stats.
+ * @param daosContName  filled with the name of the daos container.
  */
 static void parseArgs(int argc, char **argv,
                       int* bufSize, int *recvBufSize, int *tickPrescale,
                       int *cores, uint16_t* port,
                       bool *debug, bool *useIPv6, bool *noBuild,
-                      char *listenAddr, char *filename) {
+                      char *listenAddr, char *filename,
+                      char *daosContName) {
 
     int c, i_tmp;
     bool help = false;
@@ -112,7 +112,7 @@ static void parseArgs(int argc, char **argv,
             };
 
 
-    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:", long_options, nullptr)) != EOF) {
+    while ((c = getopt_long_only(argc, argv, "vhp:b:a:r:f:d:", long_options, nullptr)) != EOF) {
 
         if (c == -1)
             break;
@@ -166,6 +166,12 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
                 strcpy(listenAddr, optarg);
+                break;
+
+            case 'd':
+                // DAOS container name
+                std::cout << "Input DAOS container name is: " << optarg << std::endl << std::endl;
+                strcpy(daosContName, optarg);
                 break;
 
             case 'f':
@@ -442,14 +448,14 @@ int main(int argc, char **argv) {
     bool useIPv6 = false;
     bool noBuild = false;
 
-    // DAOS stuff declaration
-    DFSSysClient dfs_sys_client(EJFAT_DAOS_POOL_LABEL, EJFAT_DAOS_CONT_LABEL);
-    std::cout << "DAOS pool usage: " << 100.0 * dfs_sys_client.getPoolUsage() << "%\n" << std::endl;
-
     char listeningAddr[16];
     memset(listeningAddr, 0, 16);
     char filename[101];
     memset(filename, 0, 101);
+
+    // CLI DAOS container name
+    char daosContName[16];
+    memset(daosContName, 0, 16);
 
     for (int & core : cores) {
         core = -1;
@@ -457,7 +463,15 @@ int main(int argc, char **argv) {
 
     parseArgs(argc, argv, &bufSize, &recvBufSize,
               &tickPrescale, cores, &port, &debug,
-              &useIPv6, &noBuild, listeningAddr, filename);
+              &useIPv6, &noBuild, listeningAddr, filename, daosContName);
+
+    // DAOS stuff declaration
+    // Make sure this container exists. List the conts in a DAOS pool by `daos cont ls <pool_label>`.
+    DFSSysClientAsync dfs_sys_client(
+        EJFAT_DAOS_POOL_LABEL, daosContName);
+    dfs_sys_client.setCapSize(MiB);
+    std::cout << "DAOS pool usage: " << 100.0 * dfs_sys_client.getPoolUsage() << "%\n" << std::endl;
+
 
 #ifdef __linux__
 
@@ -713,10 +727,8 @@ int main(int argc, char **argv) {
         discardedBytes   += stats->discardedBytes;
         discardedPackets += stats->discardedPackets;
 
-        // Send data to DAOS server.
-        const char* fileName = generate_daos_kv_key(totalEvents);
-        dfs_sys_client.create(fileName);
-        dfs_sys_client.push(fileName, nBytes, dataBuf);
+        /// NOTE: Send data to DAOS server.
+        dfs_sys_client.flush(totalEvents, nBytes, dataBuf);
 
         // The tick returned is what was just built.
         // Now give it the next expected tick.
