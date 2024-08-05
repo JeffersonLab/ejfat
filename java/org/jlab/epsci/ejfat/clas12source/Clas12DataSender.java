@@ -364,7 +364,7 @@ public class Clas12DataSender {
 
             // Perhaps -direct was specified. parseArgs ensures this is not defined
             // if either -uri or -file is defined.
-            if (!haveEverything && directArg.length() > 0) {
+            if (!haveEverything && (directArg != null && directArg.length() > 0)) {
                 direct = true;
 
                 // Let's parse the arg with regex (arg = ipaddr:port where ipaddr can be ipv4 or ipv6)
