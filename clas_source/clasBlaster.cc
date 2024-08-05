@@ -665,9 +665,9 @@ int main(int argc, char **argv) {
         direct = true;
 
         // Let's parse the arg with regex (arg = ipaddr:port where ipaddr can be ipv4 or ipv6)
-        // Note: the pattern (\[?[a-fA-F\d:.]+\]?) matches either IPv6 or IPv4 addresses
-        // in which the addr may be surrounded by [] and thus is stripped off.
-        std::regex pattern(R"regex((\[?[a-fA-F\d:.]+\]?):(\d+))regex");
+        // Note: the pattern \[?([a-fA-F\d:.]+)\]? matches either IPv6 or IPv4 addresses
+        // in which the addr may be surrounded by [] and is stripped off.
+        std::regex pattern(R"regex(\[?([a-fA-F\d:.]+)\]?:(\d+))regex");
 
         std::smatch match;
         // change char* to string
@@ -678,10 +678,6 @@ int main(int argc, char **argv) {
 
             // Remove square brackets from address if present
             directIP = match[1];
-            if (!directIP.empty() && directIP.front() == '[' && directIP.back() == ']') {
-                directIP = directIP.substr(1, directIP.size() - 2);
-            }
-
             directPort = std::stoi(match[2]);
 
             if (isIPv6(directIP)) {
