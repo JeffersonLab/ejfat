@@ -833,7 +833,9 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
             }
 
             // in this case only syncAddr and syncPort defined
-            if (matcher.group(9).length() > 0) {
+            boolean onlySyncDefined = ((matcher.group(9) != null) &&
+                                       (matcher.group(9).length() > 0));
+            if (onlySyncDefined) {
                 uriInfo.haveSync = true;
                 uriInfo.haveData = false;
 
@@ -870,7 +872,9 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
             }
             else {
                 // if dataAddr and dataPort defined
-                if (matcher.group(5).length() > 0) {
+                boolean dataDefined = ((matcher.group(5) != null) &&
+                                       (matcher.group(5).length() > 0));
+                if (dataDefined) {
                     uriInfo.haveData = true;
 
                     addr = matcher.group(5);
@@ -908,7 +912,9 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
                 }
 
                 // if syncAddr and syncPort defined
-                if (matcher.group(7).length() > 0) {
+                boolean syncDefined = ((matcher.group(7) != null) &&
+                                       (matcher.group(7).length() > 0));
+                if (syncDefined) {
                     uriInfo.haveSync = true;
 
                     addr = matcher.group(7);
