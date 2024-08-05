@@ -284,14 +284,14 @@ public class Clas12DataSender {
                 "        [-r <# repeats>]           # times to read file (default forever)\n" +
                 "        [-nc]                      do NOT connect socket\n\n" +
 
-                "        [-uri  <URI containing info for sending to LB/CP (default \"\")>]" +
+                "        [-uri  <URI containing info for sending to LB/CP (default \"\")>]\n" +
                 "        [-file <file with URI (default /tmp/ejfat_uri)>]\n\n" +
 
                 "        [-direct <ip_addr:port>]   send data directly to consumer, bypass LB\n\n" +
 
                 "        [-d <delay in microsec>]\n" +
                 "        [-tpre <tick prescale>     tick increment after each event sent)\n" +
-                "        [-dpre <delay prescale>    if -d defined, 1 delay after every prescale pkts/evts)>]" +
+                "        [-dpre <delay prescale>    if -d defined, 1 delay after every prescale pkts/evts)>]\n" +
                 "        [-sock <# UDP sockets>]    sockets used to send data, 16 max (default 1)\n\n" +
 
                 "        [-mtu <desired MTU size>]\n" +
