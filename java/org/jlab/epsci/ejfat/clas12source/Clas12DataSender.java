@@ -463,9 +463,6 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
                 InetAddress destAddr = InetAddress.getByName(dataAddr);
                 if (connect) {
                     clientSockets[i].connect(destAddr, dataPort);
-                }
-
-                if (connect) {
                     udpPackets[i] = new DatagramPacket(packetStorage[i], 65535);
                 }
                 else {
