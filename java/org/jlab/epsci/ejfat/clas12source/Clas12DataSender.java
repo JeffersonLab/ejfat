@@ -354,10 +354,13 @@ public class Clas12DataSender {
                         }
                         else {
                             haveEverything = true;
+System.out.println("\nHave EVERYTHING in file\n");
                         }
                     }
                 }
-                catch (Exception e) {}
+                catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
 
             //  printUri(uriInfo);
@@ -378,6 +381,7 @@ public class Clas12DataSender {
                 if (matcher.find()) {
                     // We're here if directArg is in the proper format ...
                     directIP = matcher.group(1);
+System.out.println("Direct IP = " + directIP);
                     directPort = Integer.parseInt(matcher.group(2));
                     if (isIPv6(directIP)) {
                         directIpV6 = true;
