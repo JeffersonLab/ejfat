@@ -44,9 +44,13 @@ public class Clas12DataSender {
     /** Size of all headers. */
     static final int HEADER_BYTES = RE_HEADER_BYTES + LB_HEADER_BYTES;
     /** Default MTU to be used if it cannot be found programmatically. */
-    static final int DEFAULT_MTU = 1400;
+    static final int DEFAULT_MTU = 9000;
     /** Maximum number of sockets used to send data. */
     static final int MAX_SOCK_COUNT = 16;
+
+
+    // Statistics
+    static volatile long bufsSent = 0L, totalBytes=0L, totalPackets=0L, totalEvents=0L;
 
 
 
@@ -294,7 +298,7 @@ public class Clas12DataSender {
                 "        [-dpre <delay prescale>    if -d defined, 1 delay after every prescale pkts/evts)>]\n" +
                 "        [-sock <# UDP sockets>]    sockets used to send data, 16 max (default 1)\n\n" +
 
-                "        [-mtu <desired MTU size>]\n" +
+                "        [-mtu <desired MTU size, 9000 default>]\n" +
                 "        [-t <tick>]\n" +
                 "        [-ver <LB version>]\n" +
                 "        [-id <data src id>]\n" +
@@ -363,7 +367,7 @@ System.out.println("\nHave EVERYTHING in file\n");
                 }
             }
 
-            //  printUri(uriInfo);
+            printUri(uriInfo);
 
             // Perhaps -direct was specified. parseArgs ensures this is not defined
             // if either -uri or -file is defined.
@@ -491,14 +495,17 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
             // https://stackoverflow.com/questions/42609561/udp-maximum-packet-size
             int maxUdpPayload = (mtu - 20 - 8 - HEADER_BYTES);
 
+            // Start up stats thread
+            StatThread thread = new StatThread();
+            thread.start();
 
             int readFromIndex = 0;
             int delayCounter = 0;
             int portIndex = 0;
             int evtRate;
             int[] packetsSent = new int[2];
-            long loops = repeat, bufsSent = 0, totalBytes = 0, totalPackets = 0, totalEvents = 0;
 
+            long loops = repeat;
             long deltaT;
             Instant instant = Instant.now();
             long startTimeNanoos = instant.getEpochSecond() * 1000_000_000 + instant.getNano();
@@ -583,6 +590,98 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
             e.printStackTrace();
         }
 
+    }
+
+
+
+    class StatThread extends Thread {
+
+
+        // Thread to send to print out rates
+        public void run() {
+
+            long packetCount, byteCount, eventCount;
+            long prevTotalPackets, prevTotalBytes, prevTotalEvents;
+            long currTotalPackets, currTotalBytes, currTotalEvents;
+
+            // Ignore first rate calculation as it's most likely a bad value
+            boolean skipFirst = true;
+
+            double rate, avgRate, totalRate, totalAvgRate, evRate, avgEvRate;
+            long totalT, time, t1, t2, firstT;
+
+            // Get the current time suitable for measuring elapsed time
+            firstT = t1 = System.nanoTime();
+
+            while (true) {
+
+                prevTotalBytes   = totalBytes;
+                prevTotalPackets = totalPackets;
+                prevTotalEvents  = totalEvents;
+
+                // Delay 4 seconds between printouts
+                try {
+                    Thread.sleep(4000);
+                }
+                catch (InterruptedException ex) {
+                    return;
+                }
+
+                // Read time
+                t2 = System.nanoTime();
+
+                // Time diff in microseconds
+                time   = (t2 - t1) / 1000L;
+                totalT = (t2 - firstT) / 1000L;
+
+                currTotalBytes   = totalBytes;
+                currTotalPackets = totalPackets;
+                currTotalEvents  = totalEvents;
+
+                if (skipFirst) {
+                    // Don't calculate rates until data is coming in
+                    if (currTotalPackets > 0) {
+                        skipFirst = false;
+                    }
+                    firstT = t1 = t2;
+                    totalT = totalBytes = totalPackets = totalEvents = 0L;
+                    continue;
+                }
+
+                // Use for instantaneous rates
+                byteCount   = currTotalBytes   - prevTotalBytes;
+                packetCount = currTotalPackets - prevTotalPackets;
+                eventCount  = currTotalEvents  - prevTotalEvents;
+
+                // Reset things if #s rolling over
+                if ( (byteCount < 0) || (totalT < 0) )  {
+                    totalT = totalBytes = totalPackets = totalEvents = 0L;
+                    firstT = t1 = t2;
+                    continue;
+                }
+
+                // Packet rates
+                rate = 1000000.0 * ((double) packetCount) / time;
+                avgRate = 1000000.0 * ((double) currTotalPackets) / totalT;
+                System.out.printf("Packets:       %3.4g Hz,    %3.4g Avg, time: diff = %d usec%n", rate, avgRate, time);
+
+                // Data rates (with NO header info)
+                rate = ((double) byteCount) / time;
+                avgRate = ((double) currTotalBytes) / totalT;
+
+                // Data rates (with RE header info)
+                totalRate = ((double) (byteCount + RE_HEADER_BYTES*packetCount)) / time;
+                totalAvgRate = ((double) (currTotalBytes + RE_HEADER_BYTES*currTotalPackets)) / totalT;
+                System.out.printf("Data (+hdrs):  %3.4g (%3.4g) MB/s,  %3.4g (%3.4g) Avg%n", rate, totalRate, avgRate, totalAvgRate);
+
+                // Event rates
+                evRate = 1000000.0 * ((double) eventCount) / time;
+                avgEvRate = 1000000.0 * ((double) currTotalEvents) / totalT;
+                System.out.printf("Events:         %3.4g Hz,  %3.4g Avg, total %d %n%n", evRate, avgEvRate, totalEvents);
+
+                t1 = t2;
+            }
+        }
     }
 
 
@@ -683,38 +782,38 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
         System.out.println("CP host:             " + uri.cpAddr);
         System.out.println("CP port:             " + uri.cpPort);
 
-        if (uri.adminToken.length() > 0) {
+        if (uri.adminToken != null && uri.adminToken.length() > 0) {
             System.out.println("Admin token:         " +uri.adminToken);
         }
 
-        if (uri.instanceToken.length() > 0) {
+        if (uri.instanceToken != null && uri.instanceToken.length() > 0) {
             System.out.println("Instance token:      " + uri.instanceToken);
         }
 
-        if (uri.lbId.length() > 0) {
+        if (uri.lbId != null && uri.lbId.length() > 0) {
             System.out.println("LB id:               " + uri.lbId);
         }
 
-        if (uri.lbName.length() > 0) {
+        if (uri.lbName != null && uri.lbName.length() > 0) {
             System.out.println("LB name:             " + uri.lbName);
         }
 
-        if (uri.dataAddrV4.length() > 0) {
+        if (uri.dataAddrV4 != null && uri.dataAddrV4.length() > 0) {
             System.out.println("Data host:           " + uri.dataAddrV4);
             System.out.println("Data port:           " + uri.dataPort);
         }
 
-        if (uri.dataAddrV6.length() > 0) {
+        if (uri.dataAddrV6 != null && uri.dataAddrV6.length() > 0) {
             System.out.println("Data host V6:        " + uri.dataAddrV6);
             System.out.println("Data port:           " + uri.dataPort);
         }
 
-        if (uri.syncAddrV4.length() > 0) {
+        if (uri.syncAddrV4 != null && uri.syncAddrV4.length() > 0) {
             System.out.println("Sync host:           " + uri.syncAddrV4);
             System.out.println("Sync port:           " + uri.syncPort);
         }
 
-        if (uri.syncAddrV6.length() > 0) {
+        if (uri.syncAddrV6 != null && uri.syncAddrV6.length() > 0) {
             System.out.println("Sync host V6:        " + uri.syncAddrV6);
             System.out.println("Sync port:           " + uri.syncPort);
         }
