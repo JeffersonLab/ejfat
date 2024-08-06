@@ -1,19 +1,9 @@
 # To use this, do the following the first time:
 #   % mkdir build
 #   % cd build
-#   % cmake ..
+#   % cmake .. -DBUILD_SIMPLE=1 -DBUILD_CLAS=1 -DBUILD_OLD=1 -DBUILD_BACKEND=1
 #   % make (install)
 #
-#
-# To build ERSAP engine/service code
-# define where we put FindZeroMQ.cmake file so zmq can be found
-#   % cmake .. -DBUILD_ERSAP=1 -DBUILD_ET=1
-#
-# To build evenything in simulation and util directories
-#   % cmake .. -DBUILD_DIS=1 -DBUILD_ET=1 -DBUILD_GRPC=1
-#
-# These and other flags may be combined to do a complete build
-#  % cmake .. -DBUILD_ET=1 -DBUILD_ERSAP=1 -DBUILD_DIS=1 -DBUILD_GRPC=1 -DBUILD_CLAS=1
 #
 # After doing this once can do the following to recompile
 #  % cd <top level dir>
@@ -131,8 +121,9 @@ set(BACKEND_SRC_FILES
         simulation/EtFifoEntryItem.cpp
         )
 
-# ET, boost, grpc, ejfa_grpc, protobuf, Disruptor, Prometheus, asio, crow dependencies. Basically everything.
-set(ERSAP_EXEC_FILES
+# Backend with extras: ET, boost, grpc, ejfa_grpc, protobuf, Disruptor, Prometheus, asio, crow dependencies. Basically everything.
+set(BACKEND_EXEC_FILES_2
+#set(ERSAP_EXEC_FILES
         simulation/packetBlasteeEtMT.cc
         simulation/packetBlasteeEtMTPRT.cc
         simulation/ersap_et_consumer.cc
@@ -376,17 +367,13 @@ if (BUILD_BACKEND)
         message(STATUS "ejfat_grpc lib cannot be found, compile without it")
     endif()
 
-endif()
+
+    #----------------------------------------------------------
+    # For executables in BACKEND_EXEC_FILES_2 to be compiled,
+    # the following additional packages are required.
+    #----------------------------------------------------------
 
 
-
-
-
-# Ersap build is optional and set it to OFF by default.
-# Requires zmq lib.
-option(BUILD_ERSAP "Build ERSAP engine and service" OFF)
-
-if (BUILD_ERSAP)
     # Need ET for ERSAP CODE
     find_package(ET)
     if (NOT ET_FOUND)
@@ -394,86 +381,10 @@ if (BUILD_ERSAP)
     endif()
 
 
-    # Need boost for Disruptor
-    if (NOT DEFINED Boost_FOUND)
-        find_package(Boost REQUIRED system thread chrono)
-    endif()
-    if (NOT Boost_FOUND)
-        message(FATAL_ERROR "Boost cannot be found, cmake will exit." )
-    endif()
-
-
-    # Find where Disruptor libs and includes are installed for ejfat use
-    if (NOT DEFINED DISRUPTOR_FOUND)
-        find_package(DISRUPTOR)
-    endif()
-    if (NOT DISRUPTOR_FOUND)
-        message(FATAL_ERROR "Disruptor cannot be found, cmake will exit." )
-    endif()
-
-
-    # Find Protobuf installation
-    # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
-    if (NOT DEFINED Protobuf_FOUND)
-        find_package(Protobuf CONFIG REQUIRED)
-        message(STATUS "Using protobuf ${Protobuf_VERSION}")
-        set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
-    endif()
-    if (NOT Protobuf_FOUND)
-        message(FATAL_ERROR "Protobuf cannot be found, cmake will exit." )
-    endif()
-
-
-    # Find gRPC installation
-    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-    if (NOT DEFINED gRPC_FOUND)
-        find_package(gRPC)
-    endif()
-    if (NOT gRPC_FOUND)
-        # Grpc cannot be found, let's try again by using env var
-        if (NOT DEFINED ENV{GRPC_INSTALL_DIR})
-            if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
-                message(FATAL_ERROR "Define GRPC_INSTALL_DIR or EJFAT_ERSAP_INSTALL_DIR so gRPC can be found")
-            else()
-                set(GRPC_INSTALL_DIR $ENV{EJFAT_ERSAP_INSTALL_DIR})
-            endif()
-        else()
-            set(GRPC_INSTALL_DIR $ENV{GRPC_INSTALL_DIR})
-        endif()
-
-        find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
-    endif()
-    if (NOT gRPC_FOUND)
-        message(FATAL_ERROR "grpc cannot be found, cmake will exit." )
-    endif()
-
-    message(STATUS "Using gRPC ${gRPC_VERSION}")
-    set(_REFLECTION gRPC::grpc++_reflection)
-    set(_GRPC_GRPCPP gRPC::grpc++)
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
-
-
-    # Find where ejfat_grpc lib and includes are installed
-    if (NOT DEFINED Ejfat_grpc_FOUND)
-        find_package(Ejfat_grpc)
-    endif()
-    if (NOT Ejfat_grpc_FOUND)
-        message(STATUS "ejfat_grpc lib cannot be found, compile without it")
-    endif()
-
     # for clasBlasteeEtNTPRT
     find_package(ASIO REQUIRED)
     find_package(CROW REQUIRED)
     find_package(prometheus-cpp REQUIRED CONFIG)
-
-    if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-        # Only on Linux
-        find_package(Ersap REQUIRED)
-
-        # requires zmq
-        add_subdirectory(ersap_engine/ejfat/legacy/src/main/cpp)
-        add_subdirectory(ersap_engine/ejfat/services/src/main/cpp)
-    endif()
 
 endif()
 
@@ -609,12 +520,6 @@ endif()
             # Install headers into include dir
         endif()
 
-    endif()
-
-
-
-    if (BUILD_ERSAP)
-        message(STATUS "TRY ERSAP CODE:")
 
 #        add_executable(packetBlasteeEtMTPRT simulation/packetBlasteeEtMTPRT.cc ${UTIL_FILES} ${GRPC_SRC_FILES})
 #
@@ -638,7 +543,7 @@ endif()
 
 
         # This files need util files added to executable
-        foreach(fileName ${ERSAP_EXEC_FILES})
+        foreach(fileName ${BACKEND_EXEC_FILES_2})
             # Get file name with no directory or extension as executable name
             get_filename_component(execName ${fileName} NAME_WE)
             # Create executable from file
