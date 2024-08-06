@@ -22,7 +22,7 @@
     <property name="jarPath"       value="${build.lib}/${jarName}" />
     <property name="local.jars"    value="${src.dir}/jars" />
 
-    <property name="hipoJarName"     value="jn4p-1.0.4.jar" />
+    <property name="hipoJarName"     value="j4np-1.0.4.jar" />
     <property name="hipoJarPath"     value="${local.jars}/${hipoJarName}" />
 
     <!-- Set Classpath, ignore caller's classpath -->
