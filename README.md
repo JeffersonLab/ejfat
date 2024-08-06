@@ -1,11 +1,11 @@
 # EJFAT (ESnet-JLab FPGA Accelerated Transport)
 
-## Check out ejfat, esnet2 branch
+## Check out ejfat, esnet3 branch
 
-    git clone https://github.com/JeffersonLab/ejfat/tree/esnet2
+    git clone https://github.com/JeffersonLab/ejfat/tree/esnet3
             or 
     gh repo clone JeffersonLab/ejfat
-    git checkout esnet2
+    git checkout esnet3
     
     cd ejfat
     mkdir build
@@ -22,9 +22,9 @@ which takes precedence over the environmental variable.
 This allows for needed libraries and headers to be found. It also
 allows for generated files to be stored there.
 
-    export EJFAT_ERSAP_INSTALL_DIR=/daqfs/ersap/installation
+    export EJFAT_ERSAP_INSTALL_DIR=/daqfs/ersap/installation3
         or
-    cmake .. -DINSTALL_DIR=/daqfs/ersap/installation
+    cmake .. -DINSTALL_DIR=/daqfs/ersap/installation3
     
 
 ## -------------------------------------------------------------
@@ -33,10 +33,10 @@ allows for generated files to be stored there.
 
 This builds the no-dependency code:
 
-    export EJFAT_ERSAP_INSTALL_DIR=/daqfs/ersap/installation
+    export EJFAT_ERSAP_INSTALL_DIR=/daqfs/ersap/installation3
     cmake ..
         or
-    cmake .. -DINSTALL_DIR=/daqfs/ersap/installation
+    cmake .. -DINSTALL_DIR=/daqfs/ersap/installation3
     
     make install
     
@@ -350,7 +350,7 @@ you're compiling so that cmake know where to find it:
         export ASIO_INSTALL_DIR=<installation dir>
 
 
-- **zeroMQ**
+- **zeroMQ** (no longer used)
 
         # first look here
         export ZeroMQ_DIR=<zmq dir>
@@ -371,7 +371,7 @@ you're compiling so that cmake know where to find it:
 
 
 ### -------------------------------------------------------------
-#### Compile non-ET/ERSAP reassembly backends
+#### Compile reassembly backends
 
     cmake .. -DBUILD_BACKEND=1
     make
@@ -393,12 +393,10 @@ you're compiling so that cmake know where to find it:
 
 
 ### -------------------------------------------------------------
-#### Compile ERSAP (engines are linux only)
+#### Compile Everything 
 
-    export ASIO_INSTALL_DIR=<location of asio directory>
-    export CROW_INSTALL_DIR=<location of Crow directory>
-    cmake .. -DBUILD_ERSAP=1
-    make
+    cmake .. -DBUILD_SIMPLE=1 -DBUILD_CLAS=1 -DBUILD_BACKEND=1 -DBUILD_OLD=1
+    make -j 4
 
 
 ### -------------------------------------------------------------
