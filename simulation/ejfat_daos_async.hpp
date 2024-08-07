@@ -17,6 +17,9 @@
 // BoE calulation: DAOS dfs chunk size (1MiB)/ Ethernet MTU - header (8952B) = 117.13
 /// TODO: 256 used to be the best on Aug-2 but now the maximum supported is 256!!!
 /// TODO: Dig it later (should be related to the RDMA library CART)
+
+// For DFS, maximum can set to 32;
+// For KV, this can be up to 300. 500 will fail. Larger than 256 does not gain more perf.
 #define EJFAT_DAOS_EVT_QUEUE_SIZE 256
 
 #define EJFAT_DAOS_MAGIC_ERROR_NUM_EQ_EXIT -6007
@@ -150,6 +153,61 @@ public:
 };
 
 
+class KVClientAsync : public DAOSConnectorAsync
+{
+/**
+
+*/
+private:
+    int objectId = 0;  // the objectId-th object to create.
+    daos_handle_t currObjectHandle = DAOS_HDL_INVAL;
+    daos_obj_id_t currObject;
+
+    void setObjectID(const uint64_t oid_lowbits);
+
+    /**
+     * Stop writing to the current object and sync the DAOS event queue to make sure
+     * all previous events have completed.
+     * Close this object afterwardds.
+     *
+     * \param[in]   num_events      The number of uncompleted events in the DAOS event queue.
+     */
+    void commitObject(int num_events);
+
+    /**
+     * Set the new DAOS object id based on @param oid_hint.
+     * Open this object.
+    */
+    void createObject(const uint64_t oid_hint);
+
+    /**
+     * Helper function to process the KV object error.
+     * Print the error number and close the KV object.
+     * It only applies to the cases where the object has been successfully opened.
+     */
+    void processKVError(const char* op_name, const int err_num);
+
+public:
+    ~KVClientAsync() = default;
+    KVClientAsync(const char* pool_label, const char* cont_label)
+        : DAOSConnectorAsync(pool_label, cont_label) { }
+
+    /**
+     * Flush memory buf into DAOS server.
+     * \param[in]   counter EJFAT packets counter.
+     * \param[in]   size    The length of memory buffer.
+     * \param[in]   buf     Piece of memory to write.
+     */
+    void flush(uint64_t counter, daos_size_t size, const void *buf);
+
+    /**
+     * Helper function to print out the full 128-bit DAOS Object ID with a format of <oid.hi>.<oid.lo>.
+     * \param[in]   oid The DAOS object id.
+    */
+    void printObjectID(const daos_obj_id_t oid) const;
+    };
+
+
 DAOSConnectorAsync::DAOSConnectorAsync(
     const char* pool_label, const char* cont_label) :
     pool_label(pool_label), cont_label(cont_label)
@@ -185,7 +243,7 @@ bool DAOSConnectorAsync::syncDAOSEventQueue(int num)
     // std::cout << "\nBegin polling the events...  eq.cookie: " << _eq.cookie << std::endl;
 
     int readyEvents = 0;
-    for (int i=0; i < EJFAT_DAOS_EVT_QUEUE_SIZE; i++) {
+    for (int i = 0; i < EJFAT_DAOS_EVT_QUEUE_SIZE; i++) {
         bool isReady;
         int rc = daos_event_test(&_evs[i], DAOS_EQ_WAIT, &isReady);
         if (rc != 0) {
@@ -200,7 +258,7 @@ bool DAOSConnectorAsync::syncDAOSEventQueue(int num)
     }
 
     // Reset the events
-    for (int i=0; i < EJFAT_DAOS_EVT_QUEUE_SIZE; i++){
+    for (int i = 0; i < EJFAT_DAOS_EVT_QUEUE_SIZE; i++){
         // std::cout << "\t\t Finalizing  event: " << i << std::endl;
         int rc = daos_event_fini(&_evs[i]);
         if (rc != 0) {
@@ -398,11 +456,11 @@ void DFSSysClientAsync::commitFile(int num_evts)
         DFSSysClientAsync::processDFSSysError(
             "commitFile", EJFAT_DAOS_MAGIC_ERROR_NUM_EQ_EXIT);
     } else {
-    int rc = dfs_sys_close(currFileObj);
-    if (rc != 0) {
-        DFSSysClientAsync::processDFSSysError("dfs_sys_close", rc);
-    }
-    currFileObj = nullptr;
+        int rc = dfs_sys_close(currFileObj);
+        if (rc != 0) {
+            DFSSysClientAsync::processDFSSysError("dfs_sys_close", rc);
+        }
+        currFileObj = nullptr;
 
     // if (fileId % 1000 == 1)
     //     std::cout << "\t Commit file" << std::endl;
@@ -441,8 +499,119 @@ void DFSSysClientAsync::flush(uint64_t counter, daos_size_t size, const void *bu
     // Update the counnters of the DAOS event queue.
     DFSSysClientAsync::acummBytes += size;
     DFSSysClientAsync::currEventId += 1;
-
 }
 
+void KVClientAsync::commitObject(int num_evts)
+{
+    if (currObjectHandle.cookie == 0) {      // No such object is accepttable.
+        currObject = DAOS_OBJ_NIL;
+        return;
+    }
+
+    // Poll the events in the event queue
+    // std::cout << "\nBegin commit object, objectId: " << objectId << std::endl;
+    bool queueReady = DAOSConnectorAsync::syncDAOSEventQueue(num_evts);
+    if (!queueReady) {
+        KVClientAsync::processKVError(
+            "commitObject", EJFAT_DAOS_MAGIC_ERROR_NUM_EQ_EXIT);
+    }
+
+    // Close current object in BLOCKING mode.
+    int rc = daos_kv_close(currObjectHandle, NULL);
+    if (rc != 0) {
+        std::cout << "Closing object...   obj.cookie: " << currObjectHandle.cookie << std::endl;
+        KVClientAsync::processKVError("daos_kv_close", rc);
+    }
+    currObject = DAOS_OBJ_NIL;
+
+    // if (objectId % 1000 == 0) {
+    //     std::cout << "\t Commit Object, objId: " << objectId << std::endl;
+    // }
+}
+
+inline void KVClientAsync::setObjectID(const uint64_t oid_lowbits)
+{
+    // Make sure it's a new object that \var _oid.lo is 0.
+    if (KVClientAsync::currObject.lo != 0) {
+        std::cerr << "Not a new object - " << std::endl;
+        KVClientAsync::printObjectID(currObject);
+        KVClientAsync::processError("daos_kv_obj_set_id", EJFAT_DAOS_MAGIC_ERROR_NUM_KV_SETOBJID);
+    }
+
+    KVClientAsync::currObject.lo = oid_lowbits;
+}
+
+void KVClientAsync::createObject(const uint64_t oid_low)
+{
+    // oid.hi + oid.low is 128-bit. The higher 32-bit of oid.low is reserved for DAOS.
+    KVClientAsync::setObjectID(oid_low);
+    int rc = daos_obj_generate_oid2(KVClientAsync::_coh, &currObject,
+        /* Object type */ DAOS_OT_KV_LEXICAL,
+        /* Object class identifier, check <daos_obj_class.h>. */ OC_UNKNOWN,
+        /* Hints. */ 0,
+        /* Reserved arg. uint32_t*/ 0);
+
+    if (rc != 0) {
+        KVClientAsync::processError("daos_kv_create_obj", rc);
+    }
+
+    // Open the object in BLocking mode. This will initilizee \var currObjectHandle.
+    rc = daos_kv_open(KVClientAsync::_coh, currObject, DAOS_OO_RW, &currObjectHandle, NULL);
+    if (rc != 0) {
+        KVClientAsync::processError("daos_kv_obj_open", rc);
+    }
+
+    // std::cout << "\nCreate DAOS object...   obj.cookie: " << currObjectHandle.cookie << "\n";
+    // KVClientAsync::printObjectID(currObject);
+}
+
+void KVClientAsync::flush(uint64_t counter, daos_size_t size, const void *buf)
+{
+    // The first file to write.
+    if (currEventId == 0 && DFSSysClientAsync::DAOSConnectorAsync::acummBytes == 0)
+    {
+        KVClientAsync::createObject(counter);
+    }
+
+    // Planned write can fit into the file.
+    // if (DFSSysClientAsync::acummBytes + size <= cap_size)
+    if (currEventId == EJFAT_DAOS_EVT_QUEUE_SIZE)
+    {
+        // std::cout << "\t Reach limit at KiB: "<< float(DFSSysClientAsync::acummBytes)/1024.0 <<\
+            ", EvtId: " << currEventId << \
+            ", fileId: " << fileId << \
+            std::endl;
+        // Commit the old file and reset all the counnters of the DAOS event queue.
+        KVClientAsync::commitObject(KVClientAsync::currEventId);
+        DAOSConnectorAsync::resetDAOSEventQueueCounters();
+
+        // Create a new file and write to it.
+        objectId += 1;
+        KVClientAsync::createObject(objectId);
+    }
+
+    // Put into a new key-value pair.
+    daos_kv_put(currObjectHandle, DAOS_TX_NONE, 0,
+        /* key */ std::to_string(counter).c_str(), size, buf, &_evs[currEventId]);
+
+    // Update the counnters of the DAOS event queue.
+    KVClientAsync::acummBytes += size;
+    KVClientAsync::currEventId += 1;
+}
+
+inline void KVClientAsync::processKVError(const char *op_name, const int err_num)
+{
+    std::cerr << "Error in DAOS KV object operation " << op_name << ": " << err_num << std::endl;
+
+    int rc = daos_kv_close(currObjectHandle, NULL);  // Close in blocking mode.
+    if (rc != 0) {
+        KVClientAsync::processError("daos_kv_obj_close", rc);
+    }
+}
+
+inline void KVClientAsync::printObjectID(const daos_obj_id_t oid) const
+{
+    std::cout << oid.hi << "." << oid.lo << std::endl;
+}
 
 } // namespace ejfat

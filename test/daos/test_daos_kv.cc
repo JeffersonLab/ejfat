@@ -1,6 +1,6 @@
 /**
  * DAOS key-value store operation.
- * 
+ *
  * First checked in by xmei@jlab.org on Mar/28/2024.
 */
 
@@ -49,13 +49,13 @@ TEST(DaosTest, KeyValueGetAfterPut) {
         /* reserved arg. uint32_t*/ 0), 0);
     EXPECT_NE(oid.hi, 0);   // oid is updated
     EXPECT_EQ(oid.lo, EJFAT_DAOS_OBJECT_ID_LO);
-    // std::cout << "oid (assigned): " << oid.hi << "," << oid.lo << std::endl; 
-    
-    // Start a new transaction. Returns the transaction handle @var th. 
-    EXPECT_EQ(daos_tx_open(coh, &th, 
+    // std::cout << "oid (assigned): " << oid.hi << "," << oid.lo << std::endl;
+
+    // Start a new transaction. Returns the transaction handle @var th.
+    EXPECT_EQ(daos_tx_open(coh, &th,
         /* DAOS transaction flags, DAOS_TF_RONLY or DAOS_TF_ZERO_COPY */ DAOS_TF_ZERO_COPY,
         /* runnning in blockingg mode */ NULL), 0);
-    
+
     EXPECT_EQ(daos_kv_open(coh, oid, DAOS_OO_RW,
         &oh1,
         /* runnning in blockingg mode */ NULL), 0);
@@ -122,7 +122,7 @@ TEST(DaosTest, KeyValueMultiplePuts) {
 
     // TODO: study the relationship between object type and OCI.
     // Every other OC_XXX (object class identifier, OCI) I tried return -1003
-    EXPECT_EQ(daos_obj_generate_oid2(coh, &oid, 
+    EXPECT_EQ(daos_obj_generate_oid2(coh, &oid,
         /* object type */ DAOS_OT_KV_LEXICAL,
         /* object class idetifier, check <daos_obj_class.h>. */ OC_UNKNOWN,
         /* hint. */ 0,
@@ -137,17 +137,17 @@ TEST(DaosTest, KeyValueMultiplePuts) {
     for (int i = 0; i < n; i++) {
         std::string put_key = base_key_str + std::to_string(i);
         std::string put_value = base_value_str + std::to_string(i);
-        
+
         ASSERT_EQ(daos_kv_put(oh, DAOS_TX_NONE, 0, put_key.c_str(), put_value.size(),
         /* type cast to void*. Optional. */  static_cast<const void*>(put_value.data()),
         /* running in blocking mode */ NULL), 0);
     }
-    
+
     for (int i = 0; i < n; i++) {
         std::string get_key = base_key_str + std::to_string(i);
         daos_size_t fetch_size = DAOS_REC_ANY;
-        
-        ASSERT_EQ(daos_kv_get(oh, DAOS_TX_NONE, 0, get_key.c_str(), &fetch_size, 
+
+        ASSERT_EQ(daos_kv_get(oh, DAOS_TX_NONE, 0, get_key.c_str(), &fetch_size,
         /* NULL means only returns the fetch_size */ NULL, NULL), 0);
         ASSERT_EQ(fetch_size, 16);
 
