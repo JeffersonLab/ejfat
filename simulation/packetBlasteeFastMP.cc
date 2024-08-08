@@ -104,30 +104,6 @@ using namespace ejfat;
 // Max # of data input sources
 #define MAX_SOURCES 16
 
-// Limit the number of time that an incomplete buffer is kept,
-// hoping for late packets to arrive. If this time is too large and the incoming
-// data rate is high, then this program will run out of available buffers in which
-// to construct events.
-// This is due to the nature of the fast-ring-buffer-based buffer supply.
-// It is set to account for non-sequential return of buffers to the supply.
-// In practical terms, if a buffer is incomplete and therefore not returned back to
-// the supply to be further processed downstream, the supply will not return all buffers
-// which were obtained from the supply after the one being held back. So holding onto it
-// for too long will mean running out of buffers.
-//
-// There is a 2-tiered solution for this problem.
-// The solution is to decrease the "hold" time defined in FAST_STORE_MICROSEC.
-// Suggestion: don't go above 2000 microsec for high rates. Also, the max size of this map
-// is limited by FAST_MAP_MAX to allow for fast map searches.
-// Once this fast hold time or map size is exceeded, the buffer is copied and stored in
-// the "slow" map. The max # of items in the slow map and the max time to store it are
-// given by SLOW_MAP_MAX and SLOW_STORE_MILLISEC. If size is exceeded, the oldest map item
-// is deleted to make room. Anything stored over the time limit is deleted.
-
-#define FAST_STORE_MICROSEC 2000
-#define SLOW_STORE_MILLISEC 100
-#define FAST_MAP_MAX 4
-#define SLOW_MAP_MAX 20
 
 
 /**
@@ -138,7 +114,7 @@ static void printHelp(char *programName) {
     fprintf(stderr,
             "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
-            "        [-h] [-v] [-ip6] [-norestart] [-jointstats]\n",
+            "        [-h] [-v] [-ip6] [-norestart] [-jointstats] [-direct]\n",
 
             "        -addr  <data receiving address to register w/ CP>",
             "        [-a <listening IP address (defaults to INADDR_ANY)>]",
@@ -163,9 +139,12 @@ static void printHelp(char *programName) {
             "        [-pinBuf <starting core #, 1 for each buf collection thd>]",
             "        [-tpre <tick prescale (1,2, ... expected tick increment for each buffer)>]\n");
 
-    fprintf(stderr, "        Must connect to a CP. This can be done by specifying either -uri or -file.\n");
-    fprintf(stderr, "        If neither specified, default is to find connection info in /tmp/ejat_uri.\n");
-    fprintf(stderr, "        This client only reports 0%% fill and ready for data.\n\n");
+    fprintf(stderr, "        Normally connect to a CP. This can be done by specifying either -uri or -file.\n");
+    fprintf(stderr, "          If neither specified, default is to find connection info in /tmp/ejat_uri.\n");
+    fprintf(stderr, "          This client only reports 0%% fill and ready for data.\n\n");
+
+    fprintf(stderr, "        To get data directly from a sender (packetBlaster -direct <addr:port>)");
+    fprintf(stderr, "          and not interact with the CP, use the -direct cmd line option.\n\n");
 
     fprintf(stderr, "        This is an EJFAT UDP packet receiver made to work with packetBlaster.\n");
     fprintf(stderr, "        It can receive from multiple data sources simultaneously.\n\n");
@@ -194,6 +173,7 @@ static void printHelp(char *programName) {
  * @param dump          don't have a thd which gets all buffers (for possible merging).
  * @param noRestart     exit program if sender restarts.
  * @param jointStats    display stats of all sources joined together.
+ * @param direct        get data directly from sender (not thru LB) and do NOT talk to CP.
  * @param listenAddr    IP address to listen on.
  * @param filename      name of file in which to write stats.
  * @param dataAddr      IP address to send to CP as data destination addr for this program.
@@ -209,7 +189,8 @@ static void parseArgs(int argc, char **argv,
                       int *core, int *coreCnt, int *coreBuf,
                       uint16_t* port,
                       bool *debug, bool *useIPv6,
-                      bool *dump, bool *lump, bool *noRestart, bool *jointStats,
+                      bool *dump, bool *lump, bool *noRestart,
+                      bool *jointStats, bool *direct,
                       char *listenAddr, char *dataAddr,
                       char *uri, char *file, char *token,
                       std::vector<int>& ids,
@@ -242,6 +223,8 @@ static void parseArgs(int argc, char **argv,
 
                           {"minf",        1, nullptr, 16},
                           {"maxf",        1, nullptr, 17},
+
+                          {"direct",      0, nullptr, 18},
                           {0,       0, 0,    0}
             };
 
@@ -464,6 +447,11 @@ static void parseArgs(int argc, char **argv,
                 *jointStats = true;
                 break;
 
+            case 18:
+                // get data directly from sender
+                *direct = true;
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -490,7 +478,7 @@ static void parseArgs(int argc, char **argv,
         exit(-1);
     }
 
-    if (strlen(dataAddr) < 7) {
+    if ((*direct == false) && (strlen(dataAddr) < 7)) {
         fprintf(stderr, "Must specify -addr\n");
         exit(-1);
     }
@@ -997,7 +985,7 @@ static void *threadAssembleFast(void *arg) {
     int bufSize         = tArg->bufferSize;
     int id              = tArg->pktConsumerId;
     int sourceId        = tArg->sourceId;
-    std::cerr << "sourceId = " << sourceId << std::endl;
+    //std::cerr << "thd receiving sourceId = " << sourceId << std::endl;
     int port            = tArg->port + sourceId;
     int recvBufSize     = tArg->recvBufSize;
     int tickPrescale    = tArg->tickPrescale;
@@ -1290,7 +1278,7 @@ static void *threadReadBuffers(void *arg) {
     int id = tArg->sourceId;
     auto & supply = tArg->supplyMap;
 
-    std::cerr << "2 id = " << id <<std::endl;
+    //std::cerr << "2 id = " << id <<std::endl;
 
 #ifdef __linux__
 
@@ -1436,6 +1424,7 @@ int main(int argc, char **argv) {
     bool lumpBufs = false;
     bool noRestart = false;
     bool jointStats = false;
+    bool direct = false;
 
     float minFactor = 0.F;
     float maxFactor = 0.F;
@@ -1472,7 +1461,7 @@ int main(int argc, char **argv) {
               &startingBufCore,
               &startingPort, &debug, &useIPv6,
               &dumpBufs, &lumpBufs,
-              &noRestart, &jointStats,
+              &noRestart, &jointStats, &direct,
               listeningAddr, dataAddr,
               uri, fileName, adminToken, ids,
               &minFactor, &maxFactor);
@@ -1529,64 +1518,72 @@ int main(int argc, char **argv) {
     }
 
 
-    //----------------------------------------------
-    // Parse the URI (directly given or in file().
-    // This gives CP connection info.
-    //----------------------------------------------
+    std::string cpAddr;
+    uint16_t cpPort;
+    std::string lbId;
+    std::string instanceToken;
 
-    // Set default file name
-    if (strlen(fileName) < 1) {
-        strcpy(fileName, "/tmp/ejfat_uri");
-    }
 
-    ejfatURI uriInfo;
-    bool haveEverything = false;
+    if (!direct) {
+        //----------------------------------------------
+        // Parse the URI (directly given or in file().
+        // This gives CP connection info.
+        //----------------------------------------------
 
-    // First see if the uri arg is defined, if so, parse it
-    if (strlen(uri) > 0) {
-        bool parsed = parseURI(uri, uriInfo);
-        if (parsed) {
-            // URI is in correct format
-            if (!uriInfo.haveInstanceToken) {
-                std::cerr << "no instance token in URI, substitute admin token" << std::endl;
-                uriInfo.instanceToken = token;
-            }
-            haveEverything = true;
+        // Set default file name
+        if (strlen(fileName) < 1) {
+            strcpy(fileName, "/tmp/ejfat_uri");
         }
-    }
 
-    // If no luck with URI, look into file
-    if (!haveEverything && strlen(fileName) > 0) {
+        ejfatURI uriInfo;
+        bool haveEverything = false;
 
-        std::ifstream file(fileName);
-        if (file.is_open()) {
-            std::string uriLine;
-            if (std::getline(file, uriLine)) {
-                bool parsed = parseURI(uriLine, uriInfo);
-                if (parsed) {
-                    if (!uriInfo.haveInstanceToken) {
-                        std::cerr << "no instance token in file, substitute admin token" << std::endl;
-                        uriInfo.instanceToken = token;
-                    }
-                    haveEverything = true;
+        // First see if the uri arg is defined, if so, parse it
+        if (strlen(uri) > 0) {
+            bool parsed = parseURI(uri, uriInfo);
+            if (parsed) {
+                // URI is in correct format
+                if (!uriInfo.haveInstanceToken) {
+                    std::cerr << "no instance token in URI, substitute admin token" << std::endl;
+                    uriInfo.instanceToken = token;
                 }
+                haveEverything = true;
             }
-
-            file.close();
         }
+
+        // If no luck with URI, look into file
+        if (!haveEverything && strlen(fileName) > 0) {
+
+            std::ifstream file(fileName);
+            if (file.is_open()) {
+                std::string uriLine;
+                if (std::getline(file, uriLine)) {
+                    bool parsed = parseURI(uriLine, uriInfo);
+                    if (parsed) {
+                        if (!uriInfo.haveInstanceToken) {
+                            std::cerr << "no instance token in file, substitute admin token" << std::endl;
+                            uriInfo.instanceToken = token;
+                        }
+                        haveEverything = true;
+                    }
+                }
+
+                file.close();
+            }
+        }
+
+        //printUri(std::cerr, uriInfo);
+
+        if (!haveEverything) {
+            std::cerr << "no LB/CP info in uri or file" << std::endl;
+            return 1;
+        }
+
+        cpAddr = uriInfo.cpAddr;
+        cpPort = uriInfo.cpPort;
+        lbId = uriInfo.lbId;
+        instanceToken = uriInfo.instanceToken;
     }
-
-    //printUri(std::cerr, uriInfo);
-
-    if (!haveEverything) {
-        std::cerr << "no LB/CP info in uri or file" << std::endl;
-        return 1;
-    }
-
-    std::string cpAddr = uriInfo.cpAddr;
-    uint16_t cpPort    = uriInfo.cpPort;
-    std::string lbId   = uriInfo.lbId;
-    std::string instanceToken = uriInfo.instanceToken;
 
     // Need to give this back end a name (no, not "horse's"),
     // base part of it on least significant 6 digits of current time in microsec
@@ -1659,6 +1656,7 @@ int main(int argc, char **argv) {
         arg->sourceCount   = sourceCount;
         arg->pktConsumerId = i;
         arg->sourceId      = ids[i];
+//fprintf(stderr, "assemble thd #%d: src id = %d\n", i, ids[i]);
         arg->bufferSize    = (int) bufSize;
         arg->tickPrescale  = (int) tickPrescale;
 
@@ -1697,7 +1695,7 @@ int main(int argc, char **argv) {
             targ->supplyMap = supplyMaps[i];
             targ->debug = debug;
             targ->sourceId = ids[i];
-            std::cerr << "2 ids[" << i << "] = " << ids[i] <<std::endl;
+            //std::cerr << "2 ids[" << i << "] = " << ids[i] <<std::endl;
             if (pinBufCores) {
                 targ->core = startingBufCore + i;
             } else {
@@ -1737,43 +1735,51 @@ int main(int argc, char **argv) {
 
     //--------------------------------------------------------
 
-    // Fake things since there is no internal fifo ...
+    if (!direct) {
 
-    int portRangeValue = getPortRange(sourceCount);
-    auto range = PortRange(portRangeValue);
-    if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
+        // Fake things since there is no internal fifo ...
+
+        int portRangeValue = getPortRange(sourceCount);
+        auto range = PortRange(portRangeValue);
+        if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
 
-    float setPoint = 0.F;
-    float fillPercent = 0.F;
-    float pidError = 0.F;
-    float weight = 1.F;
+        float setPoint = 0.F;
+        float fillPercent = 0.F;
+        float pidError = 0.F;
+        float weight = 1.F;
 
-    LbControlPlaneClient client(cpAddr, cpPort,
-                                dataAddr, startingPort, range,
-                                beName, instanceToken, lbId, weight,
-                                minFactor, maxFactor);
+        LbControlPlaneClient client(cpAddr, cpPort,
+                                    dataAddr, startingPort, range,
+                                    beName, instanceToken, lbId, weight,
+                                    minFactor, maxFactor);
 
-    // Register this client with the grpc server
-    int32_t err = client.Register();
-    if (err == 1) {
-        printf("GRPC client %s communication error with server when registering, exit\n", beName);
-        exit(1);
-    }
-
-    printf("GRPC client %s registered!\n", beName);
-
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        // Update the changing variables
-        client.update(fillPercent, pidError);
-
-        // Send to server
-        err = client.SendState();
+        // Register this client with the grpc server
+        int32_t err = client.Register();
         if (err == 1) {
-            printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
+            printf("GRPC client %s communication error with server when registering, exit\n", beName);
             exit(1);
+        }
+
+        printf("GRPC client %s registered!\n", beName);
+
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+
+            // Update the changing variables
+            client.update(fillPercent, pidError);
+
+            // Send to server
+            err = client.SendState();
+            if (err == 1) {
+                printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
+                exit(1);
+            }
+        }
+    }
+    else {
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     }
 
