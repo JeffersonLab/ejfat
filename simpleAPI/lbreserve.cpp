@@ -271,8 +271,10 @@ int main(int argc, char **argv) {
 
 
     if (strlen(until) == 0) {
-        // If ending time not set, set it to 10 min from now
-        untilSeconds = nowSeconds + 10*60;
+        // If ending time not set, set it to last forever
+        //std::strcpy(until, "1970-01-01T00:00:00Z");
+        untilSeconds = 0;
+        //std::cout << "until time NOT set on command line, set to 0" << std::endl;
     }
     else {
         // Convert date to epoch seconds.
@@ -290,9 +292,12 @@ int main(int argc, char **argv) {
             }
         }
 
+        //std::cout << "until time in epoch sec = " << untilSeconds << std::endl;
+
         if (badTime) {
-            // If until is bad, set for 10 min from now
-            untilSeconds = nowSeconds + 10*60;
+            // If until has elapsed, set for forever
+            untilSeconds = 0;
+            //std::cout << "Time is already elapsed, so set \"until time\" = 0" << std::endl;
         }
     }
 
