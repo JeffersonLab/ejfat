@@ -584,7 +584,7 @@ int main(int argc, char **argv) {
 
         if (debug) {
             for (int i=0; i < cores.size(); i++) {
-                     std::cerr << "core[" << i << "] = " << cores[i] << "\n";
+                std::cerr << "core[" << i << "] = " << cores[i] << "\n";
             }
         }
 
@@ -603,70 +603,19 @@ int main(int argc, char **argv) {
 
 #endif
 
-
-    //----------------------------------------------
-    // Parse the URI (directly given or in file().
-    // This gives CP connection info.
-    //----------------------------------------------
-
-    // Set default file name
-    if (strlen(fileName) < 1) {
-        strcpy(fileName, "/tmp/ejfat_uri");
-    }
-
-    ejfatURI uriInfo;
     bool haveEverything = false;
+    ejfatURI uriInfo;
 
-    // First see if the uri arg is defined, if so, parse it
-    if (strlen(uri) > 0) {
-        bool parsed = parseURI(uri, uriInfo);
-        if (parsed) {
-            // URI is in correct format
-            if (!(uriInfo.haveData && uriInfo.haveSync)) {
-                std::cerr << "no LB/CP info in URI" << std::endl;
-            }
-            else {
-                haveEverything = true;
-            }
-        }
-    }
-
-    // If no luck with URI, look into file
-    if (!haveEverything && strlen(fileName) > 0) {
-
-        std::ifstream file(fileName);
-        if (file.is_open()) {
-            std::string uriLine;
-            if (std::getline(file, uriLine)) {
-
-                bool parsed = parseURI(uriLine, uriInfo);
-                if (parsed) {
-                    if (!(uriInfo.haveData && uriInfo.haveSync)) {
-                        std::cerr << "no LB/CP info in file" << std::endl;
-                        file.close();
-                        return 1;
-                    }
-                    else {
-                        haveEverything = true;
-                    }
-                }
-
-            }
-
-            file.close();
-        }
-    }
-    //printUri(std::cerr, uriInfo);
 
     // Perhaps -direct was specified. parseArgs ensures this is not defined
     // if either -uri or -file is defined.
-    if (!haveEverything && strlen(directArg) > 0) {
+    if (strlen(directArg) > 0) {
         direct = true;
 
         // Let's parse the arg with regex (arg = ipaddr:port where ipaddr can be ipv4 or ipv6)
-        // Note: the pattern (\[?[a-fA-F\d:.]+\]?) matches either IPv6 or IPv4 addresses
+        // Note: the pattern \[?([a-fA-F\d:.]+\)]? matches either IPv6 or IPv4 addresses
         // in which the addr may be surrounded by [] and thus is stripped off.
-        std::regex pattern(R"regex((\[?[a-fA-F\d:.]+\]?):(\d+))regex");
+        std::regex pattern(R"regex(\[?([a-fA-F\d:.]+)\]?:(\d+))regex");
 
         std::smatch match;
         // change char* to string
@@ -677,10 +626,6 @@ int main(int argc, char **argv) {
 
             // Remove square brackets from address if present
             directIP = match[1];
-            if (!directIP.empty() && directIP.front() == '[' && directIP.back() == ']') {
-                directIP = directIP.substr(1, directIP.size() - 2);
-            }
-
             directPort = std::stoi(match[2]);
 
             if (isIPv6(directIP)) {
@@ -688,6 +633,57 @@ int main(int argc, char **argv) {
             }
             haveEverything = true;
         }
+    }
+    else {
+
+        //----------------------------------------------
+        // Parse the URI (directly given or in file().
+        // This gives CP connection info.
+        //----------------------------------------------
+
+        // Set default file name
+        if (strlen(fileName) < 1) {
+            strcpy(fileName, "/tmp/ejfat_uri");
+        }
+
+        // First see if the uri arg is defined, if so, parse it
+        if (strlen(uri) > 0) {
+            bool parsed = parseURI(uri, uriInfo);
+            if (parsed) {
+                // URI is in correct format
+                if (!(uriInfo.haveData && uriInfo.haveSync)) {
+                    std::cerr << "no LB/CP info in URI" << std::endl;
+                } else {
+                    haveEverything = true;
+                }
+            }
+        }
+
+        // If no luck with URI, look into file
+        if (!haveEverything && strlen(fileName) > 0) {
+
+            std::ifstream file(fileName);
+            if (file.is_open()) {
+                std::string uriLine;
+                if (std::getline(file, uriLine)) {
+
+                    bool parsed = parseURI(uriLine, uriInfo);
+                    if (parsed) {
+                        if (!(uriInfo.haveData && uriInfo.haveSync)) {
+                            std::cerr << "no LB/CP info in file" << std::endl;
+                            file.close();
+                            return 1;
+                        } else {
+                            haveEverything = true;
+                        }
+                    }
+
+                }
+
+                file.close();
+            }
+        }
+        //printUri(std::cerr, uriInfo);
     }
 
 
@@ -961,6 +957,7 @@ int main(int argc, char **argv) {
     delayCounter = delayPrescale;
 
     fprintf(stdout, "delay prescale = %u\n", delayPrescale);
+    fprintf(stdout, "data id        = %hu\n", dataId);
 
     // Statistics & rate setting
     int64_t packetsSent=0;
