@@ -1208,8 +1208,12 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
      * Write the reassembly header, at the start of the given byte array,
      * in the format used in ERSAP project.
      * The first 16 bits go as ordered. The dataId is put in network byte order.
-     * The offset, length and tick are also put into network byte order.</p>
-     * This is the new, version 2, RE header.
+     * The offset, length and tick are also put into network byte order.
+     * This is the new, version 2, RE header.</p>
+     *
+     * The difficulty with Java is that all integers are signed.
+     * But the interpretation of these integer values in the reassembly's C++ lib
+     * is that they are unsigned, so user beware.
      *
      * <pre>
      *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
@@ -1257,10 +1261,15 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
 
 
     /**
+     * <p>
      * Set the Load Balancer header data.
      * The first four bytes go as ordered.
      * The entropy goes as a single, network byte ordered, 16-bit int.
-     * The tick goes as a single, network byte ordered, 64-bit int.
+     * The tick goes as a single, network byte ordered, 64-bit int.</p>
+     *
+     * The difficulty with Java is that all integers are signed.
+     * But the interpretation of these integer values in the reassembly's C++ lib
+     * is that they are unsigned, so user beware when setting tick.
      *
      * <pre>
      *  protocol 'L:8,B:8,Version:8,Protocol:8,Reserved:16,Entropy:16,Tick:64'
@@ -1312,10 +1321,15 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
 
 
     /**
+     * <p>
      * Set the Load Balancer header data.
      * The first four bytes go as ordered.
      * The entropy goes as a single, network byte ordered, 16-bit int.
-     * The tick goes as a single, network byte ordered, 64-bit int.
+     * The tick goes as a single, network byte ordered, 64-bit int.</p>
+     *
+     * The difficulty with Java is that all integers are signed.
+     * But the interpretation of these integer values in the reassembly's C++ lib
+     * is that they are unsigned, so user beware when setting tick.
      *
      * <pre>
      *  protocol 'L:8,B:8,Version:8,Protocol:8,Reserved:16,Entropy:16,Tick:64'
@@ -1374,6 +1388,10 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
      * The first 3 fields go as ordered. The srcId, evtNum, evtRate and time are all
      * put into network byte order.</p>
      *
+     * The difficulty with Java is that all integers are signed.
+     * But the interpretation of these integer values in the reassembly's C++ lib
+     * is that they are unsigned, so user beware.
+     *
      * <pre>
      *  protocol 'Version:4, Rsvd:12, Data-ID:16, Offset:32, Length:32, Tick:64'
      *
@@ -1397,6 +1415,7 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
      * </pre>
      *
      * @param buffer   buffer in which to write the data.
+     * @param off      offset into buffer to write.
      * @param version  version of this software.
      * @param srcId    id number of this data source.
      * @param evtNum   unsigned 64 bit event number used to tell the load balancer
@@ -1417,6 +1436,7 @@ System.out.println("    Create data UDP socket #" + i + " to dest " + dataAddr +
         buffer[off]   = (byte) 'L';
         buffer[off+1] = (byte) 'C';
         buffer[off+2] = (byte) version;
+        buffer[off+3] = 0;
 
         toBytes(srcId,   ByteOrder.BIG_ENDIAN, buffer, off+4);
         toBytes(evtNum,  ByteOrder.BIG_ENDIAN, buffer, off+8);
