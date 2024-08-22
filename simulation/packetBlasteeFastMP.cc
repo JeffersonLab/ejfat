@@ -239,7 +239,7 @@ static void parseArgs(int argc, char **argv,
             case 'p':
                 // PORT
                 i_tmp = (int) strtol(optarg, nullptr, 0);
-                if (i_tmp > 1023 && i_tmp < 65535) {
+                if (i_tmp > 1023 && i_tmp < 65536) {
                     *port = i_tmp;
                 }
                 else {
@@ -986,7 +986,7 @@ static void *threadAssembleFast(void *arg) {
     int id              = tArg->pktConsumerId;
     int sourceId        = tArg->sourceId;
     //std::cerr << "thd receiving sourceId = " << sourceId << std::endl;
-    int port            = tArg->port + sourceId;
+    int port            = tArg->port;
     int recvBufSize     = tArg->recvBufSize;
     int tickPrescale    = tArg->tickPrescale;
     char *listeningAddr = tArg->listeningAddr;
@@ -1088,7 +1088,7 @@ static void *threadAssembleFast(void *arg) {
         }
     }
 
-    fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes, source count = %d\n",
+    fprintf(stderr, "UDP port %d, socket recv buffer = %d bytes, source id = %d\n",
             port, recvBufSize, sourceId);
 
 
@@ -1660,7 +1660,7 @@ int main(int argc, char **argv) {
         arg->bufferSize    = (int) bufSize;
         arg->tickPrescale  = (int) tickPrescale;
 
-        arg->port = startingPort;
+        arg->port = startingPort + i;
         arg->useIPv6 = useIPv6;
         arg->recvBufSize = recvBufSize;
         arg->listeningAddr = listeningAddr;
@@ -1741,7 +1741,7 @@ int main(int argc, char **argv) {
 
         int portRangeValue = getPortRange(sourceCount);
         auto range = PortRange(portRangeValue);
-        if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
+        std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
 
         float setPoint = 0.F;

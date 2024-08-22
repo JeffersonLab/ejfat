@@ -1596,7 +1596,7 @@ static void *threadAssembleGood(void *arg) {
 
     int id = tArg->pktConsumerId;
     int sourceId = tArg->sourceId;
-    int port = tArg->port + sourceId;
+    int port = tArg->port;
     int recvBufSize = tArg->recvBufSize;
 
     char *listeningAddr = tArg->listeningAddr;
@@ -2422,7 +2422,7 @@ int main(int argc, char **argv) {
         arg->pktConsumerId = i;
         arg->sourceId = ids[i];
 
-        arg->port = startingPort;
+        arg->port = startingPort + i;
         arg->useIPv6 = useIPv6;
         arg->recvBufSize = recvBufSize;
         arg->listeningAddr = listeningAddr;
