@@ -666,10 +666,18 @@ static void *writeToEtThread(void *arg) {
 
         // Access the new buffer(s) in the entry
         et_event **pe = et_fifo_getBufs(entry);
+        if (pe == NULL) {
+            fprintf(stderr, "et_fifo_getBufs returned NULL\n");
+            exit(-1);
+        }
 
         // Write into ET buf here
-        char *pdest;
-        et_event_getdata(pe[0], (void **) &pdest);
+        char *pdest = nullptr;
+        int err = et_event_getdata(pe[0], (void **) &pdest);
+        if (err != ET_OK) {
+            fprintf(stderr, "et_event_getdata returned error\n");
+            exit(-1);
+        }
 
 
         // Get buffer with reassembled data
@@ -694,8 +702,8 @@ static void *writeToEtThread(void *arg) {
         // Put fifo entry back into the ET system so ET data consumers can access it
         int status = et_fifo_putEntry(entry);
         if (status != ET_OK) {
-            fprintf(stderr, "et_fifo_putEntry error\n");
-            return nullptr;
+            fprintf(stderr, "et_fifo_putEntry returned error\n");
+            exit(-1);
         }
 
         // Release entry back to supply
@@ -1622,6 +1630,15 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         status = et_fifo_openProducer(id, &fid, ids, idCount);
         if (status != ET_OK) {
             fprintf(stderr, "et_fifo_open problems\n");
+            et_close(id);
+            exit(1);
+        }
+
+        size_t maxEtBytes = et_fifo_getBufSize(fid);
+        if (bufSize > maxEtBytes) {
+            fprintf(stderr, "\nData buffer size is biggger than ET buf, exit\n\n");
+            et_fifo_close(fid);
+            et_close(id);
             exit(1);
         }
 
@@ -1644,6 +1661,8 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         etThreadStruct *targg = (etThreadStruct *) calloc(1, sizeof(etThreadStruct));
         if (targg == nullptr) {
             fprintf(stderr, "out of mem\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
         targg->fid = fid;
@@ -1653,14 +1672,17 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         status = pthread_create(&thd1, NULL, getEtEntryThread, (void *) targg);
         if (status != 0) {
             fprintf(stderr, "\n ******* error creating Entry thread ********\n\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
-
 
         // Start thread to copy data from reassembled local buffers to ET buffers
         etThreadStruct *tarrg = (etThreadStruct *) calloc(1, sizeof(etThreadStruct));
         if (tarrg == nullptr) {
             fprintf(stderr, "out of mem\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
 
@@ -1674,9 +1696,10 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         status = pthread_create(&thd11, NULL, writeToEtThread, (void *) tarrg);
         if (status != 0) {
             fprintf(stderr, "\n ******* error creating Entry thread ********\n\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
-
 
         // Start thread to do PID "control"
         threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
@@ -1721,9 +1744,10 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         status = pthread_create(&thd2, NULL, pidThread, (void *) targ);
         if (status != 0) {
             fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
-
     }
 
     // Start with offset 0 in very first packet to be read

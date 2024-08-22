@@ -658,10 +658,18 @@ static void *writeToEtThread(void *arg) {
 
         // Access the new buffer(s) in the entry
         et_event **pe = et_fifo_getBufs(entry);
+        if (pe == NULL) {
+            fprintf(stderr, "et_fifo_getBufs returned NULL\n");
+            exit(-1);
+        }
 
         // Write into ET buf here
-        char *pdest;
-        et_event_getdata(pe[0], (void **) &pdest);
+        char *pdest = nullptr;
+        int err = et_event_getdata(pe[0], (void **) &pdest);
+        if (err != ET_OK) {
+            fprintf(stderr, "et_event_getdata returned error\n");
+            exit(-1);
+        }
 
 
         // Get buffer with reassembled data
@@ -686,8 +694,8 @@ static void *writeToEtThread(void *arg) {
         // Put fifo entry back into the ET system so ET data consumers can access it
         int status = et_fifo_putEntry(entry);
         if (status != ET_OK) {
-            fprintf(stderr, "et_fifo_putEntry error\n");
-            return nullptr;
+            fprintf(stderr, "et_fifo_putEntry returned error\n");
+            exit(-1);
         }
 
         // Release entry back to supply
@@ -1434,7 +1442,7 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
     // These buffers must be RAM for speed.
     // In a separate thread, these buffers will be copied into ET buffers.
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize, 1);
-    auto bufferSupply = std::make_shared<Supplier<BufferItem>>(8192, true);
+    auto bufferSupply = std::make_shared<Supplier<BufferItem>>(1024, true);
 
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
@@ -1496,8 +1504,6 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
 
         et_system_geteventsize(id, &etEventSize);
 
-        /*-------------------------------------------------------*/
-
         /* set level of debug output (everything) */
         et_system_setdebug(id, debugLevel);
 
@@ -1507,6 +1513,15 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         status = et_fifo_openProducer(id, &fid, ids, idCount);
         if (status != ET_OK) {
             fprintf(stderr, "et_fifo_open problems\n");
+            et_close(id);
+            exit(1);
+        }
+
+        size_t maxEtBytes = et_fifo_getBufSize(fid);
+        if (bufSize > maxEtBytes) {
+            fprintf(stderr, "\nData buffer size is biggger than ET buf, exit\n\n");
+            et_fifo_close(fid);
+            et_close(id);
             exit(1);
         }
 
@@ -1524,11 +1539,12 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         /* Start a couple threads */
         /**************************/
 
-
         // Start thread to get empty FIFO entries from the ET system
         etThreadStruct *targg = (etThreadStruct *) calloc(1, sizeof(etThreadStruct));
         if (targg == nullptr) {
             fprintf(stderr, "out of mem\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
         targg->fid = fid;
@@ -1538,14 +1554,17 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         status = pthread_create(&thd1, NULL, getEtEntryThread, (void *) targg);
         if (status != 0) {
             fprintf(stderr, "\n ******* error creating Entry thread ********\n\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
-
 
         // Start thread to copy data from reassembled local buffers to ET buffers
         etThreadStruct *tarrg = (etThreadStruct *) calloc(1, sizeof(etThreadStruct));
         if (tarrg == nullptr) {
             fprintf(stderr, "out of mem\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
 
@@ -1559,53 +1578,57 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         status = pthread_create(&thd11, NULL, writeToEtThread, (void *) tarrg);
         if (status != 0) {
             fprintf(stderr, "\n ******* error creating Entry thread ********\n\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
 
+        // Start thread to do PID "control"
+        threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
+        if (targ == nullptr) {
+            fprintf(stderr, "out of mem\n");
+            et_fifo_close(fid);
+            et_close(id);
+            return -1;
+        }
 
-            // Start thread to do PID "control"
-            threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
-            if (targ == nullptr) {
-                fprintf(stderr, "out of mem\n");
-                return -1;
-            }
+        targ->etId = id;
+        targ->fid = fid;
 
-            targ->etId = id;
-            targ->fid = fid;
+        targ->cpServerPort   = cpPort;
+        targ->cpServerIpAddr = cpAddr;
 
-            targ->cpServerPort   = cpPort;
-            targ->cpServerIpAddr = cpAddr;
+        targ->dataPort = port;
+        targ->dataIpAddr = dataAddr;
+        targ->dataPortRange = 0;
 
-            targ->dataPort = port;
-            targ->dataIpAddr = dataAddr;
-            targ->dataPortRange = 0;
+        targ->myName   = beName;
+        targ->token    = instanceToken;
+        targ->lbId     = lbId;
+        targ->setPoint = cpSetPoint;
+        targ->weight   = weight;
 
-            targ->myName   = beName;
-            targ->token    = instanceToken;
-            targ->lbId     = lbId;
-            targ->setPoint = cpSetPoint;
-            targ->weight   = weight;
+        targ->Kp = Kp;
+        targ->Ki = Ki;
+        targ->Kd = Kd;
 
-            targ->Kp = Kp;
-            targ->Ki = Ki;
-            targ->Kd = Kd;
+        targ->fcount = fcount;
+        targ->reportTime = reportTime;
+        targ->sampleTime = stime;
 
-            targ->fcount = fcount;
-            targ->reportTime = reportTime;
-            targ->sampleTime = stime;
+        targ->keepFillStats = keepLevelStats;
+        if (keepLevelStats) {
+            targ->statFile = stat_file_name;
+        }
 
-            targ->keepFillStats = keepLevelStats;
-            if (keepLevelStats) {
-                targ->statFile = stat_file_name;
-            }
-
-            pthread_t thd2;
-            status = pthread_create(&thd2, NULL, pidThread, (void *) targ);
-            if (status != 0) {
-                fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
-                return -1;
-            }
-
+        pthread_t thd2;
+        status = pthread_create(&thd2, NULL, pidThread, (void *) targ);
+        if (status != 0) {
+            fprintf(stderr, "\n ******* error creating PID thread ********\n\n");
+            et_fifo_close(fid);
+            et_close(id);
+            return -1;
+        }
     }
 
     // Start with offset 0 in very first packet to be read
