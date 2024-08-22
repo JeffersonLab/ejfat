@@ -73,8 +73,8 @@ namespace ejfat {
      *                         ||
      *                       ________
      *                     /    |    \
-     *                    / 1 _ | _ 2 \  <---- Thread using items
-     *                   | __ /   \ __ |               |
+     *                    /  1  |  2  \  <---- Thread using items
+     *                   | __ /   \ __ \               |
      *                   |  6 |    | 3 |               V
      *             ^     | __ | __ | __| ==========================
      *             |      \   5 |   4 /       Barrier
@@ -143,9 +143,7 @@ namespace ejfat {
         /**
          * Default Constructor. Ring has 16 bufs, no ordered release.
          */
-        Supplier() :
-                Supplier(16, false) {
-        }
+        Supplier() :  Supplier(16, false) {}
 
         
         /**
@@ -202,9 +200,8 @@ namespace ejfat {
 
         /**
          * Method to have sequence barriers throw a Disruptor's AlertException.
-         * In this case, we can use it to warn write and compress threads which
-         * are waiting on barrier.waitFor() in {@link #getToCompress(uint32_t)} and
-         * {@link #getToWrite()}. Do this in case of a write, compress, or some other error.
+         * In this case, we can use it to warn threads which
+         * are waiting on barrier.waitFor() in case of an error.
          * This allows any threads waiting on these 2 methods to wake up, clean up,
          * and exit.
          */
@@ -332,7 +329,7 @@ namespace ejfat {
 
 
         /**
-         * Get the next "n" available itema in ring buffer for writing/reading data.
+         * Get the next "n" available items in ring buffer for writing/reading data.
          * Does NOT reset the item.
          * This may only be used in conjunction with:
          * {@link #publish(std::shared_ptr<T>)} or preferably {@link #publish(std::shared_ptr<T>[]}.
@@ -391,7 +388,7 @@ namespace ejfat {
          * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
          * @param item item in ring buffer to release for reuse.
          */
-        void release(std::shared_ptr<T> & item) {
+        void release(std::shared_ptr<T> item) {
             if (item == nullptr) return;
 
             // Each item may be used by several objects/threads. It will
@@ -455,7 +452,7 @@ namespace ejfat {
          * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
          * @param item item available for consumer's use.
          */
-        void publish(std::shared_ptr<T> & item) {
+        void publish(std::shared_ptr<T> item) {
             if (item == nullptr) return;
             ringBuffer->publish(item->getProducerSequence());
         }

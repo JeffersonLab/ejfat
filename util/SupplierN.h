@@ -67,8 +67,8 @@ namespace ejfat {
      *                         ||
      *                       ________
      *                     /    |    \
-     *                    / 1 _ | _ 2 \  <---- Thread using items
-     *                   | __ /   \ __ |               |
+     *                    / 1   |   2 \  <---- Thread using items
+     *                   | __ /   \ __ \               |
      *                   |  6 |    | 3 |               V
      *             ^     | __ | __ | __| ==========================
      *             |      \   5 |   4 /       Barrier
@@ -237,13 +237,12 @@ namespace ejfat {
 
 
         /**
-         * Method to have sequence barriers throw a Disruptor's AlertException.
-         * In this case, we can use it to warn write and compress threads which
-         * are waiting on barrier.waitFor() in {@link #getToCompress(uint32_t)} and
-         * {@link #getToWrite()}. Do this in case of a write, compress, or some other error.
-         * This allows any threads waiting on these 2 methods to wake up, clean up,
-         * and exit.
-         */
+        * Method to have sequence barriers throw a Disruptor's AlertException.
+        * In this case, we can use it to warn threads which
+        * are waiting on barrier.waitFor() in case of an error.
+        * This allows any threads waiting on these 2 methods to wake up, clean up,
+        * and exit.
+        */
         void errorAlert() const {
             barrier->alert();
         }
@@ -405,7 +404,7 @@ namespace ejfat {
          * To be used in conjunction with {@link #get()} and {@link #consumerGet()}.
          * @param item item in ring buffer to release for reuse.
          */
-        void release(std::shared_ptr<T> & item, uint32_t id = 0) {
+        void release(std::shared_ptr<T> item, uint32_t id = 0) {
             if (id > consumerCount - 1) {
                 throw std::runtime_error("too many consumers, id = " + std::to_string(consumerCount - 1) + " max");
             }
@@ -473,7 +472,7 @@ namespace ejfat {
          * To be used in conjunction with {@link #get()}.
          * @param item item available for consumer's use.
          */
-        void publish(std::shared_ptr<T> & item) {
+        void publish(std::shared_ptr<T> item) {
             if (item == nullptr) return;
             ringBuffer->publish(item->getProducerSequence());
         }
