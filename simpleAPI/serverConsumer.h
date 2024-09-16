@@ -317,7 +317,7 @@ namespace ejfat {
                       bool debug = false, bool jointStats = false, bool connect = false,
                       int startingCore = -1, int coreCount = 1,
                       float minFactor=0.F, float maxFactor=0.F,
-                      float Kp=0., float Ki=0., float Kd=0.,
+                      float Kp=520., float Ki=5., float Kd=0.,
                       float setPt=0., float weight=1.);
 
         // No copy constructor
