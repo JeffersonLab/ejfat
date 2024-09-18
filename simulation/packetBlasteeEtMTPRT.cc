@@ -48,6 +48,7 @@
 #include <prometheus/exposer.h>
 #include <prometheus/registry.h>
 #include <prometheus/counter.h>
+#include <prometheus/text_serializer.h> 
 
 
 #ifdef __linux__
@@ -782,13 +783,6 @@ static void *writeToEtThread(void *arg) {
     return nullptr;
 }
 
-// Function that runs the Crow server
-static void run_crow_server() {
-    crow::SimpleApp app;
-
-    // Configure and run the server on port 8081
-    app.port(8081).multithreaded().run();
-}
 
 // structure for passing args to thread
 typedef struct threadStruct_t {
