@@ -93,6 +93,75 @@ using namespace ejfat;
 //    return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
 //}
 
+// Global variables for metrics for the Prometheus exporter
+std::shared_ptr<prometheus::Registry> registry;
+prometheus::Gauge* dataRateGauge;
+prometheus::Gauge* totalRateGauge;
+prometheus::Gauge* dataAvgRateGauge;
+prometheus::Gauge* totalAvgRateGauge;
+prometheus::Gauge* evRateGauge;
+prometheus::Gauge* avgEvRateGauge;
+prometheus::Gauge* totalEventsGauge;
+prometheus::Gauge* dropEventCountGauge;
+prometheus::Gauge* currDropTotalEventsGauge;
+prometheus::Gauge* dropPacketCountGauge;
+prometheus::Gauge* currDropTotalPacketsGauge;
+
+prometheus::Gauge* absTimeGauge;
+prometheus::Gauge* fillPercentGauge;
+prometheus::Gauge* fillAvgGauge;
+prometheus::Gauge* curFillGauge;
+prometheus::Gauge* pidErrorGauge;
+
+std::mutex metrics_mutex;
+
+// Function to initialize Prometheus metrics
+void initialize_metrics() {
+    registry = std::make_shared<prometheus::Registry>();
+
+    auto& ejfat_be = prometheus::BuildGauge()
+                             .Name("ejfat_be")
+                             .Help("Ejfat Back-End statistics")
+                             .Register(*registry);
+
+    // Initialize rateThread metrics
+    dataRateGauge = &ejfat_be.Add({{"metric", "dataRate"}});
+    totalRateGauge = &ejfat_be.Add({{"metric", "totalRate"}});
+    dataAvgRateGauge = &ejfat_be.Add({{"metric", "dataAvgRate"}});
+    totalAvgRateGauge = &ejfat_be.Add({{"metric", "totalAvgRate"}});
+    evRateGauge = &ejfat_be.Add({{"metric", "evRate"}});
+    avgEvRateGauge = &ejfat_be.Add({{"metric", "avgEvRate"}});
+    totalEventsGauge = &ejfat_be.Add({{"metric", "totalEvents"}});
+    dropEventCountGauge = &ejfat_be.Add({{"metric", "dropEventCount"}});
+    currDropTotalEventsGauge = &ejfat_be.Add({{"metric", "currDropTotalEvents"}});
+    dropPacketCountGauge = &ejfat_be.Add({{"metric", "dropPacketCount"}});
+    currDropTotalPacketsGauge = &ejfat_be.Add({{"metric", "currDropTotalPackets"}});
+
+    // Initialize pidThread metrics
+    absTimeGauge = &ejfat_be.Add({{"metric", "absTime"}});
+    fillPercentGauge = &ejfat_be.Add({{"metric", "fillPercent"}});
+    fillAvgGauge = &ejfat_be.Add({{"metric", "fillAvg"}});
+    curFillGauge = &ejfat_be.Add({{"metric", "curFill"}});
+    pidErrorGauge = &ejfat_be.Add({{"metric", "pidError"}});
+}
+
+// Function that runs the Crow server
+void run_crow_server() {
+    crow::SimpleApp app;
+
+    // Define the /metrics endpoint
+    CROW_ROUTE(app, "/metrics")([]() {
+        prometheus::TextSerializer serializer;
+        std::ostringstream os;
+        std::lock_guard<std::mutex> lock(metrics_mutex);
+        auto collected = registry->Collect();
+        serializer.Serialize(os, collected);
+        return os.str();
+    });
+
+    // Configure and run the server on port 8080
+    app.port(8088).multithreaded().run();
+}
 
 
 template<class X>
@@ -761,43 +830,12 @@ typedef struct threadStruct_t {
 // Thread to monitor the ET system, run PID loop and report back to control plane
 static void *pidThread(void *arg) {
 
-  /////////////////////////
-  /// Prometheus  Stuff ///
-  ////////////////////////
-
-  // Create an exposer that serves metrics at http://localhost:8080/metrics
-  prometheus::Exposer exposer{"0.0.0.0:8088"};
-
-  // Create a metrics registry
-  auto registry = std::make_shared<prometheus::Registry>();
-
-  // Add a gauge to the registry
-  auto& ejfat_be = prometheus::BuildGauge()
-                           .Name("ejfat_be")
-                           .Help("Ejfat Back-End statistics")
-                           .Register(*registry);
-
-  // Initialize metrics
-  auto& absTimeP = ejfat_be.Add({{"absTime", "value"}});
-  auto& fillPercentP = ejfat_be.Add({{"fillPercent", "value"}});
-  auto& fillAvgP = ejfat_be.Add({{"fillAvg", "value"}});
-  auto& curFillP = ejfat_be.Add({{"curFill", "value"}});
-  auto& pidErrorP = ejfat_be.Add({{"pidError", "value"}});
-
-  // Expose the metrics via Prometheus-cpp's exposer
-  exposer.RegisterCollectable(registry);
-
-  printf("DDD-4");
-
-  // Use Crow to handle HTTP requests
-  crow::SimpleApp app;
-
-  printf("DDD-5");
-
-  // Start the Crow server in a separate thread
-  std::thread crow_server_thread(run_crow_server);
-
-  printf("DDD-6");
+  // Variables for metrics (local references)
+  auto& absTimeP = *absTimeGauge;
+  auto& fillPercentP = *fillPercentGauge;
+  auto& fillAvgP = *fillAvgGauge;
+  auto& curFillP = *curFillGauge;
+  auto& pidErrorP = *pidErrorGauge;
 
 
     threadStruct *targ = static_cast<threadStruct *>(arg);
@@ -831,7 +869,7 @@ static void *pidThread(void *arg) {
     // Vectors to store statistics values until reporting time, then written to file
     std::vector<uint64_t> timeVec;        // epoch time in millisec
     std::vector<float> percentVec;     // % of fifo filled (0-1)
-    std::vector<float> avgVec;         // running avg fill level
+    std::vector<float> avgVec;         // running a fill level
     std::vector<float> instVec;        // instantaneous fill level
     std::vector<float> pidErrVec;      // PID loop error
 
@@ -1016,6 +1054,8 @@ static void *pidThread(void *arg) {
             instVec.push_back(curFill);
             pidErrVec.push_back(pidError);
         }
+        // Updating Prometheus metrics
+        std::lock_guard<std::mutex> lock(metrics_mutex);
         absTimeP.Set(absTime);
         fillPercentP.Set(fillPercent);
         fillAvgP.Set(fillAvg);
@@ -1080,6 +1120,21 @@ static volatile int64_t droppedPackets=0, droppedEvents=0, droppedBytes=0;
 // Thread to send to print out rates
 static void *rateThread(void *arg) {
 
+  // Variables for Prometheus metrics (local references)
+auto& dataRateP = *dataRateGauge;
+auto& totalRateP = *totalRateGauge;
+auto& dataAvgRateP = *dataAvgRateGauge;
+auto& totalAvgRateP = *totalAvgRateGauge;
+auto& evRateP = *evRateGauge;
+auto& avgEvRateP = *avgEvRateGauge;
+auto& totalEventsP = *totalEventsGauge;
+auto& dropEventCountP = *dropEventCountGauge;
+auto& currDropTotalEventsP = *currDropTotalEventsGauge;
+auto& dropPacketCountP = *dropPacketCountGauge;
+auto& currDropTotalPacketsP = *currDropTotalPacketsGauge;
+
+
+
     int64_t packetCount, byteCount, eventCount;
     int64_t prevTotalPackets, prevTotalBytes, prevTotalEvents;
     uint64_t currTotalPackets, currTotalBytes, currTotalEvents;
@@ -1099,49 +1154,6 @@ static void *rateThread(void *arg) {
     clock_gettime(CLOCK_MONOTONIC, &t1);
     firstT = t1;
 
-    /////////////////////////
-    /// Prometheus  Stuff ///
-    ////////////////////////
-
-    // Create an exposer that serves metrics at http://localhost:8080/metrics
-    prometheus::Exposer exposer{"0.0.0.0:8088"};
-
-    // Create a metrics registry
-    auto registry = std::make_shared<prometheus::Registry>();
-
-    // Add a gauge to the registry
-    auto& ejfat_be = prometheus::BuildGauge()
-                             .Name("ejfat_be")
-                             .Help("Ejfat Back-End statistics")
-                             .Register(*registry);
-
-    // Initialize metrics
-    auto& dataRateP = ejfat_be.Add({{"dataRate", "value"}});
-    auto& totalRateP = ejfat_be.Add({{"totalRate", "value"}});
-    auto& dataAvgRateP = ejfat_be.Add({{"dataAvgRate", "value"}});
-    auto& totalAvgRateP = ejfat_be.Add({{"totalAvgRate", "value"}});
-    auto& evRateP = ejfat_be.Add({{"evRate", "value"}});
-    auto& avgEvRateP = ejfat_be.Add({{"avgEvRate", "value"}});
-    auto& totalEventsP = ejfat_be.Add({{"totalEvents", "value"}});
-    auto& dropEventCountP = ejfat_be.Add({{"dropEventCount", "value"}});
-    auto& currDropTotalEventsP = ejfat_be.Add({{"currDropTotalEvents", "value"}});
-    auto& dropPacketCountP = ejfat_be.Add({{"dropPacketCount", "value"}});
-    auto& currDropTotalPacketsP = ejfat_be.Add({{"currDropTotalPackets", "value"}});
-
-    // Expose the metrics via Prometheus-cpp's exposer
-    exposer.RegisterCollectable(registry);
-
-    printf("DDD-1");
-
-    // Use Crow to handle HTTP requests
-    crow::SimpleApp app;
-
-    printf("DDD-2");
-
-    // Start the Crow server in a separate thread
-    std::thread crow_server_thread(run_crow_server);
-
-    printf("DDD-3");
 
     while (true) {
 
@@ -1219,32 +1231,33 @@ static void *rateThread(void *arg) {
         totalRate = ((double) (byteCount + HEADER_BYTES*packetCount)) / time;
         totalAvgRate = ((double) (currTotalBytes + HEADER_BYTES*currTotalPackets)) / totalT;
         printf("Data (+hdrs):  %3.4g (%3.4g) MB/s,  %3.4g (%3.4g) Avg\n", dataRate, totalRate, dataAvgRate, totalAvgRate);
-        dataRateP.Set(dataRate);
-        totalRateP.Set(totalRate);
-        dataAvgRateP.Set(dataAvgRate);
-        totalAvgRateP.Set(totalAvgRate);
 
         // Event rates
         evRate = 1000000.0 * ((double) eventCount) / time;
         avgEvRate = 1000000.0 * ((double) currTotalEvents) / totalT;
         printf("Events:        %3.4g Hz,  %3.4g Avg, total %" PRIu64 "\n", evRate, avgEvRate, totalEvents);
-        evRateP.Set(evRate);
-        avgEvRateP.Set(avgEvRate);
-        totalEventsP.Set(totalEvents);
 
         // Drop info
         printf("Dropped: evts: %" PRId64 ", %" PRId64 " total, pkts: %" PRId64 ", %" PRId64 " total\n\n",
                dropEventCount, currDropTotalEvents, dropPacketCount, currDropTotalPackets);
-        dropEventCountP.Set(dropEventCount);
-        currDropTotalEventsP.Set(currDropTotalEvents);
-        dropPacketCountP.Set(dropPacketCount);
-        currDropTotalPacketsP.Set(currDropTotalPackets);
+
+        // Update Prometheus metrics_mute
+        std::lock_guard<std::mutex> lock(metrics_mutex);
+dataRateP.Set(dataRate);
+totalRateP.Set(totalRate);
+dataAvgRateP.Set(dataAvgRate);
+totalAvgRateP.Set(totalAvgRate);
+evRateP.Set(evRate);
+avgEvRateP.Set(avgEvRate);
+totalEventsP.Set(currTotalEvents);
+dropEventCountP.Set(dropEventCount);
+currDropTotalEventsP.Set(currDropTotalEvents);
+dropPacketCountP.Set(dropPacketCount);
+currDropTotalPacketsP.Set(currDropTotalPackets);
 
         t1 = t2;
     }
 
-    // Wait for the crow_server thread to complete
-     crow_server_thread.join();
 
     return (nullptr);
 }
@@ -1758,6 +1771,19 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
     std::shared_ptr<BufferItem> bufItem = nullptr;
     std::shared_ptr<ByteBuffer> bb = nullptr;
 
+//////////////////////
+// Prometheus staff //
+//////////////////////
+
+// Initialize Prometheus metrics
+initialize_metrics();
+
+// Start the Crow server in a separate thread
+std::thread crow_server_thread(run_crow_server);
+
+
+// Wait for the Crow server thread to complete (if necessary)
+crow_server_thread.join();
 
     while (true) {
 
