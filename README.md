@@ -11,6 +11,10 @@
     mkdir build
     cd build
 
+# ----  basic compilation instructions ------------------------
+cmake .. -DBUILD_CLAS=1 -DBUILD_BACKEND=1
+make -j 4 install
+
 
     
 ## -------------------------------------------------------------
