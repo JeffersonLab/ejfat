@@ -1337,6 +1337,7 @@ int main(int argc, char **argv) {
 
     // Wait for the Crow server thread to complete (if necessary)
     crow_server_thread.join();
+    std::cerr << "Crow server is running" << std::endl;
 
     parseArgs(argc, argv,
               &bufSize, &recvBufSize, &tickPrescale,
