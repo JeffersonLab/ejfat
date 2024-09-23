@@ -48,7 +48,7 @@
 #include <prometheus/exposer.h>
 #include <prometheus/registry.h>
 #include <prometheus/counter.h>
-#include <prometheus/text_serializer.h> 
+#include <prometheus/text_serializer.h>
 
 
 #ifdef __linux__
@@ -1324,6 +1324,19 @@ int main(int argc, char **argv) {
     memset(adminToken, 0, 512);
     std::string token;
 
+    //////////////////////
+    // Prometheus staff //
+    //////////////////////
+
+    // Initialize Prometheus metrics
+    initialize_metrics();
+
+    // Start the Crow server in a separate thread
+    std::thread crow_server_thread(run_crow_server);
+
+
+    // Wait for the Crow server thread to complete (if necessary)
+    crow_server_thread.join();
 
     parseArgs(argc, argv,
               &bufSize, &recvBufSize, &tickPrescale,
@@ -1765,19 +1778,6 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
     std::shared_ptr<BufferItem> bufItem = nullptr;
     std::shared_ptr<ByteBuffer> bb = nullptr;
 
-//////////////////////
-// Prometheus staff //
-//////////////////////
-
-// Initialize Prometheus metrics
-initialize_metrics();
-
-// Start the Crow server in a separate thread
-std::thread crow_server_thread(run_crow_server);
-
-
-// Wait for the Crow server thread to complete (if necessary)
-crow_server_thread.join();
 
     while (true) {
 
