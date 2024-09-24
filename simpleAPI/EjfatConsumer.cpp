@@ -129,7 +129,7 @@ namespace ejfat {
      * @param coreCount    number of cores each receiving thread will run on (default 2).
      * @param minFactor    factor for setting min # of CP slot assignments.
      * @param maxFactor    factor for setting max # of CP slot assignments.
-     * @param Kp           PID proportional constant used for error signal to CP (default 0.).
+     * @param Kp           PID proportional constant used for error signal to CP (default 1.).
      * @param Ki           PID integral constant used for error signal to CP (default 0.).
      * @param Kd           PID differential constant used for error signal to CP (default 0.).
      * @param setPt        PID set point for queue fill level (default 0.).

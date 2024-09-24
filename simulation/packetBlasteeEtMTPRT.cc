@@ -220,8 +220,8 @@ static void printHelp(char *programName) {
             "        [-minf <min factor for CP slot assignment (default 0>]",
             "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
 
-            "        [-kp <PID proportional constant, default 520.>]",
-            "        [-ki <PID integral constant, default 5.>]",
+            "        [-kp <PID proportional constant, default 1.>]",
+            "        [-ki <PID integral constant, default 0.>]",
             "        [-kd <PID differential constant, default 0.>]\n",
 
             "        [-count <# of most recent fill values averaged, default 1000>]",
@@ -1283,8 +1283,8 @@ int main(int argc, char **argv) {
     bool keepLevelStats = false;
 
     // PID loop variables
-    float Kp = 520.;
-    float Ki = 5.;
+    float Kp = 1.;
+    float Ki = 0.;
     float Kd = 0.;
 
     // CP slot stuff
