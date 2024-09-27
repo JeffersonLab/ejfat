@@ -1718,6 +1718,9 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         targ->Ki = Ki;
         targ->Kd = Kd;
 
+        targ->minFactor = minFactor;
+        targ->maxFactor = maxFactor;
+
         targ->useFakeQueuelevel = useFakeQueuelevel;
         targ->qFakeFillMean     = qFakeFillMean;
         targ->qFakeFillDev      = qFakeFillStdDev;
@@ -1748,6 +1751,7 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
     char *dataBuf;
     std::shared_ptr<BufferItem> bufItem = nullptr;
     std::shared_ptr<ByteBuffer> bb = nullptr;
+
 
     while (true) {
 
@@ -1825,6 +1829,3 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
 
     return 0;
 }
-
-
-

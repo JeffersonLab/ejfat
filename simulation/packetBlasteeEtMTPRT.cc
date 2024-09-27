@@ -32,6 +32,7 @@
 #include <stdexcept>
 #include <vector>
 #include <fstream>
+#include <random>
 
 #include "ejfat.hpp"
 #include "ejfat_assemble_ersap.hpp"
@@ -200,7 +201,7 @@ static bool haveEtName = false;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        -f <ET file>",
             "        [-h] [-v] [-ip6]\n",
@@ -208,7 +209,6 @@ static void printHelp(char *programName) {
             "        -a <data receiving address to register w/ CP>",
             "        [-p <data receiving port, 17750 default>]",
             "        [-baddr <bind data receiving socket to this address, default INADDR_ANY>]\n",
-
 
             "        [-sfile <file name for stats>]",
             "        [-stime <stat sample millisec (t >= 1 msec, default = 1)]\n",
@@ -219,6 +219,9 @@ static void printHelp(char *programName) {
 
             "        [-minf <min factor for CP slot assignment (default 0>]",
             "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
+
+            "        [-qmean <report this as the mean queue fill level to CP (0 - 1)>]",
+            "        [-qdev  <std dev of queue fill level if -qmean defined (0 - 0.5)>]\n",
 
             "        [-kp <PID proportional constant, default 1.>]",
             "        [-ki <PID integral constant, default 0.>]",
@@ -270,6 +273,8 @@ static void printHelp(char *programName) {
  * @param kd            PID loop kd constant.
  * @param minFactor     factor for setting min # of slot assignments.
  * @param maxFactor     factor for setting max # of slot assignments.
+ * @param qMean         set a fake Q fill level to report to CP (0 - 1).
+ * @param qDev          set a std. dev. of Q level if fake Q fill level set (0 - .5).
  * @param cores         vector or cores to run on.
  */
 static void parseArgs(int argc, char **argv,
@@ -282,6 +287,7 @@ static void parseArgs(int argc, char **argv,
                       char *etFilename, std::string &statFileName,
                       float *kp, float *ki, float *kd,
                       float *minFactor, float *maxFactor,
+                      float *qMean, float *qDev,
                       std::vector<int>& cores) {
 
     int c, i_tmp;
@@ -308,6 +314,9 @@ static void parseArgs(int argc, char **argv,
                           {"count",     1, nullptr, 14},
                           {"rtime",     1, nullptr, 15},
                           {"baddr",     1, nullptr, 16},
+
+                          {"qmean",     1, nullptr, 17},
+                          {"qdev",      1, nullptr, 18},
 
                           {0,       0, 0,    0}
             };
@@ -614,6 +623,49 @@ static void parseArgs(int argc, char **argv,
                 }
                 break;
 
+            case 17:
+                // Set the fake mean queue fill level
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                    if (sp < 0.) {
+                        fprintf(stderr, "Invalid argument to -qmean, must be >= 0\n\n");
+                        exit(-1);
+                    }
+                    else if (sp > 1.) {
+                        fprintf(stderr, "Invalid argument to -qmean, must be <= 1\n\n");
+                        exit(-1);
+                    }
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -qmean\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+
+                *qMean = sp;
+                break;
+
+            case 18:
+                // Set the std. dev. pf the fake mean queue fill level
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                    if (sp < 0.) {
+                        fprintf(stderr, "Invalid argument to -qdev, must be >= 0\n\n");
+                        exit(-1);
+                    }
+                    else if (sp > .5) {
+                        fprintf(stderr, "Invalid argument to -qdev, must be <= 0.5\n\n");
+                        exit(-1);
+                    }
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -qdev\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *qDev = sp;
+                break;
+
             case 'v':
                 // VERBOSE
                 *debug = true;
@@ -784,6 +836,8 @@ static void *writeToEtThread(void *arg) {
 }
 
 
+
+
 // structure for passing args to thread
 typedef struct threadStruct_t {
     et_sys_id etId;
@@ -814,11 +868,42 @@ typedef struct threadStruct_t {
     float minFactor;
     float maxFactor;
 
+    bool  useFakeQueuelevel;
+    float qFakeFillMean;
+    float qFakeFillDev;
+
     uint32_t fcount;
     uint32_t reportTime;
     uint32_t sampleTime;
 
 } threadStruct;
+
+
+
+/**
+ * Method to produce a random value with given mean (level) and standard deviation.
+ * It ensures the value is between 0 and 1.
+ * @param mean
+ * @param stddev
+ * @return
+ */
+static float getRandomLevel(float mean, float stddev) {
+    // Create a random number generator
+    static std::random_device rd; // Non-deterministic random device
+    static std::mt19937 generator(rd()); // Mersenne Twister random number generator
+
+    // Create a normal distribution with specified mean and standard deviation
+    std::normal_distribution<float> distribution(mean, stddev);
+
+    // Generate a random value from the distribution
+    float ran = distribution(generator);
+
+    // Clamp the result between 0 and 1 to ensure it stays within bounds
+    if (ran < 0.0f) ran = 0.f;
+    else if (ran > 1.0f) ran = 1.f;
+
+    return ran;
+}
 
 
 // Thread to monitor the ET system, run PID loop and report back to control plane
@@ -855,6 +940,10 @@ static void *pidThread(void *arg) {
     const float Ki = targ->Ki;
     const float Kd = targ->Kd;
 
+    bool useFakeQueuelevel = targ->useFakeQueuelevel;
+    float qFakeFillMean    = targ->qFakeFillMean;
+    float qFakeFillDev     = targ->qFakeFillDev;
+
     // # of fill level to average together
     uint32_t fcount = targ->fcount;
     // time period in millisec for reporting to CP
@@ -863,7 +952,7 @@ static void *pidThread(void *arg) {
     // Vectors to store statistics values until reporting time, then written to file
     std::vector<uint64_t> timeVec;        // epoch time in millisec
     std::vector<float> percentVec;     // % of fifo filled (0-1)
-    std::vector<float> avgVec;         // running a fill level
+    std::vector<float> avgVec;         // running avg fill level
     std::vector<float> instVec;        // instantaneous fill level
     std::vector<float> pidErrVec;      // PID loop error
 
@@ -981,11 +1070,17 @@ static void *pidThread(void *arg) {
 
 
         // Read current fifo fill level
-        curFill = static_cast<float>(et_fifo_getFillLevel(fid));
-        if (curFill < 0) {
-            // ET system error
-            printf("ET closed or communication error, exit\n");
-            exit(1);
+        if (useFakeQueuelevel) {
+            // Random output from 0 to 1 with given mean & stddev, scaled up to fifoCapacity
+            curFill = fifoCapacityFlt * getRandomLevel(qFakeFillMean, qFakeFillDev);
+        }
+        else {
+            curFill = static_cast<float>(et_fifo_getFillLevel(fid));
+            if (curFill < 0) {
+                // ET system error
+                printf("ET closed or communication error, exit\n");
+                exit(1);
+            }
         }
 
         // Previous value at this index
@@ -1281,6 +1376,7 @@ int main(int argc, char **argv) {
     bool useIPv6 = false;
     bool sendToEt = false;
     bool keepLevelStats = false;
+    bool useFakeQueuelevel = false;
 
     // PID loop variables
     float Kp = 1.;
@@ -1290,6 +1386,10 @@ int main(int argc, char **argv) {
     // CP slot stuff
     float minFactor = 0.F;
     float maxFactor = 0.F;
+
+    // Use if reporting fake queue levels to CP
+    float qFakeFillMean = -1.F;
+    float qFakeFillStdDev = 0.F;
 
 
     // # of fill values to average when reporting to grpc
@@ -1347,7 +1447,9 @@ int main(int argc, char **argv) {
               &debug, &useIPv6, dataAddr,
               listeningAddr, uri, fileName, adminToken,
               et_filename, stat_file_name,
-              &Kp, &Ki, &Kd, &minFactor, &maxFactor,
+              &Kp, &Ki, &Kd,
+              &minFactor, &maxFactor,
+              &qFakeFillMean, &qFakeFillStdDev,
               cores);
 
     std::cerr << "Tick prescale = " << tickPrescale << "\n";
@@ -1358,6 +1460,11 @@ int main(int argc, char **argv) {
     }
     else {
         token = adminToken;
+    }
+
+    // If set by caller
+    if (qFakeFillMean >= 0.) {
+        useFakeQueuelevel = true;
     }
 
     //----------------------------------------------
@@ -1578,7 +1685,7 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
     // These buffers must be RAM for speed.
     // In a separate thread, these buffers will be copied into ET buffers.
     BufferItem::setEventFactorySettings(ByteOrder::ENDIAN_LOCAL, bufSize, 1);
-    auto bufferSupply = std::make_shared<Supplier<BufferItem>>(8192, true);
+    auto bufferSupply = std::make_shared<Supplier<BufferItem>>(1024, true);
 
 
     fprintf(stderr, "Internal buffer size = %d bytes\n", bufSize);
@@ -1726,6 +1833,8 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
         threadStruct *targ = (threadStruct *) calloc(1, sizeof(threadStruct));
         if (targ == nullptr) {
             fprintf(stderr, "out of mem\n");
+            et_fifo_close(fid);
+            et_close(id);
             return -1;
         }
 
@@ -1751,6 +1860,10 @@ if (debug) fprintf(stderr, "Successful binding IPv4 UDP socket to listening port
 
         targ->minFactor = minFactor;
         targ->maxFactor = maxFactor;
+
+        targ->useFakeQueuelevel = useFakeQueuelevel;
+        targ->qFakeFillMean     = qFakeFillMean;
+        targ->qFakeFillDev      = qFakeFillStdDev;
 
         targ->fcount = fcount;
         targ->reportTime = reportTime;
