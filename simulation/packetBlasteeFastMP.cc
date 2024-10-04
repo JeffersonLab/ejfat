@@ -65,6 +65,7 @@
 #include <unordered_map>
 #include <string.h>
 #include <errno.h>
+#include <random>
 
 #include "BufferItem.h"
 #include "PacketStoreItem.h"
@@ -105,6 +106,29 @@ using namespace ejfat;
 #define MAX_SOURCES 16
 
 
+template<class X>
+X pid(                      // Proportional, Integrative, Derivative Controller
+        const X& setPoint,  // Desired Operational Set Point
+        const X& prcsVal,   // Measure Process Value
+        const X& delta_t,   // Time delta between determination of last control value
+        const X& Kp,        // Konstant for Proprtional Control
+        const X& Ki,        // Konstant for Integrative Control
+        const X& Kd,        // Konstant for Derivative Control
+        const X& prev_err,  // previous error
+        const X& prev_err_t // # of microseconds earlier that previous error was recorded
+)
+{
+    static X integral_acc = 0;   // For Integral (Accumulated Error)
+    X error = setPoint - prcsVal;
+    integral_acc += error * delta_t;
+    X derivative = (error - prev_err) * 1000000. / prev_err_t;
+//    if (prev_err_t == 0 || prev_err_t != prev_err_t) {
+//        derivative = 0;
+//    }
+    return Kp * error + Ki * integral_acc + Kd * derivative;  // control output
+}
+
+
 
 /**
  * Print out help.
@@ -112,7 +136,7 @@ using namespace ejfat;
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats] [-direct]\n",
 
@@ -129,6 +153,9 @@ static void printHelp(char *programName) {
 
             "        [-minf <min factor for CP slot assignment (default 0>]",
             "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
+
+            "        [-qmean <report this as the mean queue fill level to CP (0 - 1)>]",
+            "        [-qdev  <std dev of queue fill level if -qmean defined (0 - 0.5)>]\n",
 
             "        [-dump (no thd to get & merge buffers)]",
             "        [-lump (1 thd to get & merge buffers from all sources)]",
@@ -183,6 +210,8 @@ static void printHelp(char *programName) {
  * @param ids           vector to be filled with data source id numbers.
  * @param minFactor     factor for setting min # of slot assignments.
  * @param maxFactor     factor for setting max # of slot assignments.
+ * @param qMean         set a fake Q fill level to report to CP (0 - 1).
+ * @param qDev          set a std. dev. of Q level if fake Q fill level set (0 - .5).
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
@@ -194,7 +223,8 @@ static void parseArgs(int argc, char **argv,
                       char *listenAddr, char *dataAddr,
                       char *uri, char *file, char *token,
                       std::vector<int>& ids,
-                      float *minFactor, float *maxFactor) {
+                      float *minFactor, float *maxFactor,
+                      float *qMean, float *qDev) {
 
     int c, i_tmp;
     bool help = false;
@@ -225,6 +255,10 @@ static void parseArgs(int argc, char **argv,
                           {"maxf",        1, nullptr, 17},
 
                           {"direct",      0, nullptr, 18},
+
+                          {"qmean",       1, nullptr, 19},
+                          {"qdev",        1, nullptr, 20},
+
                           {0,       0, 0,    0}
             };
 
@@ -425,6 +459,49 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
                 *maxFactor = sp;
+                break;
+
+            case 19:
+                // Set the fake mean queue fill level
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                    if (sp < 0.) {
+                        fprintf(stderr, "Invalid argument to -qmean, must be >= 0\n\n");
+                        exit(-1);
+                    }
+                    else if (sp > 1.) {
+                        fprintf(stderr, "Invalid argument to -qmean, must be <= 1\n\n");
+                        exit(-1);
+                    }
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -qmean\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+
+                *qMean = sp;
+                break;
+
+            case 20:
+                // Set the std. dev. pf the fake mean queue fill level
+                try {
+                    sp = (float) std::stof(optarg, nullptr);
+                    if (sp < 0.) {
+                        fprintf(stderr, "Invalid argument to -qdev, must be >= 0\n\n");
+                        exit(-1);
+                    }
+                    else if (sp > .5) {
+                        fprintf(stderr, "Invalid argument to -qdev, must be <= 0.5\n\n");
+                        exit(-1);
+                    }
+                }
+                catch (const std::invalid_argument& ia) {
+                    fprintf(stderr, "Invalid argument to -qdev\n\n");
+                    printHelp(argv[0]);
+                    exit(-1);
+                }
+                *qDev = sp;
                 break;
 
             case 7:
@@ -1401,6 +1478,67 @@ static void *threadReadBuffers(void *arg) {
 
 
 
+/**
+ * Method to produce a random value with given mean (level) and standard deviation.
+ * It ensures the value is between 0 and 1.
+ * @param mean
+ * @param stddev
+ * @return
+ */
+static float getRandomLevel(float mean, float stddev) {
+    // Create a random number generator
+    static std::random_device rd; // Non-deterministic random device
+    static std::mt19937 generator(rd()); // Mersenne Twister random number generator
+
+    // Create a normal distribution with specified mean and standard deviation
+    std::normal_distribution<float> distribution(mean, stddev);
+
+    // Generate a random value from the distribution
+    float ran = distribution(generator);
+
+    // Clamp the result between 0 and 1 to ensure it stays within bounds
+    if (ran < 0.0f) ran = 0.f;
+    else if (ran > 1.0f) ran = 1.f;
+
+    return ran;
+}
+
+
+
+/**
+ * Method to produce a fake PID error signal proportional to a given fill level (0 to 1)
+ * while taking a set point into account.
+ * It ensures the signal is between -1 and 1, inclusive.
+ * @param fill   fill level of some queue (0 to 1).
+ * @param setPt  set point of fill level for a PID loop.
+ * @return fake PID error signal.
+ */
+static float getPidErrSig(float fill, float setPt) {
+
+    // Set some limits & avoid dividing by 0 below
+    if (setPt < 0.01f) setPt = 0.01f;
+    else if (setPt > 1.0f) setPt = 1.f;
+
+    if (fill < 0.0f) fill = 0.f;
+    else if (fill > 0.99f) fill = 0.99f;
+    //----------------------------------
+
+    float err = 0.F;
+    float maxSig =  1.F;
+    float minSig = -1.F;
+
+    if (fill <= setPt) {
+        err = (-1.F/setPt)*fill + 1.F;
+    }
+    else {
+        err = (1.F/(setPt - 1.F))*fill + (setPt/(1.F - setPt));
+    }
+
+    return err;
+}
+
+
+
 
 int main(int argc, char **argv) {
 
@@ -1425,10 +1563,14 @@ int main(int argc, char **argv) {
     bool noRestart = false;
     bool jointStats = false;
     bool direct = false;
+    bool useFakeQueuelevel = false;
 
     float minFactor = 0.F;
     float maxFactor = 0.F;
 
+    // Use if reporting fake queue levels to CP
+    float qFakeFillMean = -1.F;
+    float qFakeFillStdDev = 0.F;
 
 
     // CP stuff
@@ -1464,7 +1606,8 @@ int main(int argc, char **argv) {
               &noRestart, &jointStats, &direct,
               listeningAddr, dataAddr,
               uri, fileName, adminToken, ids,
-              &minFactor, &maxFactor);
+              &minFactor, &maxFactor,
+              &qFakeFillMean, &qFakeFillStdDev);
 
     pinCores = startingCore >= 0;
     pinBufCores = startingBufCore >= 0;
@@ -1475,6 +1618,12 @@ int main(int argc, char **argv) {
     else {
         token = adminToken;
     }
+
+    // If set by caller
+    if (qFakeFillMean >= 0.) {
+        useFakeQueuelevel = true;
+    }
+
 
 #ifdef __linux__
 
@@ -1744,9 +1893,6 @@ int main(int argc, char **argv) {
         std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
 
-        float setPoint = 0.F;
-        float fillPercent = 0.F;
-        float pidError = 0.F;
         float weight = 1.F;
 
         LbControlPlaneClient client(cpAddr, cpPort,
@@ -1763,17 +1909,189 @@ int main(int argc, char **argv) {
 
         printf("GRPC client %s registered!\n", beName);
 
+
+        // stat sampling time in microsec (1 millisec)
+        int sampleTime = 1000;
+        int adjustedSampleTime = sampleTime;
+
+        // # of fill levels to average together
+        uint32_t fcount = 1000;
+        // time period in millisec for reporting to CP
+        uint32_t reportTime = 1000;
+        // Can set this to any value as it gets factored out
+        int fifoCapacity = 1;
+
+        // # of loops (samples) to comprise one reporting period =
+        int loopMax   = 1000*reportTime / sampleTime; // reportTime in millisec, sampleTime in microsec
+        int loopCount = loopMax;    // use to track # loops made
+
+        // PID loop constants
+        float Kp = 1.F;
+        float Kd = 0.F;
+        float Ki = 0.F;
+
+        float setPoint = 0.F;
+        float pidError = 0.F;
+
+        // Keep fcount sample times worth (1 sec) of errors so we can use error from 1 sec ago
+        // for PID derivative term. For now, fill w/ 0's.
+        float oldestPidError, oldPidErrors[fcount];
+        memset(oldPidErrors, 0, fcount*sizeof(float));
+
+        // Keep a running avg of fifo fill over fcount samples
+        float runningFillTotal = 0., fillAvg;
+        int fillValues[fcount];
+        memset(fillValues, 0, fcount*sizeof(float));
+
+        // Keep circulating thru array. Highest index is fcount - 1.
+        float prevFill, curFill, fillPercent;
+        // set first and last indexes right here
+        int currentIndex = 0, earliestIndex = 1;
+
+        // Change to floats for later computations
+        float fifoCapacityFlt = static_cast<float>(fifoCapacity);
+        float fcountFlt = static_cast<float>(fcount);
+
+        // time stuff
+        struct timespec t1, t2;
+        int64_t totalTime, time; // microsecs
+        int64_t totalTimeGoal = sampleTime * fcount;
+        int64_t times[fcount];
+        float deltaT; // "time" in secs
+        int64_t absTime, prevAbsTime, prevFifoTime;
+
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        prevFifoTime = prevAbsTime = 1000000L*(t1.tv_sec) + (t1.tv_nsec)/1000L; // microsec epoch time
+        // Load times with current time for more accurate first round of rates
+        for (int i=0; i < fcount; i++) {
+            times[i] = prevAbsTime;
+        }
+
+
         while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
 
-            // Update the changing variables
-            client.update(fillPercent, pidError);
+            // Use fake fifo fill level & PID error
+            if (!useFakeQueuelevel) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
 
-            // Send to server
-            err = client.SendState();
-            if (err == 1) {
-                printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
-                exit(1);
+                float fillPercent_ = 0.F;
+                float pidError_ = 0.F;
+
+                // Update the changing variables
+                client.update(fillPercent_, pidError_);
+
+                // Send to server
+                err = client.SendState();
+                if (err == 1) {
+                    printf("GRPC client %s communication error with server during sending of data, exit\n", beName);
+                    exit(1);
+                }
+            }
+            else {
+                // Delay between data points
+                // sampleTime is adjusted below to get close to the actual desired sampling rate.
+                std::this_thread::sleep_for(std::chrono::microseconds(adjustedSampleTime));
+
+                // Read time
+                clock_gettime(CLOCK_MONOTONIC, &t2);
+                // time diff in microsec
+                time = (1000000L * (t2.tv_sec - t1.tv_sec)) + ((t2.tv_nsec - t1.tv_nsec) / 1000L);
+                // convert to sec
+                deltaT = static_cast<float>(time) / 1000000.F;
+                // Get the current epoch time in microsec
+                absTime = 1000000L * t2.tv_sec + t2.tv_nsec / 1000L;
+                t1 = t2;
+
+
+                // Keep count of total time taken for last fcount periods.
+
+                // Record current time
+                times[currentIndex] = absTime;
+                // Subtract from that the earliest time to get the total time in microsec
+                totalTime = absTime - times[earliestIndex];
+                // Keep things from blowing up if we've goofed somewhere
+                if (totalTime < totalTimeGoal) totalTime = totalTimeGoal;
+                // Get oldest pid error for calculating PID derivative term
+                oldestPidError = oldPidErrors[earliestIndex];
+
+
+                // Read current fifo fill level
+                // Random output from 0 to 1 with given mean & stddev, scaled up to fifoCapacity
+                curFill = fifoCapacityFlt * getRandomLevel(qFakeFillMean, qFakeFillStdDev);
+
+                // Previous value at this index
+                prevFill = fillValues[currentIndex];
+                // Store current val at this index
+                fillValues[currentIndex] = curFill;
+                // Add current val and remove previous val at this index from the running total.
+                // That way we have added loopMax number of most recent entries at ony one time.
+                runningFillTotal += curFill - prevFill;
+
+                // Under crazy circumstances, runningFillTotal could be < 0 !
+                // Would have to have high fill, then IMMEDIATELY drop to 0 for about a second.
+                // This would happen at very small input rate as otherwise it takes too much
+                // time for events in q to be processed and q level won't drop as quickly
+                // as necessary to see this effect.
+                // If this happens, set runningFillTotal to 0 as the best approximation.
+                if (runningFillTotal < 0.) {
+                    printf("\nNEG runningFillTotal (%f), set to 0!!\n\n", runningFillTotal);
+                    runningFillTotal = 0.;
+                }
+
+                fillAvg = runningFillTotal / fcountFlt;
+                fillPercent = fillAvg / fifoCapacityFlt;
+                pidError = pid<float>(setPoint, fillPercent, deltaT, Kp, Ki, Kd, oldestPidError, totalTime);
+
+                // Track pid error
+                oldPidErrors[currentIndex] = pidError;
+
+                // Set indexes for next round
+                earliestIndex++;
+                earliestIndex = (earliestIndex == fcount) ? 0 : earliestIndex;
+
+                currentIndex++;
+                currentIndex = (currentIndex == fcount) ? 0 : currentIndex;
+
+                if (currentIndex == 0) {
+                    // Use totalTime to adjust the effective sampleTime so that we really do sample
+                    // at the desired rate set on command line. This accounts for all the computations
+                    // that this code does which slows down the actual sample rate.
+                    // Do this adjustment once every fcount samples.
+                    float factr = totalTimeGoal / totalTime;
+                    adjustedSampleTime = sampleTime * factr;
+
+                    // If totalTime, for some reason, is really big, we don't want the adjusted time to be 0
+                    // since a sleep_for(0) is very short. However, sleep_for(1) is pretty much the same as
+                    // sleep_for(500).
+                    if (adjustedSampleTime == 0) {
+                        adjustedSampleTime = 500;
+                    }
+
+                    //fprintf(fp, "sampleTime = %d, totalT = %.0f\n", adjustedSampleTime, totalTime);
+                }
+
+
+                // Every "loopMax" loops
+                if (--loopCount <= 0) {
+
+                    // Update the changing variables
+                    client.update(fillPercent, pidError);
+
+                    // Send to server
+                    err = client.SendState();
+                    if (err == 1) {
+                        printf("GRPC client %s communication error with server, exit\n", beName);
+                        exit(1);
+                    }
+
+                    if (absTime - prevAbsTime >= 4000000) {
+                        prevAbsTime = absTime;
+                        printf("     Fifo level %d  Avg:  %.2f,  %.2f%%,  pid err %f\n\n",
+                               ((int) curFill), fillAvg, (100.F * fillPercent), pidError);
+                    }
+
+                    loopCount = loopMax;
+                }
             }
         }
     }
