@@ -925,7 +925,7 @@ static void *pidThread(void *arg) {
 
     // Keep a running avg of fifo fill over fcount samples
     float runningFillTotal = 0., fillAvg;
-    int fillValues[fcount];
+    float fillValues[fcount];
     memset(fillValues, 0, fcount*sizeof(float));
     // Keep circulating thru array. Highest index is fcount - 1.
     float prevFill, curFill, fillPercent;

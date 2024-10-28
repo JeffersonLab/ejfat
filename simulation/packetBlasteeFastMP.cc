@@ -1938,9 +1938,9 @@ int main(int argc, char **argv) {
         float oldestPidError, oldPidErrors[fcount];
         memset(oldPidErrors, 0, fcount*sizeof(float));
 
-        // Keep a running avg of fifo fill over fcount samples
+        // Keep a sliding window avg of fifo fill over fcount samples
         float runningFillTotal = 0., fillAvg;
-        int fillValues[fcount];
+        float fillValues[fcount];
         memset(fillValues, 0, fcount*sizeof(float));
 
         // Keep circulating thru array. Highest index is fcount - 1.
@@ -2018,14 +2018,17 @@ int main(int argc, char **argv) {
                 // Read current fifo fill level
                 // Random output from 0 to 1 with given mean & stddev, scaled up to fifoCapacity
                 curFill = fifoCapacityFlt * getRandomLevel(qFakeFillMean, qFakeFillStdDev);
+//printf("fill %f\n", curFill);
 
                 // Previous value at this index
                 prevFill = fillValues[currentIndex];
                 // Store current val at this index
                 fillValues[currentIndex] = curFill;
+printf("curFill %f, prevFill %f, index = %d, fillValues %f\n", curFill, prevFill, currentIndex, fillValues[currentIndex]);
                 // Add current val and remove previous val at this index from the running total.
                 // That way we have added loopMax number of most recent entries at ony one time.
                 runningFillTotal += curFill - prevFill;
+printf("total %f\n", runningFillTotal);
 
                 // Under crazy circumstances, runningFillTotal could be < 0 !
                 // Would have to have high fill, then IMMEDIATELY drop to 0 for about a second.
