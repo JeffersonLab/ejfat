@@ -136,7 +136,7 @@ X pid(                      // Proportional, Integrative, Derivative Controller
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats] [-direct]\n",
 
@@ -154,8 +154,9 @@ static void printHelp(char *programName) {
             "        [-minf <min factor for CP slot assignment (default 0>]",
             "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
 
-            "        [-qmean <report this as the mean queue fill level to CP (0 - 1)>]",
-            "        [-qdev  <std dev of queue fill level if -qmean defined (0 - 0.5)>]\n",
+            "        [-qmean <report this as the mean Q fill level to CP (0 - 1)>]",
+            "        [-qdev  <std dev of Q fill level if -qmean defined (0 - 0.5)>]\n",
+            "        [-qcnt  <how many Q measurements to average over 1 sec (must divide 1M evenly: 1,2,4,5,8,10, ... 1k max)>]\n",
 
             "        [-dump (no thd to get & merge buffers)]",
             "        [-lump (1 thd to get & merge buffers from all sources)]",
@@ -212,6 +213,7 @@ static void printHelp(char *programName) {
  * @param maxFactor     factor for setting max # of slot assignments.
  * @param qMean         set a fake Q fill level to report to CP (0 - 1).
  * @param qDev          set a std. dev. of Q level if fake Q fill level set (0 - .5).
+ * @param qCnt          number of Q measurements to average over 1 sec (must divide 1M evenly: 1,2,4,10,200, ...).
  */
 static void parseArgs(int argc, char **argv,
                       uint32_t* bufSize, int *recvBufSize, int *tickPrescale,
@@ -224,7 +226,7 @@ static void parseArgs(int argc, char **argv,
                       char *uri, char *file, char *token,
                       std::vector<int>& ids,
                       float *minFactor, float *maxFactor,
-                      float *qMean, float *qDev) {
+                      float *qMean, float *qDev, int *qCnt) {
 
     int c, i_tmp;
     bool help = false;
@@ -258,6 +260,7 @@ static void parseArgs(int argc, char **argv,
 
                           {"qmean",       1, nullptr, 19},
                           {"qdev",        1, nullptr, 20},
+                          {"qcnt",        1, nullptr, 21},
 
                           {0,       0, 0,    0}
             };
@@ -502,6 +505,18 @@ static void parseArgs(int argc, char **argv,
                     exit(-1);
                 }
                 *qDev = sp;
+                break;
+
+            case 21:
+                // # Q fill level measurements to avg together (1 to 1000, divide evenly into 1M)
+                i_tmp = (int) strtol(optarg, nullptr, 0);
+                if (i_tmp >= 1 && i_tmp <= 1000 && 1000000 % i_tmp == 0) {
+                    *qCnt = i_tmp;
+                }
+                else {
+                    fprintf(stderr, "Invalid argument to -qcnt, # measurements to avg >= 1 and <= 1000, evenly into 1M\n");
+                    exit(-1);
+                }
                 break;
 
             case 7:
@@ -1497,8 +1512,14 @@ static float getRandomLevel(float mean, float stddev) {
     float ran = distribution(generator);
 
     // Clamp the result between 0 and 1 to ensure it stays within bounds
-    if (ran < 0.0f) ran = 0.f;
-    else if (ran > 1.0f) ran = 1.f;
+    if (ran < 0.0f) {
+        //std::cerr << "Clipping bottom val of " << ran << " to 0" << std::endl;
+        ran = 0.f;
+    }
+    else if (ran > 1.0f) {
+        //std::cerr << "Clipping top val of " << ran << " to 1" << std::endl;
+        ran = 1.f;
+    }
 
     return ran;
 }
@@ -1551,6 +1572,9 @@ int main(int argc, char **argv) {
     int startingCore = -1;
     int coreCount = 1;
     int startingBufCore = -1;
+
+    // # of fill levels to average together
+    int fcount = 1000;
 
     std::vector<int> ids;
 
@@ -1607,7 +1631,7 @@ int main(int argc, char **argv) {
               listeningAddr, dataAddr,
               uri, fileName, adminToken, ids,
               &minFactor, &maxFactor,
-              &qFakeFillMean, &qFakeFillStdDev);
+              &qFakeFillMean, &qFakeFillStdDev, &fcount);
 
     pinCores = startingCore >= 0;
     pinBufCores = startingBufCore >= 0;
@@ -1622,6 +1646,7 @@ int main(int argc, char **argv) {
     // If set by caller
     if (qFakeFillMean >= 0.) {
         useFakeQueuelevel = true;
+        std::cerr << "Using FAKE fill levels" << std::endl;
     }
 
 
@@ -1910,14 +1935,18 @@ int main(int argc, char **argv) {
         printf("GRPC client %s registered!\n", beName);
 
 
+        // # of fill levels to average together, fcount, set above (default 1000)
+
+
         // stat sampling time in microsec (1 millisec)
-        int sampleTime = 1000;
+        //int sampleTime = 1000;
+        int sampleTime = 1000000/fcount; // 1 sec
         int adjustedSampleTime = sampleTime;
 
-        // # of fill levels to average together
-        uint32_t fcount = 1000;
+
         // time period in millisec for reporting to CP
         uint32_t reportTime = 1000;
+
         // Can set this to any value as it gets factored out
         int fifoCapacity = 1;
 
@@ -2018,14 +2047,18 @@ int main(int argc, char **argv) {
                 // Read current fifo fill level
                 // Random output from 0 to 1 with given mean & stddev, scaled up to fifoCapacity
                 curFill = fifoCapacityFlt * getRandomLevel(qFakeFillMean, qFakeFillStdDev);
+//printf("fill %f\n", curFill);
 
                 // Previous value at this index
                 prevFill = fillValues[currentIndex];
                 // Store current val at this index
                 fillValues[currentIndex] = curFill;
+//printf("curFill %f, prevFill %f, index = %d, fillValues %f || mean %f / std %f\n",
+//        curFill, prevFill, currentIndex, fillValues[currentIndex], qFakeFillMean, qFakeFillStdDev);
                 // Add current val and remove previous val at this index from the running total.
                 // That way we have added loopMax number of most recent entries at ony one time.
                 runningFillTotal += curFill - prevFill;
+//printf("total %f\n", runningFillTotal);
 
                 // Under crazy circumstances, runningFillTotal could be < 0 !
                 // Would have to have high fill, then IMMEDIATELY drop to 0 for about a second.
