@@ -136,7 +136,7 @@ X pid(                      // Proportional, Integrative, Derivative Controller
  */
 static void printHelp(char *programName) {
     fprintf(stderr,
-            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            "\nusage: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
             programName,
             "        [-h] [-v] [-ip6] [-norestart] [-jointstats] [-direct]\n",
 
@@ -147,6 +147,7 @@ static void printHelp(char *programName) {
             "        [-b <internal buffer byte size, 100kB default>]",
             "        [-r <UDP receive buffer byte size, system default>]\n",
 
+            "        [-direct (sender bypasses LB, so no LB communication)]",
             "        [-uri  <URI containing info for sending to LB/CP (default "")>]",
             "        [-file <file with URI (default /tmp/ejfat_uri)>]",
             "        [-token <CP admin token (default udplbd_default_change_me)>]\n",
@@ -159,7 +160,7 @@ static void printHelp(char *programName) {
             "        [-qcnt  <how many Q measurements to average over 1 sec (must divide 1M evenly: 1,2,4,5,8,10, ... 1k max)>]\n",
 
             "        [-dump (no thd to get & merge buffers)]",
-            "        [-lump (1 thd to get & merge buffers from all sources)]",
+            "        [-lump (DISABLED at the moment -- 1 thd to get & merge buffers from all sources)]",
             "        [-ids <comma-separated list of incoming source ids>]\n",
 
             "        [-pinRead <starting core # for read thds>]",
@@ -199,11 +200,11 @@ static void printHelp(char *programName) {
  * @param debug         filled with debug flag.
  * @param useIPv6       filled with use IP version 6 flag.
  * @param dump          don't have a thd which gets all buffers (for possible merging).
+ * @param lump          add 1 thd to get & merge buffers from all sources.
  * @param noRestart     exit program if sender restarts.
  * @param jointStats    display stats of all sources joined together.
  * @param direct        get data directly from sender (not thru LB) and do NOT talk to CP.
  * @param listenAddr    IP address to listen on.
- * @param filename      name of file in which to write stats.
  * @param dataAddr      IP address to send to CP as data destination addr for this program.
  * @param uri           URI containing LB/CP connection info.
  * @param file          name of file in which to read URI.
@@ -1427,7 +1428,7 @@ static void *threadReadBuffers(void *arg) {
 
 
 ///**
-// * Thread to read all buffers from a ALL data sources.
+// * Thread to read all buffers from ALL data sources.
 // * There is one buffer supply for each data source.
 // * Not all buffers have valid data, so ignore those with no data.
 // * @param arg
