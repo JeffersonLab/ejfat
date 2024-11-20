@@ -108,6 +108,7 @@ set(STATIC_EXEC_FILES
 # Executables with no dependencies
 set(NODEP_EXEC_FILES
         simulation/packetBlaster.cc
+        simulation/packetBlasteeFastDirect.cc
         )
 
 # Regular backends: boost, grpc, ejfat_grpc, protobuf

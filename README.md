@@ -50,6 +50,7 @@ It takes the URI (more on this later) and can parse it to find out where to
 send data and sync messages. The following is created:
 
 - **packetBlaster** (packetizes and sends data)
+- **packetBlasteeFastDirect** (reassembles data sent direct from packetBlaster w/ no LB)
 
 
 
