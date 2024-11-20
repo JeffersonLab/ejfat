@@ -2,10 +2,9 @@
 
 ## Check out ejfat, esnet3 branch
 
-    git clone https://github.com/JeffersonLab/ejfat/tree/esnet3
+    git clone https://github.com/JeffersonLab/ejfat.git
             or 
     gh repo clone JeffersonLab/ejfat
-    git checkout esnet3
     
     cd ejfat
     mkdir build
