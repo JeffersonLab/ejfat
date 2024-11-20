@@ -689,7 +689,7 @@ int main(int argc, char **argv) {
 
 
     if (!haveEverything) {
-        std::cerr << "no LB/CP info in uri or file" << std::endl;
+        std::cerr << "no LB/CP info in uri or file or direct" << std::endl;
         return 1;
     }
 
