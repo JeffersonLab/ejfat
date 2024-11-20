@@ -327,7 +327,7 @@ namespace ejfat {
                 uriInfo.useIPv6Cp = true;
             }
 
-                // in this case only syncAddr and syncPort defined
+            // in this case only syncAddr and syncPort defined
             if (!match[9].str().empty()) {
                 uriInfo.haveSync = true;
                 uriInfo.haveData = false;
