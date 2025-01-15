@@ -2504,7 +2504,7 @@ int main(int argc, char **argv) {
     auto range = PortRange(portRangeValue);
     if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
-    float setPoint = 0.F;
+    float setPoint = 0.1F;
     float fillPercent = 0.F;
     float pidError = 0.F;
     float weight = 1.F;

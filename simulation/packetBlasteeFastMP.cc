@@ -1960,7 +1960,7 @@ int main(int argc, char **argv) {
         float Kd = 0.F;
         float Ki = 0.F;
 
-        float setPoint = 0.F;
+        float setPoint = 0.1F;
         float pidError = 0.F;
 
         // Keep fcount sample times worth (1 sec) of errors so we can use error from 1 sec ago
