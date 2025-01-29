@@ -1,7 +1,7 @@
 # To use this, do the following the first time:
 #   % mkdir build
 #   % cd build
-#   % cmake .. -DBUILD_SIMPLE=1 -DBUILD_CLAS=1 -DBUILD_OLD=1 -DBUILD_BACKEND=1
+#   % cmake .. -DBUILD_CLAS=1 -DBUILD_OLD=1 -DBUILD_BACKEND=1
 #   % make (install)
 #
 #
@@ -12,7 +12,7 @@
 #
 # The installation will default to the cmake flag INSTALL_DIR.
 # If that's not defined, it will use the env var EJFAT_ERSAP_INSTALL_DIR:
-#   % cmake -DINSTALL_dir=<my_dir> ..
+#   % cmake -DINSTALL_DIR=<my_dir> ..
 
 # This file came from ejfat project
 
@@ -22,6 +22,10 @@ project(ejfat VERSION 0.1)
 
 # define where we put Find<*>.cmake files so various packages can be found
 # set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
+
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules /usr/share/cmake-3.16/Modules)
+
+set(Ejfat_grpc_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -80,8 +84,6 @@ if (NOT DEFINED CMAKE_INSTALL_PLUGINDIR)
 endif()
 mark_as_advanced(CMAKE_INSTALL_PLUGINDIR)
 
-
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 
 # Michael's old files used with static LB, now obsolete, not compiled by default,
@@ -248,7 +250,7 @@ if (BUILD_SIMPLE)
     # Find Protobuf installation
     # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
     if (NOT DEFINED Protobuf_FOUND)
-        find_package(Protobuf CONFIG REQUIRED)
+        find_package(Protobuf REQUIRED)
         message(STATUS "Using protobuf ${Protobuf_VERSION}")
         set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
     endif()
@@ -257,11 +259,11 @@ if (BUILD_SIMPLE)
     endif()
 
     # Find gRPC installation
-    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-    if (NOT DEFINED gRPC_FOUND)
-        find_package(gRPC)
+    # Looks for FindGRPC.cmake file installed by gRPC's cmake installation.
+    if (NOT DEFINED GRPC_FOUND)
+        find_package(GRPC)
     endif()
-    if (NOT gRPC_FOUND)
+    if (NOT GRPC_FOUND)
         # Grpc cannot be found, let's try again by using env var
         if (NOT DEFINED ENV{GRPC_INSTALL_DIR})
             if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
@@ -273,16 +275,16 @@ if (BUILD_SIMPLE)
             set(GRPC_INSTALL_DIR $ENV{GRPC_INSTALL_DIR})
         endif()
 
-        find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
+        find_package(GRPC REQUIRED PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
     endif()
-    if (NOT gRPC_FOUND)
+    if (NOT GRPC_FOUND)
         message(FATAL_ERROR "grpc cannot be found, cmake will exit." )
     endif()
 
-    message(STATUS "Using gRPC ${gRPC_VERSION}")
-    set(_REFLECTION gRPC::grpc++_reflection)
-    set(_GRPC_GRPCPP gRPC::grpc++)
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+    #message(STATUS "Using GRPC ${GRPC_VERSION}")
+    #set(_REFLECTION gRPC::grpc++_reflection)
+    #set(_GRPC_GRPCPP gRPC::grpc++)
+    #set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
 
     # Find where ejfat_grpc lib and includes are installed
     if (NOT DEFINED Ejfat_grpc_FOUND)
@@ -322,7 +324,7 @@ if (BUILD_BACKEND)
     # Find Protobuf installation
     # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
     if (NOT DEFINED Protobuf_FOUND)
-        find_package(Protobuf CONFIG REQUIRED)
+        find_package(Protobuf REQUIRED)
         message(STATUS "Using protobuf ${Protobuf_VERSION}")
         set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
     endif()
@@ -332,11 +334,11 @@ if (BUILD_BACKEND)
 
 
     # Find gRPC installation
-    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-    if (NOT DEFINED gRPC_FOUND)
-        find_package(gRPC CONFIG REQUIRED)
+    # Looks for FindGRPC.cmake file installed by gRPC's cmake installation.
+    if (NOT DEFINED GRPC_FOUND)
+        find_package(GRPC REQUIRED)
     endif()
-    if (NOT gRPC_FOUND)
+    if (NOT GRPC_FOUND)
         # Grpc cannot be found, let's try again by using env var
         if (NOT DEFINED ENV{GRPC_INSTALL_DIR})
             if (NOT DEFINED ENV{EJFAT_ERSAP_INSTALL_DIR})
@@ -348,16 +350,16 @@ if (BUILD_BACKEND)
             set(GRPC_INSTALL_DIR $ENV{GRPC_INSTALL_DIR})
         endif()
 
-        find_package(gRPC REQUIRED CONFIG PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
+        find_package(GRPC REQUIRED PATHS ${GRPC_INSTALL_DR}/lib/cmake/grpc)
     endif()
-    if (NOT gRPC_FOUND)
+    if (NOT GRPC_FOUND)
         message(FATAL_ERROR "grpc cannot be found, cmake will exit." )
     endif()
 
-    message(STATUS "Using gRPC ${gRPC_VERSION}")
-    set(_REFLECTION gRPC::grpc++_reflection)
-    set(_GRPC_GRPCPP gRPC::grpc++)
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+    #message(STATUS "Using gRPC ${gRPC_VERSION}")
+    #set(_REFLECTION gRPC::grpc++_reflection)
+    #set(_GRPC_GRPCPP gRPC::grpc++)
+    #set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
 
 
     # Find where ejfat_grpc lib and includes are installed
@@ -475,14 +477,13 @@ endif()
                     ${CMAKE_SOURCE_DIR}/util
                     ${Boost_INCLUDE_DIRS}
                     ${Ejfat_grpc_INCLUDE_DIRS}
-                    ${gRPC_INCLUDE_DIRS}
+                    ${GRPC_INCLUDE_DIRS}
                     ${DISRUPTOR_INCLUDE_DIRS}
                     )
             # Needs these libs
             target_link_libraries(${execName} pthread
                     ${Boost_LIBRARIES}
-                    ${_REFLECTION}
-                    ${_GRPC_GRPCPP}
+                    ${GRPC_LIBRARIES}
                     ${Ejfat_grpc_LIBRARIES}
                     ${DISRUPTOR_LIBRARIES}
                     )
@@ -560,7 +561,7 @@ endif()
                     ${CROW_INCLUDE_DIRS}
                     ${CMAKE_SOURCE_DIR}/util
                     ${Ejfat_grpc_INCLUDE_DIRS}
-                    ${gRPC_INCLUDE_DIRS}
+                    ${GRPC_INCLUDE_DIRS}
                     ${ET_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
                     ${DISRUPTOR_INCLUDE_DIRS})
@@ -569,11 +570,14 @@ endif()
             target_link_libraries(${execName} PRIVATE pthread
                     prometheus-cpp::core prometheus-cpp::pull
                     ${Boost_LIBRARIES}
-                    ${_REFLECTION}
-                    ${_GRPC_GRPCPP}
+                    ${GRPC_LIBRARIES}
                     ${Ejfat_grpc_LIBRARIES}
                     ${DISRUPTOR_LIBRARIES}
                     ${ET_LIBRARY})
+
+            #${_REFLECTION}
+            #${_GRPC_GRPCPP}
+
 
             # Only install if installation directory has been defined
             if (INSTALL_DIR_DEFINED)
