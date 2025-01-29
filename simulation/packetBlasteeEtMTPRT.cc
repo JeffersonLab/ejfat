@@ -220,8 +220,8 @@ static void printHelp(char *programName) {
             "        [-minf <min factor for CP slot assignment (default 0>]",
             "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
 
-            "        [-qmean <report this as the mean queue fill level to CP (0 - 1)>]",
-            "        [-qdev  <std dev of queue fill level if -qmean defined (0 - 0.5)>]\n",
+            "        [-qmean <report this as the mean queue fill level to CP (>= 0)>]",
+            "        [-qdev  <std dev of queue fill level if -qmean defined (>= 0)>]\n",
 
             "        [-kp <PID proportional constant, default 1.>]",
             "        [-ki <PID integral constant, default 0.>]",
@@ -348,16 +348,16 @@ static void parseArgs(int argc, char **argv,
                     sp = (float) std::stof(optarg, nullptr);
                 }
                 catch (const std::invalid_argument& ia) {
-                    fprintf(stderr, "Invalid argument to -s, 0.0 <= PID set point <= 100.0\n\n");
+                    fprintf(stderr, "Invalid argument to -s, 0.0 <= PID set point\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
 
-                if (sp >= 0. && sp <= 100.) {
+                if (sp >= 0.) {
                     *setPt = sp;
                 }
                 else {
-                    fprintf(stderr, "Invalid argument to -s, 0 <= PID set point <= 100\n\n");
+                    fprintf(stderr, "Invalid argument to -s, 0 <= PID set point\n\n");
                     printHelp(argv[0]);
                     exit(-1);
                 }
@@ -631,10 +631,6 @@ static void parseArgs(int argc, char **argv,
                         fprintf(stderr, "Invalid argument to -qmean, must be >= 0\n\n");
                         exit(-1);
                     }
-                    else if (sp > 1.) {
-                        fprintf(stderr, "Invalid argument to -qmean, must be <= 1\n\n");
-                        exit(-1);
-                    }
                 }
                 catch (const std::invalid_argument& ia) {
                     fprintf(stderr, "Invalid argument to -qmean\n\n");
@@ -651,10 +647,6 @@ static void parseArgs(int argc, char **argv,
                     sp = (float) std::stof(optarg, nullptr);
                     if (sp < 0.) {
                         fprintf(stderr, "Invalid argument to -qdev, must be >= 0\n\n");
-                        exit(-1);
-                    }
-                    else if (sp > .5) {
-                        fprintf(stderr, "Invalid argument to -qdev, must be <= 0.5\n\n");
                         exit(-1);
                     }
                 }
@@ -1104,7 +1096,9 @@ static void *pidThread(void *arg) {
 
         fillAvg = runningFillTotal / fcountFlt;
         fillPercent = fillAvg / fifoCapacityFlt;
-        pidError = pid<float>(setPoint, fillPercent, deltaT, Kp, Ki, Kd, oldestPidError, totalTime);
+        // No longer send %fill, just send fill level
+        //pidError = pid<float>(setPoint, fillPercent, deltaT, Kp, Ki, Kd, oldestPidError, totalTime);
+        pidError = pid<float>(setPoint, fillAvg, deltaT, Kp, Ki, Kd, oldestPidError, totalTime);
 
         // Track pid error
         oldPidErrors[currentIndex] = pidError;
@@ -1155,7 +1149,8 @@ static void *pidThread(void *arg) {
         if (--loopCount <= 0) {
 
             // Update the changing variables
-            client.update(fillPercent, pidError);
+            //client.update(fillPercent, pidError);
+            client.update(fillAvg, pidError);
 
             // Send to server
             err = client.SendState();

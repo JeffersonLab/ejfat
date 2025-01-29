@@ -183,6 +183,7 @@ static void printHelp(char *programName) {
     fprintf(stderr, "        unless -dump or -lump arg used.\n");
     fprintf(stderr, "        The -norestart flag means sources that restart and have new, lower event numbers,\n");
     fprintf(stderr, "        out of sync with other sources, will NOT be allowed\n");
+    fprintf(stderr, "        Reports q fill level as 100, error as 0, set pt = 5\n\n");
 }
 
 
@@ -2504,8 +2505,8 @@ int main(int argc, char **argv) {
     auto range = PortRange(portRangeValue);
     if (debug) std::cout << "GRPC client port range = " << portRangeValue << std::endl;
 
-    float setPoint = 0.1F;
-    float fillPercent = 0.F;
+    float setPoint = 5.F;
+    float fillPercent = 100.F;
     float pidError = 0.F;
     float weight = 1.F;
 

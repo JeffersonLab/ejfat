@@ -155,9 +155,9 @@ static void printHelp(char *programName) {
             "        [-minf <min factor for CP slot assignment (default 0>]",
             "        [-maxf <max factor for CP slot assignment (default 0)>]\n",
 
-            "        [-qmean <report this as the mean Q fill level to CP (0 - 1)>]",
-            "        [-qdev  <std dev of Q fill level if -qmean defined (0 - 0.5)>]\n",
-            "        [-qcnt  <how many Q measurements to average over 1 sec (must divide 1M evenly: 1,2,4,5,8,10, ... 1k max)>]\n",
+            "        [-qmean <report this as the mean Q fill level to CP (>= 0)>]",
+            "        [-qdev  <std dev of Q fill level if -qmean defined (>= 0)>]\n",
+            "        [-qcnt  <how many Q measurements to average over 1 sec (default 1k, must divide 1M evenly: 1,2,4,5,8,10, ... 1k max)>]\n",
 
             "        [-dump (no thd to get & merge buffers)]",
             "        [-lump (DISABLED at the moment -- 1 thd to get & merge buffers from all sources)]",
@@ -181,7 +181,11 @@ static void printHelp(char *programName) {
     fprintf(stderr, "        By default, one thread started to \"process\" reassembled buffers for each source,\n");
     fprintf(stderr, "        unless -dump or -lump arg used.\n");
     fprintf(stderr, "        The -norestart flag means sources that restart and have new, lower event numbers,\n");
-    fprintf(stderr, "        out of sync with other sources, will NOT be allowed\n");
+    fprintf(stderr, "        out of sync with other sources, will NOT be allowed\n\n");
+
+    fprintf(stderr, "        If -qmean not set, reports q fill level as 100, error as 0., set pt = 5\n");
+    fprintf(stderr, "        It -qmean is set, set max q as 10 x mean, set pt = mean/10.\n\n");
+
 }
 
 
@@ -473,10 +477,6 @@ static void parseArgs(int argc, char **argv,
                         fprintf(stderr, "Invalid argument to -qmean, must be >= 0\n\n");
                         exit(-1);
                     }
-                    else if (sp > 1.) {
-                        fprintf(stderr, "Invalid argument to -qmean, must be <= 1\n\n");
-                        exit(-1);
-                    }
                 }
                 catch (const std::invalid_argument& ia) {
                     fprintf(stderr, "Invalid argument to -qmean\n\n");
@@ -493,10 +493,6 @@ static void parseArgs(int argc, char **argv,
                     sp = (float) std::stof(optarg, nullptr);
                     if (sp < 0.) {
                         fprintf(stderr, "Invalid argument to -qdev, must be >= 0\n\n");
-                        exit(-1);
-                    }
-                    else if (sp > .5) {
-                        fprintf(stderr, "Invalid argument to -qdev, must be <= 0.5\n\n");
                         exit(-1);
                     }
                 }
@@ -1948,8 +1944,12 @@ int main(int argc, char **argv) {
         // time period in millisec for reporting to CP
         uint32_t reportTime = 1000;
 
-        // Can set this to any value as it gets factored out
-        int fifoCapacity = 1;
+        // Since fill level gets sent directly, this no longer gets factored out
+        int fifoCapacity = 1000;
+        if (useFakeQueuelevel) {
+            // just make sure this is > qFakeFillMean
+            fifoCapacity = 10*qFakeFillMean;
+        }
 
         // # of loops (samples) to comprise one reporting period =
         int loopMax   = 1000*reportTime / sampleTime; // reportTime in millisec, sampleTime in microsec
@@ -1960,7 +1960,7 @@ int main(int argc, char **argv) {
         float Kd = 0.F;
         float Ki = 0.F;
 
-        float setPoint = 0.1F;
+        float setPoint = 5.F > fifoCapacity ? 1.F : fifoCapacity/100.F;
         float pidError = 0.F;
 
         // Keep fcount sample times worth (1 sec) of errors so we can use error from 1 sec ago
@@ -2004,7 +2004,7 @@ int main(int argc, char **argv) {
             if (!useFakeQueuelevel) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
 
-                float fillPercent_ = 0.F;
+                float fillPercent_ = 100.F;
                 float pidError_ = 0.F;
 
                 // Update the changing variables
@@ -2074,7 +2074,9 @@ int main(int argc, char **argv) {
 
                 fillAvg = runningFillTotal / fcountFlt;
                 fillPercent = fillAvg / fifoCapacityFlt;
-                pidError = pid<float>(setPoint, fillPercent, deltaT, Kp, Ki, Kd, oldestPidError, totalTime);
+                // No longer send %fill, just send fill level
+                //pidError = pid<float>(setPoint, fillPercent, deltaT, Kp, Ki, Kd, oldestPidError, totalTime);
+                pidError = pid<float>(setPoint, fillAvg, deltaT, Kp, Ki, Kd, oldestPidError, totalTime);
 
                 // Track pid error
                 oldPidErrors[currentIndex] = pidError;
@@ -2109,7 +2111,8 @@ int main(int argc, char **argv) {
                 if (--loopCount <= 0) {
 
                     // Update the changing variables
-                    client.update(fillPercent, pidError);
+                    //client.update(fillPercent, pidError);
+                    client.update(fillAvg, pidError);
 
                     // Send to server
                     err = client.SendState();
