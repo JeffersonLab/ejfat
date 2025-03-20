@@ -17,7 +17,7 @@
 #include <functional>
 #include <cstring>
 #include <string>
-
+#include <stdexcept>
 
 namespace ejfat {
 
