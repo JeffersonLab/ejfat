@@ -19,6 +19,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(ejfat VERSION 0.1)
 
+option(USE_STANDALONE_ASIO "Enable USE_STANDALONE_ASIO" ON)
+add_compile_definitions(USE_STANDALONE_ASIO)
 
 # define where we put Find<*>.cmake files so various packages can be found
 # set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
@@ -475,6 +477,7 @@ endif()
             target_include_directories(${execName} PUBLIC
                     ${CMAKE_SOURCE_DIR}/simulation
                     ${CMAKE_SOURCE_DIR}/util
+                    ${ASIO_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
                     ${Ejfat_grpc_INCLUDE_DIRS}
                     ${GRPC_INCLUDE_DIRS}

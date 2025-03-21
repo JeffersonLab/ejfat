@@ -181,7 +181,11 @@ static void parseArgs(int argc, char **argv,
 
                     while (std::getline(ss, token, ',')) {
                         try {
+#ifdef USE_STANDALONE_ASIO
+                            asio::ip::make_address(token);
+#else
                             boost::asio::ip::make_address(token);
+#endif
                         }
                         catch (const boost::system::system_error& e) {
                             std::cout << "skip bad ip addr, " << token << std::endl;
